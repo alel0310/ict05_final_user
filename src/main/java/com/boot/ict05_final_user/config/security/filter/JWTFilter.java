@@ -72,10 +72,12 @@ public class JWTFilter extends OncePerRequestFilter {
             String username = JWTUtil.getUsername(accessToken);
             String role = JWTUtil.getRole(accessToken);
             Long storeId = JWTUtil.getStoreId(accessToken);
+            Long memberId = JWTUtil.getMemberId(accessToken);
+            String memberName = JWTUtil.getMemberName(accessToken);
 
             List<GrantedAuthority> authorities = Collections.singletonList(new SimpleGrantedAuthority(role));
 
-            AppUser principal = new AppUser(username, storeId, authorities);
+            AppUser principal = new AppUser(username, storeId, memberId, memberName, authorities);
             Authentication auth =
                     new UsernamePasswordAuthenticationToken(principal, null, authorities);
             SecurityContextHolder.getContext().setAuthentication(auth);

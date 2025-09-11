@@ -34,10 +34,12 @@ public class LoginSuccessHandler implements AuthenticationSuccessHandler {
         String username =  authentication.getName();
         String role = authentication.getAuthorities().iterator().next().getAuthority();
         Long storeId = userReadService.findStoreIdByUsername(username);
+        Long memberId = userReadService.findMemberIdByUsername(username);
+        String memberName = userReadService.findMemberNameByUsername(username);
 
         // JWT(Access/Refresh) 발급
-        String accessToken = JWTUtil.createJWT(username, role, storeId, true);
-        String refreshToken = JWTUtil.createJWT(username, role, storeId, false);
+        String accessToken = JWTUtil.createJWT(username, role, storeId, memberId, memberName, true);
+        String refreshToken = JWTUtil.createJWT(username, role, storeId, memberId, memberName, false);
 
         // 발급한 Refresh DB 테이블 저장 (Refresh whitelist)
         jwtService.addRefresh(username, refreshToken);

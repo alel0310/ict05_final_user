@@ -32,6 +32,17 @@ public class JWTUtil {
                 .getPayload();
     }
 
+    private static Long toLongOrNull(Object v) {
+        if (v == null) return null;
+        if (v instanceof Long l)     return l;
+        if (v instanceof Integer i)  return i.longValue();
+        if (v instanceof Double d)   return d.longValue();
+        if (v instanceof String s) {
+            try { return Long.valueOf(s); } catch (NumberFormatException ignore) { return null; }
+        }
+        return null;
+    }
+
     // JWT 클레임 username 파싱
     public static String getUsername(String token) {
         return Jwts.parser().verifyWith(secretKey).build().parseSignedClaims(token).getPayload().get("sub", String.class);
@@ -49,6 +60,17 @@ public class JWTUtil {
         if (v instanceof Integer i) return i.longValue();
         if (v instanceof Double d)  return d.longValue();
         return Long.valueOf(v.toString());
+    }
+
+    // ★ 추가: memberId
+    public static Long getMemberId(String token) {
+        Object v = parseClaims(token).get("memberId");
+        return toLongOrNull(v);
+    }
+
+    // ★ 추가: memberName
+    public static String getMemberName(String token) {
+        return parseClaims(token).get("memberName", String.class);
     }
 
     // JWT 유효 여부 (위조, 시간, Access/Refresh 여부)
@@ -74,7 +96,11 @@ public class JWTUtil {
     }
 
     // JWT(Access/Refresh) 생성
-    public static String createJWT(String username, String role, Long storeId, Boolean isAccess) {
+    public static String createJWT(
+            String username, String role,
+            Long storeId, Long memberId, String memberName,
+            Boolean isAccess
+    ) {
 
         long now = System.currentTimeMillis();
         long expiry = isAccess ? accessTokenExpiresIn : refreshTokenExpiresIn;
@@ -84,6 +110,8 @@ public class JWTUtil {
                 .claim("sub", username)
                 .claim("role", role)
                 .claim("storeId", storeId)
+                .claim("memberId", memberId)
+                .claim("memberName", memberName)
                 .claim("type", type)
                 .issuedAt(new Date(now))
                 .expiration(new Date(now + expiry))

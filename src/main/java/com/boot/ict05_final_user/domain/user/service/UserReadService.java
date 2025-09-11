@@ -12,7 +12,16 @@ public class UserReadService {
 
     @Transactional(readOnly = true)
     public Long findStoreIdByUsername(String username) {
-        // 예: JPQL/QueryDSL projection으로 바로 store_id만 반환
-        return userRepository.findStoreIdByUsername(username); // Long 반환 형태 권장
+        return userRepository.findStoreIdByUsername(username);
+    }
+
+    @Transactional(readOnly = true)
+    public Long findMemberIdByUsername(String username) {
+        return userRepository.findMamberId(username);
+    }
+
+    @Transactional(readOnly = true)
+    public String findMemberNameByUsername(String username) {
+        return userRepository.findMemberName(username);
     }
 }
