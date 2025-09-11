@@ -1,8 +1,10 @@
 package com.boot.ict05_final_user.domain.home.controller;
 
+import com.boot.ict05_final_user.config.security.principal.AppUser;
 import com.boot.ict05_final_user.domain.home.dto.*;
 import com.boot.ict05_final_user.domain.home.service.HomeService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -21,22 +23,25 @@ public class HomeController {
     private final HomeService homeService;
 
     @GetMapping("/kpis/today")
-    public KpiCardsResponseDTO getTodayKpis(@RequestParam(required = false) Long storeId) {
+    public KpiCardsResponseDTO getTodayKpis(@AuthenticationPrincipal AppUser user) {
+        Long storeId = user.getStoreId();
         return homeService.getTodayKpis(storeId);
     }
 
     @GetMapping(value = "/menus/top5")
     public TopMenusResponseDTO getTodayTopMenus(
-            @RequestParam(required = false) Long storeId,
+            @AuthenticationPrincipal AppUser user,
             @RequestParam(defaultValue = "5") Integer limit
     ) {
+        Long storeId = user.getStoreId();
         return homeService.getTopMenus(storeId, limit);
     }
 
     @GetMapping("/hourly/today")
     public HourlyStatsResponseDTO getTodayHourly(
-            @RequestParam(required = false) Long storeId
+            @AuthenticationPrincipal AppUser user
     ) {
+        Long storeId = user.getStoreId();
         return homeService.getTodayHourly(storeId);
     }
 }

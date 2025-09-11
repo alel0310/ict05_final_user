@@ -20,8 +20,6 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -45,12 +43,6 @@ public class SecurityConfig {
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
         return configuration.getAuthenticationManager();
-    }
-
-    // 비밀번호 암호화
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
     }
 
     // 권한 계층 (ADMIN > USER)
@@ -99,7 +91,7 @@ public class SecurityConfig {
                 // 공개 엔드포인트
                 .requestMatchers("/login").permitAll()
                 .requestMatchers("/jwt/exchange", "/jwt/refresh").permitAll()
-                .requestMatchers(HttpMethod.POST, "/user/exist", "/user/**","/me","/API/**", "/user/dashboard/**", "/join", "/user/member/exist-email", "/user/member","/user/API/menu/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/exist", "/**","/me","/API/**", "/dashboard/**", "/join", "/member/exist-email", "/member","/API/menu/**").permitAll()
 
 
                 // 인증 필요

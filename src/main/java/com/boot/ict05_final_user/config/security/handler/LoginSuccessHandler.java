@@ -1,5 +1,7 @@
 package com.boot.ict05_final_user.config.security.handler;
 
+import com.boot.ict05_final_user.domain.user.service.UserReadService;
+import com.boot.ict05_final_user.domain.user.service.UserService;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -18,9 +20,11 @@ public class LoginSuccessHandler implements AuthenticationSuccessHandler {
 
 
     private final JwtService jwtService;
+    private final UserReadService userReadService;
 
-    public LoginSuccessHandler(JwtService jwtService) {
+    public LoginSuccessHandler(JwtService jwtService, UserReadService userReadService) {
         this.jwtService = jwtService;
+        this.userReadService = userReadService;
     }
 
     @Override
@@ -29,10 +33,11 @@ public class LoginSuccessHandler implements AuthenticationSuccessHandler {
         // username, role
         String username =  authentication.getName();
         String role = authentication.getAuthorities().iterator().next().getAuthority();
+        Long storeId = userReadService.findStoreIdByUsername(username);
 
         // JWT(Access/Refresh) 발급
-        String accessToken = JWTUtil.createJWT(username, role, true);
-        String refreshToken = JWTUtil.createJWT(username, role, false);
+        String accessToken = JWTUtil.createJWT(username, role, storeId, true);
+        String refreshToken = JWTUtil.createJWT(username, role, storeId, false);
 
         // 발급한 Refresh DB 테이블 저장 (Refresh whitelist)
         jwtService.addRefresh(username, refreshToken);

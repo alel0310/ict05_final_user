@@ -5,20 +5,22 @@ import com.boot.ict05_final_user.config.security.jwt.dto.RefreshRequestDTO;
 import com.boot.ict05_final_user.config.security.jwt.entity.RefreshEntity;
 import com.boot.ict05_final_user.config.security.jwt.repository.RefreshRepository;
 import com.boot.ict05_final_user.config.security.jwt.JWTUtil;
+import com.boot.ict05_final_user.domain.user.service.UserReadService;
+import com.boot.ict05_final_user.domain.user.service.UserService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 public class JwtService {
 
-    private final RefreshRepository refreshRepository;
+    private final UserReadService userReadService;
 
-    public JwtService(RefreshRepository refreshRepository) {
-        this.refreshRepository = refreshRepository;
-    }
+    private final RefreshRepository refreshRepository;
 
     // 소셜 로그인 성공 후 쿠키(Refresh) -> 헤더 방식으로 응답
     @Transactional
@@ -55,10 +57,15 @@ public class JwtService {
         // 정보 추출
         String username = JWTUtil.getUsername(refreshToken);
         String role = JWTUtil.getRole(refreshToken);
+        Long storeId = JWTUtil.getStoreId(refreshToken);
+
+        if (storeId == null) {
+            storeId = userReadService.findStoreIdByUsername(username); // DB 조회
+        }
 
         // 토큰 생성
-        String newAccessToken = JWTUtil.createJWT(username, role, true);
-        String newRefreshToken = JWTUtil.createJWT(username, role, false);
+        String newAccessToken = JWTUtil.createJWT(username, role, storeId,true);
+        String newRefreshToken = JWTUtil.createJWT(username, role, storeId, false);
 
         // 기존 Refresh 토큰 DB 삭제 후 신규 추가
         RefreshEntity newRefreshEntity = RefreshEntity.builder()
@@ -100,10 +107,14 @@ public class JwtService {
         // 정보 추출
         String username = JWTUtil.getUsername(refreshToken);
         String role = JWTUtil.getRole(refreshToken);
+        Long storeId    = JWTUtil.getStoreId(refreshToken);
+        if (storeId == null) {
+            storeId = userReadService.findStoreIdByUsername(username); // DB 보강 (Long 반환 권장)
+        }
 
         // 토큰 생성
-        String newAccessToken = JWTUtil.createJWT(username, role, true);
-        String newRefreshToken = JWTUtil.createJWT(username, role, false);
+        String newAccessToken = JWTUtil.createJWT(username, role, storeId, true);
+        String newRefreshToken = JWTUtil.createJWT(username, role, storeId, false);
 
         // 기존 Refresh 토큰 DB 삭제 후 신규 추가
         RefreshEntity newRefreshEntity = RefreshEntity.builder()
