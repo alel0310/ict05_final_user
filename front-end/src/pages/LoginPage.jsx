@@ -1,26 +1,32 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import "./LoginPage.css";
 
 // .env 에서 BASE 읽기 (예: http://localhost:8081 또는 /admin 포함)
 const BASE = process.env.REACT_APP_BACKEND_API_BASE_URL;
 
-function LoginPage() {
+export default function LoginPage() {
   const navigate = useNavigate();
 
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    if (loading) return;           // 중복 제출 방지
+    setLoading(true);
     setError("");
 
-    if (!username || !password) {
-      setError("아이디와 비밀번호를 입력하세요.");
+    if (!email || !password) {
+      setError("이메일과 비밀번호를 입력하세요.");
+      setLoading(false);
       return;
     }
     if (!BASE) {
       setError("백엔드 BASE URL이 설정되지 않았습니다.");
+      setLoading(false);
       return;
     }
 
@@ -28,18 +34,18 @@ function LoginPage() {
       const res = await fetch(`${BASE}/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include", // 서버가 쿠키로 토큰을 줄 때 필요
-        body: JSON.stringify({ username, password }),
+        credentials: "include",
+        // ⬇️ loginType 제거: 항상 일반 로그인
+        body: JSON.stringify({ email, password }),
       });
 
-      // 본문이 비어 있을 수도 있어 대비
-      const raw = await res.text();
+      const raw = await res.text(); // 본문이 비어있을 수도 있음
       if (!res.ok) {
         setError(`로그인 실패 (${res.status})`);
         return;
       }
 
-      // 서버가 JSON을 주면 토큰 저장 (쿠키만 주는 서버면 이 단계는 건너뜀)
+      // 서버가 토큰을 본문으로 주는 경우만 저장 (쿠키 기반이면 스킵)
       try {
         if (raw) {
           const data = JSON.parse(raw);
@@ -47,48 +53,76 @@ function LoginPage() {
           if (data.refreshToken) localStorage.setItem("refreshToken", data.refreshToken);
         }
       } catch {
-        // JSON이 아니면 무시 (쿠키 기반 로그인 성공 케이스)
+        /* JSON 아님 → 무시 */
       }
 
-      // 성공 시 사용자 페이지로 이동
-      navigate("/user"); // 라우트가 /mypage 등이라면 여기를 맞춰주세요
+      navigate("/main");
     } catch (err) {
       console.error(err);
       setError("네트워크 오류로 로그인에 실패했습니다.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div>
-      <h1>로그인</h1>
+    <div className="login-wrap">
+      <div className="login-card">
+        {/* 로고/타이틀 */}
+        <div className="login-logo">🏪</div>
+        <h1 className="login-title">FranFriend ERP</h1>
+        <p className="login-subtitle">프랜차이즈 통합 관리 시스템</p>
 
-      <form onSubmit={handleLogin}>
-        <label>아이디</label>
-        <input
-          type="text"
-          placeholder="아이디"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          required
-          autoComplete="username"
-        />
+        {/* 폼 */}
+        <form onSubmit={handleLogin} style={{ marginTop: 8 }}>
+          <label className="login-label">이메일</label>
+          <input
+            className="login-input"
+            type="email"
+            placeholder="이메일을 입력하세요"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="username"
+            required
+          />
 
-        <label>비밀번호</label>
-        <input
-          type="password"
-          placeholder="비밀번호"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          autoComplete="current-password"
-        />
+          <label className="login-label">비밀번호</label>
+          <input
+            className="login-input"
+            type="password"
+            placeholder="비밀번호를 입력하세요"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            required
+          />
 
-        {error && <p>{error}</p>}
+          {error && <p className="login-error">{error}</p>}
 
-        <button type="submit">계속</button>
-      </form>
+          <button type="submit" className="login-btn-primary" disabled={loading}>
+            {loading ? "로그인 중..." : "로그인"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate("/join")}
+            className="login-btn-secondary"
+          >
+            회원가입
+          </button>
+        </form>
+
+        {/* 데모 계정 */}
+        <div className="login-demo">
+          <p className="title">데모 계정</p>
+          <p>본사: hq@franfriend.com / demo123</p>
+          <p>가맹점: store@franfriend.com / demo123</p>
+        </div>
+
+        <footer className="login-footer">
+          © 2024 FranFriend ERP. All rights reserved.
+        </footer>
+      </div>
     </div>
   );
 }
-
-export default LoginPage;

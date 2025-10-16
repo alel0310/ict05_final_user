@@ -1,24 +1,44 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+// src/App.jsx
+import React from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-import JoinPage from "./pages/JoinPage";
 import LoginPage from "./pages/LoginPage";
-import CookiePage from "./pages/CookiePage";
-import UserPage from "./pages/UserPage";
+import JoinPage from "./pages/JoinPage";
+import MainApp from "./pages/MainApp";
 
-import './App.css'
+// 로그인 여부 체크 (localStorage에 accessToken 사용)
+function RequireAuth({ children }) {
+  const token = localStorage.getItem("accessToken");
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+}
 
-function App() {
-
+export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/join" element={<JoinPage />} />
+        {/* 기본 진입은 /login 으로 */}
+        <Route path="/" element={<Navigate to="/login" replace />} />
+
+        {/* 공개 라우트 */}
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/cookie" element={<CookiePage />} />
-        <Route path="/user" element={<UserPage />} />
+        <Route path="/join" element={<JoinPage />} />
+
+        {/* 보호(로그인 필요) 라우트 */}
+        <Route
+          path="/main"
+          element={
+            <RequireAuth>
+              <MainApp />
+            </RequireAuth>
+          }
+        />
+
+        {/* 없는 경로는 로그인으로 */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
-  )
+  );
 }
-
-export default App

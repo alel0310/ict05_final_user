@@ -1,13 +1,108 @@
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* --- 기본 리셋 & 베이스 --- */
+:root{
+  --navy:#0f1a2a;
+  --navy-2:#15243a;
+  --light-gray:#f1f5f9;
+  --dark-gray:#6b7280;
+
+  --kpi-red:#ff6b6b;
+  --kpi-orange:#f77f00;
+  --kpi-green:#06d6a0;
+  --kpi-purple:#9d4edd;
+
+  --white:#fff;
+  --border:#e5e7eb;
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+*{box-sizing:border-box}
+html,body,#root{height:100%}
+body{
+  margin:0;
+  font-family: system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";
+  background:var(--light-gray);
+  color:#111827;
+}
+
+/* --- 유틸 --- */
+.bg-light-gray{ background: var(--light-gray); }
+.text-dark-gray{ color: var(--dark-gray); }
+
+.bg-navy-sidebar{ background: var(--navy); }
+.bg-navy-sidebar-2{ background: var(--navy-2); }
+
+.bg-kpi-red{ background: var(--kpi-red); }
+.bg-kpi-orange{ background: var(--kpi-orange); }
+.bg-kpi-green{ background: var(--kpi-green); }
+.bg-kpi-purple{ background: var(--kpi-purple); }
+
+.text-white{ color:#fff; }
+.text-white\/80{ color: rgba(255,255,255,.8); }
+.text-white\/70{ color: rgba(255,255,255,.7); }
+.text-gray-900{ color:#111827; }
+
+.rounded-xl{ border-radius: 12px; }
+.rounded-lg{ border-radius: 10px; }
+.rounded-full{ border-radius: 9999px; }
+
+.shadow-sm{ box-shadow: 0 6px 18px rgba(0,0,0,.06); }
+.shadow-lg{ box-shadow: 0 10px 30px rgba(0,0,0,.08); }
+
+.border{ border:1px solid var(--border); }
+.border-gray-200{ border-color:#e5e7eb; }
+.border-white\/20{ border-color: rgba(255,255,255,.2); }
+
+.p-4{ padding:16px; } .p-6{ padding:24px; }
+.px-6{ padding-left:24px; padding-right:24px; }
+.py-4{ padding-top:16px; padding-bottom:16px; }
+.pt-6{ padding-top:24px; } .pb-6{ padding-bottom:24px; }
+
+.mt-4{ margin-top:16px; } .mt-6{ margin-top:24px; }
+.mb-1{ margin-bottom:4px; } .mb-2{ margin-bottom:8px; } .mb-6{ margin-bottom:24px; }
+
+.grid{ display:grid; }
+.grid-cols-1{ grid-template-columns: repeat(1,minmax(0,1fr)); }
+.gap-4{ gap:16px; } .gap-6{ gap:24px; }
+
+.flex{ display:flex; } .flex-1{ flex:1; }
+.items-center{ align-items:center; }
+.justify-between{ justify-content:space-between; }
+.justify-center{ justify-content:center; }
+.text-center{ text-align:center; }
+
+.w-5{ width:20px; } .h-5{ height:20px; }
+.w-8{ width:32px; } .h-8{ height:32px; }
+
+.font-bold{ font-weight:700; } .font-medium{ font-weight:500; }
+.text-lg{ font-size:1.125rem; } .text-2xl{ font-size:1.5rem; }
+.text-sm{ font-size:.875rem; } .text-xs{ font-size:.75rem; }
+
+/* 버튼(ghost 등 간단) */
+button{ cursor:pointer; }
+.btn-ghost{
+  background: transparent;
+  border: none;
+  padding: 6px 8px;
+}
+.btn-ghost:hover{ background: rgba(0,0,0,.04); }
+
+/* sidebar 네비 버튼 */
+.sidebar-btn{
+  width:100%;
+  display:flex; align-items:center; gap:12px;
+  padding:8px 12px;
+  border-radius:8px;
+  color: rgba(255,255,255,.8);
+  background: transparent;
+  border: none;
+}
+.sidebar-btn:hover{ background: rgba(255,255,255,.1); color:#fff; }
+.sidebar-btn.active{ background: rgba(255,255,255,.2); color:#fff; }
+
+/* 카드 */
+.card{
+  background:#fff;
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:24px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.06);
 }

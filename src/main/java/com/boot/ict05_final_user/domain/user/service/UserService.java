@@ -3,16 +3,13 @@ package com.boot.ict05_final_user.domain.user.service;
 import com.boot.ict05_final_user.domain.jwt.service.JwtService;
 import com.boot.ict05_final_user.domain.user.dto.UserRequestDTO;
 import com.boot.ict05_final_user.domain.user.dto.UserResponseDTO;
-import com.boot.ict05_final_user.domain.user.entity.UserEntity;
-import com.boot.ict05_final_user.domain.user.entity.UserRoleType;
-import com.boot.ict05_final_user.domain.user.repository.UserRepository;
-import org.springframework.security.core.context.SecurityContext;
+import com.boot.ict05_final_user.domain.user.entity.Member;
+import com.boot.ict05_final_user.domain.user.repository.UserRepository; // ← Member를 다루는 Repo
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
-
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,106 +23,119 @@ public class UserService implements UserDetailsService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
 
-
     public UserService(PasswordEncoder passwordEncoder, UserRepository userRepository, JwtService jwtService) {
         this.passwordEncoder = passwordEncoder;
         this.userRepository = userRepository;
         this.jwtService = jwtService;
     }
 
-    // 자체 로그인 회원 가입 (존재 여부)
+    /** 존재 여부 (이메일 기준) */
     @Transactional(readOnly = true)
-        public Boolean existUser(UserRequestDTO dto){
-            return userRepository.existsByUsername((dto.getUsername()));
+    public Boolean existUser(UserRequestDTO dto) {
+        String email = dto.getEmail();
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("email 은 필수입니다.");
+        }
+        return userRepository.existsByEmail(email);
     }
-    // 자체 로그인 회원 가입
+
+    /** 회원 가입 (이메일 + 비밀번호 + 이름) */
     @Transactional
     public Long addUser(UserRequestDTO dto) {
-
-        if (userRepository.existsByUsername(dto.getUsername())) {
+        String email = dto.getEmail();
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("email 은 필수입니다.");
+        }
+        if (userRepository.existsByEmail(email)) {
             throw new IllegalArgumentException("이미 유저가 존재합니다.");
         }
 
-        UserEntity entity = UserEntity.builder()
-                .username(dto.getUsername())
+        // ✅ nickname fallback 제거: name만 사용
+        if (dto.getName() == null || dto.getName().isBlank()) {
+            throw new IllegalArgumentException("name 은 필수입니다.");
+        }
+
+        Member member = Member.builder()
+                .email(email)
                 .password(passwordEncoder.encode(dto.getPassword()))
-                .isLock(false)
-                .isSocial(false)
-                .roleType(UserRoleType.USER) // 우선 일반 유저로 가입
-                .nickname(dto.getNickname())
-                .email(dto.getEmail())
+                .name(dto.getName())
+                .phone(dto.getPhone())
                 .build();
 
-        return userRepository.save(entity).getId();
+        return userRepository.save(member).getId();
     }
 
-    // 자체 로그인
+    /** 로그인용(스프링 시큐리티) — 파라미터 username에 email이 들어옵니다 */
     @Transactional(readOnly = true)
     @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
+        Member m = userRepository.findByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException(email));
 
-        UserEntity entity = userRepository.findByUsernameAndIsLockAndIsSocial(username, false, false)
-                .orElseThrow(() -> new UsernameNotFoundException(username));
-
+        // 역할 컬럼이 별도로 없다면 ROLE_USER 고정
         return User.builder()
-                .username(entity.getUsername())
-                .password(entity.getPassword())
-                .roles(entity.getRoleType().name())
-                .accountLocked(entity.getIsLock())
+                .username(m.getEmail())
+                .password(m.getPassword())
+                .roles("USER")
                 .build();
     }
 
-    // 자체 로그인 회원 정보 수정
+    /** 회원 정보 수정 (이메일 기준 본인 확인) */
     @Transactional
     public Long updateUser(UserRequestDTO dto) throws AccessDeniedException {
-
-        // 본인만 수정 가능 검증
-        String sessionUsername = SecurityContextHolder.getContext().getAuthentication().getName();
-        if (!sessionUsername.equals(dto.getUsername())) {
+        String sessionEmail = SecurityContextHolder.getContext().getAuthentication().getName();
+        if (!sessionEmail.equals(dto.getEmail())) {
             throw new AccessDeniedException("본인 계정만 수정 가능");
         }
 
-        // 조회
-        UserEntity entity;
-        entity = userRepository.findByUsernameAndIsLockAndIsSocial(dto.getUsername(), false, false)
-                .orElseThrow(() -> new UsernameNotFoundException(dto.getUsername()));
+        Member m = userRepository.findByEmail(sessionEmail)
+                .orElseThrow(() -> new UsernameNotFoundException(sessionEmail));
 
-        // 회원 정보 수정
-        entity.updateUser(dto);
-
-        return userRepository.save(entity).getId();
-    }
-
-    // 자체/소셜 로그인 회원 탈퇴
-    @Transactional
-    public void deleteUser(UserRequestDTO dto) throws AccessDeniedException {
-
-        // 본인 및 어드민만 삭제 가능 검증
-        SecurityContext context = SecurityContextHolder.getContext();
-        String sessionUsername = context.getAuthentication().getName();
-        String sessionRole = context.getAuthentication().getAuthorities().iterator().next().getAuthority();
-
-        boolean isOwner = sessionUsername.equals(dto.getUsername());
-        boolean isAdmin = sessionRole.equals("ROLE_"+UserRoleType.ADMIN.name());
-
-        if (!isOwner && !isAdmin) {
-            throw new AccessDeniedException("본인 혹은 관리자만 삭제할 수 있습니다.");
+        if (dto.getPassword() != null && !dto.getPassword().isBlank()) {
+            m.setPassword(passwordEncoder.encode(dto.getPassword()));
+        }
+        if (dto.getName() != null && !dto.getName().isBlank()) {
+            m.setName(dto.getName());
+        }
+        // ✅ 전화번호도 업데이트 허용(선택)
+        if (dto.getPhone() != null) {
+            m.setPhone(dto.getPhone());
         }
 
-        // 유저 제거
-        userRepository.deleteByUsername(dto.getUsername());
-
-        // Refresh 토큰 제거
-        jwtService.removeRefreshUser(dto.getUsername());
+        return userRepository.save(m).getId();
     }
-    // 자체 유저 정보 조회
+
+    /** 회원 탈퇴 (이메일 기준) */
+    @Transactional
+    public void deleteUser(UserRequestDTO dto) throws AccessDeniedException {
+        String sessionEmail = SecurityContextHolder.getContext().getAuthentication().getName();
+
+        String targetEmail = (dto.getEmail() != null && !dto.getEmail().isBlank())
+                ? dto.getEmail()
+                : sessionEmail;
+
+        if (!sessionEmail.equals(targetEmail)) {
+            throw new AccessDeniedException("본인만 삭제할 수 있습니다.");
+        }
+
+        userRepository.deleteByEmail(targetEmail);
+        // refresh 토큰도 email 기준으로 제거
+        jwtService.removeRefreshUser(targetEmail);
+    }
+
+    /** 내 정보 조회 */
     @Transactional(readOnly = true)
     public UserResponseDTO readUser() {
-        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        Member m = userRepository.findByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException("해당 유저를 찾을 수 없습니다: " + email));
 
-        UserEntity entity = userRepository.findByUsernameAndIsLock(username, false)
-                .orElseThrow(() -> new UsernameNotFoundException("해당 유저를 찾을 수 없습니다: " + username));
-
-        return new UserResponseDTO(username, entity.getIsSocial(), entity.getNickname(), entity.getEmail());
+        // 기존 UserResponseDTO(username, social, nickname, email) 구조를 유지한다면:
+        return new UserResponseDTO(
+                m.getEmail(),   // username 자리에 email 주입
+                false,          // social 사용 안함
+                m.getName(),    // nickname 자리에 name 주입
+                m.getEmail()
+        );
     }
 }

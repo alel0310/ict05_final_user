@@ -3,9 +3,11 @@ package com.boot.ict05_final_user.config;
 import com.boot.ict05_final_user.domain.jwt.service.JwtService;
 import com.boot.ict05_final_user.domain.user.entity.UserRoleType;
 import com.boot.ict05_final_user.filter.JWTFilter;
-import com.boot.ict05_final_user.handler.RefreshTokenLogoutHandler;
-import jakarta.servlet.http.HttpServletResponse;
 import com.boot.ict05_final_user.filter.LoginFilter;
+import com.boot.ict05_final_user.handler.RefreshTokenLogoutHandler;
+import com.boot.ict05_final_user.security.EmailAuthenticationProvider;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -32,48 +34,27 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
 
     private final AuthenticationConfiguration authenticationConfiguration;
+
+    @Qualifier("LoginSuccessHandler")
     private final AuthenticationSuccessHandler loginSuccessHandler;
 
-    public SecurityConfig(
-            AuthenticationConfiguration authenticationConfiguration,
-            @Qualifier("LoginSuccessHandler") AuthenticationSuccessHandler loginSuccessHandler
-    ) {
-        this.authenticationConfiguration = authenticationConfiguration;
-        this.loginSuccessHandler = loginSuccessHandler;
-    }
-
-    // 커스텀 자체 로그인 필터를 위한 AuthenticationManager Bean 수동 등록
+    // AuthenticationManager (커스텀 LoginFilter 용)
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
         return configuration.getAuthenticationManager();
     }
 
-    // 비밀번호 단방향(BCrypt) 암호화용 Bean
+    // 비밀번호 암호화
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    // CORS Bean
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:3000"));
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("*"));
-        configuration.setAllowCredentials(true);
-        configuration.setExposedHeaders(List.of("Authorization", "Set-Cookie"));
-        configuration.setMaxAge(3600L);
-
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
-        return source;
-    }
-
-    // 권한 계층
+    // 권한 계층 (ADMIN > USER)
     @Bean
     public RoleHierarchy roleHierarchy() {
         return RoleHierarchyImpl.withRolePrefix("ROLE_")
@@ -81,68 +62,80 @@ public class SecurityConfig {
                 .build();
     }
 
-    // SecurityFilterChain
+    // CORS (credentials 허용)
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtService jwtService) throws Exception {
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration cfg = new CorsConfiguration();
+        // 개발/운영 도메인 추가
+        cfg.setAllowedOrigins(List.of("http://localhost:3000"));
+        cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        cfg.setAllowedHeaders(List.of("*"));
+        cfg.setAllowCredentials(true);
+        // 쿠키 수신 시 브라우저가 확인 가능한 헤더
+        cfg.setExposedHeaders(List.of("Authorization", "Set-Cookie"));
+        cfg.setMaxAge(3600L);
 
-        // CSRF 보안 필터 disable
-        http
-                .csrf(AbstractHttpConfigurer::disable);
+        UrlBasedCorsConfigurationSource src = new UrlBasedCorsConfigurationSource();
+        src.registerCorsConfiguration("/**", cfg);
+        return src;
+    }
 
-        // CORS 설정
-        http
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()));
+    // 보안 필터 체인
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtService jwtService, EmailAuthenticationProvider provider) throws Exception {
 
-        // 기본 Form 기반 인증 필터들 disable
-        http
-                .formLogin(AbstractHttpConfigurer::disable);
+        http.csrf(AbstractHttpConfigurer::disable);
+        http.cors(cors -> cors.configurationSource(corsConfigurationSource()));
+        http.formLogin(AbstractHttpConfigurer::disable);
+        http.httpBasic(AbstractHttpConfigurer::disable);
 
-        // 기본 Basic 인증 필터 disable
-        http
-                .httpBasic(AbstractHttpConfigurer::disable);
+        // 인가 규칙
+        http.authorizeHttpRequests(auth -> auth
+                // CORS preflight
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-        // 인가
-        http
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/jwt/exchange", "/jwt/refresh").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/user/exist", "/user").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/user").hasRole(UserRoleType.USER.name())
-                        .requestMatchers(HttpMethod.PUT, "/user").hasRole(UserRoleType.USER.name())
-                        .requestMatchers(HttpMethod.DELETE, "/user").hasRole(UserRoleType.USER.name())
-                        .anyRequest().authenticated()
-                );
+                // 공개 엔드포인트
+                .requestMatchers("/login").permitAll()
+                .requestMatchers("/jwt/exchange", "/jwt/refresh").permitAll()
+                .requestMatchers(HttpMethod.POST, "/user/exist", "/user").permitAll()
+
+                // 인증 필요
+                .requestMatchers(HttpMethod.GET, "/user").hasRole(UserRoleType.USER.name())
+                .requestMatchers(HttpMethod.PUT, "/user").hasRole(UserRoleType.USER.name())
+                .requestMatchers(HttpMethod.DELETE, "/user").hasRole(UserRoleType.USER.name())
+
+                .anyRequest().authenticated()
+        );
 
         // 예외 처리
-        http
-                .exceptionHandling(e -> e
-                        .authenticationEntryPoint((request, response, authException) -> {
-                            response.sendError(HttpServletResponse.SC_UNAUTHORIZED); // 401 응답
-                        })
-                        .accessDeniedHandler((request, response, authException) -> {
-                            response.sendError(HttpServletResponse.SC_FORBIDDEN); // 403 응답
-                        })
-                );
+        http.exceptionHandling(e -> e
+                .authenticationEntryPoint((req, res, ex) -> res.sendError(HttpServletResponse.SC_UNAUTHORIZED))
+                .accessDeniedHandler((req, res, ex) -> res.sendError(HttpServletResponse.SC_FORBIDDEN))
+        );
 
-        // 커스텀 필터 추가
-        http
-                .addFilterBefore(new LoginFilter(authenticationManager(authenticationConfiguration), loginSuccessHandler), UsernamePasswordAuthenticationFilter.class);
+        // 무상태 세션
+        http.sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
-        // 세션 필터 설정 (STATELESS)
-        http
-                .sessionManagement(session -> session
-                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS));
+        // JWT 필터: UsernamePasswordAuthenticationFilter 보다 앞에서 토큰 검증
+        http.addFilterBefore(new JWTFilter(), UsernamePasswordAuthenticationFilter.class);
 
-        // 기본 로그아웃 필터 + 커스텀 Refresh 토큰 삭제 핸들러 추가
-        http
-                .logout(logout -> logout
-                        .addLogoutHandler(new RefreshTokenLogoutHandler(jwtService)));
+        // 커스텀 로그인 필터: /login 엔드포인트에서 인증 처리 + 성공시 핸들러
+        http.addFilterAt(
+                new LoginFilter(authenticationManager(authenticationConfiguration), loginSuccessHandler),
+                UsernamePasswordAuthenticationFilter.class
+        );
 
-        // JWT Filter
-        http
-                .addFilterBefore(new JWTFilter(), LogoutFilter.class);
+        // 로그아웃 (Refresh Token 정리)
+        http.logout(logout -> logout
+                .logoutUrl("/logout")
+                .addLogoutHandler(new RefreshTokenLogoutHandler(jwtService))
+        );
+
+        // 필요 시, H2 콘솔/iframe 등 사용할 때만
+        // http.headers(h -> h.frameOptions(HeadersConfigurer.FrameOptionsConfig::disable));
+
+        http.authenticationProvider(provider);
 
         return http.build();
     }
-
 }
