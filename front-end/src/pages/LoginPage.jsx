@@ -1,9 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import "./LoginPage.css";
-
-// .env 에서 BASE 읽기 (예: http://localhost:8081 또는 /admin 포함)
-const BASE = process.env.REACT_APP_BACKEND_API_BASE_URL;
+import "../styles/LoginPage.css";
+import api from "../lib/authApi"; // axios 인스턴스 (인터셉터 포함)
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -15,7 +13,7 @@ export default function LoginPage() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    if (loading) return;           // 중복 제출 방지
+    if (loading) return;
     setLoading(true);
     setError("");
 
@@ -24,42 +22,23 @@ export default function LoginPage() {
       setLoading(false);
       return;
     }
-    if (!BASE) {
-      setError("백엔드 BASE URL이 설정되지 않았습니다.");
-      setLoading(false);
-      return;
-    }
 
     try {
-      const res = await fetch(`${BASE}/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        // ⬇️ loginType 제거: 항상 일반 로그인
-        body: JSON.stringify({ email, password }),
-      });
+      // axios 인스턴스로 로그인 (withCredentials 등 공통설정 사용)
+      const res = await api.post("/login", { email, password });
 
-      const raw = await res.text(); // 본문이 비어있을 수도 있음
-      if (!res.ok) {
-        setError(`로그인 실패 (${res.status})`);
-        return;
-      }
+      // 서버가 본문으로 토큰을 내려줄 수도/안 줄 수도 있으므로 안전 처리
+      const data = res?.data || {};
+      if (data.accessToken) localStorage.setItem("accessToken", data.accessToken);
+      if (data.refreshToken) localStorage.setItem("refreshToken", data.refreshToken);
 
-      // 서버가 토큰을 본문으로 주는 경우만 저장 (쿠키 기반이면 스킵)
-      try {
-        if (raw) {
-          const data = JSON.parse(raw);
-          if (data.accessToken) localStorage.setItem("accessToken", data.accessToken);
-          if (data.refreshToken) localStorage.setItem("refreshToken", data.refreshToken);
-        }
-      } catch {
-        /* JSON 아님 → 무시 */
-      }
-
-      navigate("/main");
+      // 라우팅
+      navigate("/main", { replace: true });
     } catch (err) {
       console.error(err);
-      setError("네트워크 오류로 로그인에 실패했습니다.");
+      const status = err?.response?.status;
+      if (status === 401) setError("이메일 또는 비밀번호를 확인하세요.");
+      else setError("로그인 중 오류가 발생했습니다.");
     } finally {
       setLoading(false);
     }
@@ -112,10 +91,9 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* 데모 계정 */}
+        {/* 데모 계정 (HQ 문구 제거) */}
         <div className="login-demo">
           <p className="title">데모 계정</p>
-          <p>본사: hq@franfriend.com / demo123</p>
           <p>가맹점: store@franfriend.com / demo123</p>
         </div>
 

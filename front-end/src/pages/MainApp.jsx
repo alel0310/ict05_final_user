@@ -2,51 +2,55 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Layout } from "../components/Common/Layout";
-import { HQDashboard } from "../components/HQ/Dashboard";
 import { StoreDashboard } from "../components/Store/Dashboard";
 import { Toaster, toast } from "sonner";
+import api from "../lib/authApi";
 
 export default function MainApp() {
   const navigate = useNavigate();
 
-  // 기본은 HQ, 로그인 페이지에서 localStorage에 저장한 타입이 있으면 사용
-  const [userType, setUserType] = useState("HQ");
+  // 현재 페이지 (사이드바 항목 id와 동일)
+  const [currentPage, setCurrentPage] = useState("dashboard");
 
-  // 로그인 타입 복원
+  // 토큰 가드 + 인터셉터 동작 확인
   useEffect(() => {
-    const saved = localStorage.getItem("loginType");
-    if (saved === "HQ" || saved === "Store") setUserType(saved);
-  }, []);
+    const access = localStorage.getItem("accessToken");
+    if (!access) {
+      navigate("/login", { replace: true });
+      return;
+    }
+    api.get("/user").catch(() => {
+      navigate("/login", { replace: true });
+    });
+  }, [navigate]);
 
   const handleLogout = () => {
     localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
     toast.success("로그아웃되었습니다.");
     navigate("/login", { replace: true });
   };
 
-  // 토큰 가드
-  useEffect(() => {
-    if (!localStorage.getItem("accessToken")) {
-      navigate("/login", { replace: true });
+  // 페이지 전환 핸들러 (Layout에서 호출)
+  const handlePageChange = (page) => setCurrentPage(page);
+
+  // 데모: 현재는 대시보드만 렌더, 필요 시 switch문으로 확장
+  const renderPage = () => {
+    switch (currentPage) {
+      case "dashboard":
+      default:
+        return <StoreDashboard />;
     }
-  }, [navigate]);
-
-  // 대시보드만 허용 (사이드에서 다른 메뉴 눌러도 무시)
-  const handlePageChange = (page) => {
-    if (page !== "dashboard") return;
   };
-
-  const DashboardOnly = userType === "HQ" ? <HQDashboard /> : <StoreDashboard />;
 
   return (
     <>
       <Layout
-        userType={userType}
-        currentPage="dashboard"
+        currentPage={currentPage}
         onPageChange={handlePageChange}
         onLogout={handleLogout}
       >
-        {DashboardOnly}
+        {renderPage()}
       </Layout>
       <Toaster />
     </>

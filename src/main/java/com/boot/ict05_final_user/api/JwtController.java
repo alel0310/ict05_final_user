@@ -7,9 +7,7 @@ import com.boot.ict05_final_user.domain.jwt.dto.RefreshRequestDTO;
 import com.boot.ict05_final_user.domain.jwt.service.JwtService;
 import org.springframework.http.MediaType;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 public class JwtController {
@@ -20,7 +18,7 @@ public class JwtController {
         this.jwtService = jwtService;
     }
 
-    // 소셜 로그인 쿠키 방식의 Refresh 토큰 헤더 방식으로 교환
+    // (기존) 쿠키→헤더 교환 유지
     @PostMapping(value = "/jwt/exchange", consumes = MediaType.APPLICATION_JSON_VALUE)
     public JWTResponseDTO jwtExchangeApi(
             HttpServletRequest request,
@@ -29,12 +27,14 @@ public class JwtController {
         return jwtService.cookie2Header(request, response);
     }
 
-    // Refresh 토큰으로 Access 토큰 재발급 (Rotate 포함)
-    @PostMapping(value = "/jwt/refresh", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public JWTResponseDTO jwtRefreshApi(
-            @Validated @RequestBody RefreshRequestDTO dto
+    // ✅ 헤더로 받은 Refresh 토큰으로 Access 재발급 (회전 포함)
+    //    헤더 키: X-Refresh-Token
+    @PostMapping(value = "/jwt/refresh")
+    public JWTResponseDTO jwtRefreshHeaderApi(
+            @RequestHeader("X-Refresh-Token") String refreshToken
     ) {
+        RefreshRequestDTO dto = new RefreshRequestDTO();
+        dto.setRefreshToken(refreshToken);
         return jwtService.refreshRotate(dto);
     }
-
 }

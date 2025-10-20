@@ -71,9 +71,9 @@ export function StoreDashboard() {
   const fmtWonMan = (v) => `₩${(Number(v || 0) / 10000).toFixed(0)}만`;
 
   return (
-    <div className="space-y-6">
+    <div className="stack-24">
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="kpi-grid">
         <KPICard
           title="오늘 매출"
           value="₩542만"
@@ -114,7 +114,7 @@ export function StoreDashboard() {
           <h3 className="text-lg font-semibold text-gray-900">인기 메뉴 TOP 5</h3>
           <Package className="w-5 h-5 text-kpi-green" />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="menu-grid">
           {topMenus.map((menu) => (
             <div key={menu.rank} className="flex flex-col items-center p-4 bg-light-gray rounded-lg">
               <div className="w-8 h-8 bg-kpi-green text-white rounded-full flex items-center justify-center text-sm font-bold mb-2">
@@ -136,7 +136,7 @@ export function StoreDashboard() {
           <TrendingUp className="w-5 h-5 text-kpi-red" />
         </div>
         <Tabs defaultValue="sales" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="tabs-grid-3">
             <TabsTrigger value="sales">매출</TabsTrigger>
             <TabsTrigger value="orders">주문수</TabsTrigger>
             <TabsTrigger value="visitors">방문자</TabsTrigger>
@@ -181,7 +181,7 @@ export function StoreDashboard() {
       </Card>
 
       {/* 주/월 누적 데이터 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="two-col-grid">
         {/* 주 누적 */}
         <Card className="p-6 bg-white rounded-xl shadow-sm">
           <div className="flex items-center justify-between mb-6">

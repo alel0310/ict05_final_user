@@ -1,6 +1,6 @@
+// src/components/Common/Layout.jsx
 import React, { useState, useEffect } from 'react';
 import {
-  Building2,
   Store,
   Menu,
   Settings,
@@ -21,18 +21,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../ui/button';
 
-// 메뉴 정의 (타입 제거, 순수 객체)
-const hqMenuItems = [
-  { id: 'dashboard', label: '대시보드', icon: Home },
-  { id: 'stores', label: '가맹점 관리', icon: Building2 },
-  { id: 'menu', label: '메뉴 관리', icon: Package },
-  { id: 'inventory', label: '재고 관리', icon: Package },
-  { id: 'staff', label: '직원 관리', icon: Users },
-  { id: 'logistics', label: '물류/발주', icon: Truck },
-  { id: 'notice', label: '공지사항', icon: MessageSquare },
-  { id: 'reports', label: '리포트', icon: BarChart3 },
-];
-
+// ✅ 가맹점(Store) 전용 메뉴만 유지
 const storeMenuItems = [
   { id: 'dashboard', label: '대시보드', icon: Home },
   { id: 'menu', label: '메뉴 관리', icon: Package },
@@ -90,23 +79,20 @@ const storeMenuItems = [
   },
 ];
 
-export function Layout({ children, userType, currentPage, onPageChange, onLogout }) {
+export function Layout({ children, currentPage, onPageChange, onLogout }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState([]);
 
   // 현재 페이지가 서브메뉴라면 해당 상위 메뉴 자동 확장
   useEffect(() => {
-    const menuItems = userType === 'HQ' ? hqMenuItems : storeMenuItems;
     const autoExpand = [];
-    menuItems.forEach((item) => {
+    storeMenuItems.forEach((item) => {
       if (item.children && item.children.some((child) => child.id === currentPage)) {
         autoExpand.push(item.id);
       }
     });
     setExpandedMenus(autoExpand);
-  }, [userType, currentPage]);
-
-  const menuItems = userType === 'HQ' ? hqMenuItems : storeMenuItems;
+  }, [currentPage]);
 
   const toggleMenu = (menuId) => {
     setExpandedMenus((prev) =>
@@ -114,10 +100,23 @@ export function Layout({ children, userType, currentPage, onPageChange, onLogout
     );
   };
 
+  // 현재 페이지 타이틀 계산
+  const currentLabel = (() => {
+    const top = storeMenuItems.find((m) => m.id === currentPage);
+    if (top) return top.label;
+    for (const m of storeMenuItems) {
+      if (m.children) {
+        const sub = m.children.find((c) => c.id === currentPage);
+        if (sub) return sub.label;
+      }
+    }
+    return '대시보드';
+  })();
+
   return (
     <div className="min-h-screen bg-light-gray flex">
       {/* Sidebar */}
-      <div
+      <aside
         className={`bg-navy-sidebar text-white transition-all duration-300 ${
           sidebarCollapsed ? 'w-16' : 'w-64'
         }`}
@@ -131,7 +130,7 @@ export function Layout({ children, userType, currentPage, onPageChange, onLogout
             {!sidebarCollapsed && (
               <div>
                 <h1 className="font-bold">FranFriend ERP</h1>
-                <p className="text-sm text-white/70">{userType === 'HQ' ? '본사' : '가맹점'}</p>
+                <p className="text-sm text-white/70">가맹점</p>
               </div>
             )}
           </div>
@@ -139,7 +138,7 @@ export function Layout({ children, userType, currentPage, onPageChange, onLogout
 
         {/* Navigation */}
         <nav className="p-4 space-y-2">
-          {menuItems.map((item) => {
+          {storeMenuItems.map((item) => {
             const Icon = item.icon;
             const isActive =
               currentPage === item.id ||
@@ -149,6 +148,7 @@ export function Layout({ children, userType, currentPage, onPageChange, onLogout
             return (
               <div key={item.id}>
                 <button
+                  type="button"
                   onClick={() => {
                     if (item.children) {
                       toggleMenu(item.id);
@@ -182,6 +182,7 @@ export function Layout({ children, userType, currentPage, onPageChange, onLogout
                       return (
                         <button
                           key={child.id}
+                          type="button"
                           onClick={() => onPageChange && onPageChange(child.id)}
                           className={`w-full flex items-center gap-2 px-2 py-1 rounded text-sm transition-colors ${
                             isChildActive
@@ -220,9 +221,9 @@ export function Layout({ children, userType, currentPage, onPageChange, onLogout
             </>
           )}
         </div>
-      </div>
+      </aside>
 
-      {/* Main Content */}
+      {/* Main */}
       <div className="flex-1 flex flex-col">
         {/* Top Bar */}
         <header className="bg-white border-b border-gray-200 px-6 py-4">
@@ -232,29 +233,15 @@ export function Layout({ children, userType, currentPage, onPageChange, onLogout
                 <Menu className="w-5 h-5" />
               </Button>
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">
-                  {(() => {
-                    const top = menuItems.find((m) => m.id === currentPage);
-                    if (top) return top.label;
-                    for (const m of menuItems) {
-                      if (m.children) {
-                        const sub = m.children.find((c) => c.id === currentPage);
-                        if (sub) return sub.label;
-                      }
-                    }
-                    return '대시보드';
-                  })()}
-                </h2>
-                <p className="text-sm text-dark-gray">
-                  {userType === 'HQ' ? '본사 관리 시스템' : '가맹점 관리 시스템'}
-                </p>
+                <h2 className="text-lg font-semibold text-gray-900">{currentLabel}</h2>
+                <p className="text-sm text-dark-gray">가맹점 관리 시스템</p>
               </div>
             </div>
 
             <div className="flex items-center gap-4">
               <div className="text-right">
                 <p className="text-sm font-medium text-gray-900">관리자</p>
-                <p className="text-xs text-dark-gray">{userType === 'HQ' ? '본사' : '강남점'}</p>
+                <p className="text-xs text-dark-gray">강남점</p>
               </div>
               <div className="w-8 h-8 bg-kpi-green rounded-full flex items-center justify-center">
                 <Users className="w-4 h-4 text-white" />
@@ -263,8 +250,10 @@ export function Layout({ children, userType, currentPage, onPageChange, onLogout
           </div>
         </header>
 
-        {/* Content Area */}
-        <main className="flex-1 p-6 overflow-auto">{children}</main>
+        {/* Content */}
+        <main className="flex-1 overflow-auto content">
+          <div className="page-container">{children}</div>
+        </main>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import "./LoginPage.css";
+import "../styles/LoginPage.css";
 
 const BASE = process.env.REACT_APP_BACKEND_API_BASE_URL;
 
