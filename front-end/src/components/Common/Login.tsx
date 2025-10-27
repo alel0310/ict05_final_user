@@ -5,8 +5,12 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Store, Lock, Mail } from 'lucide-react';
 import { toast } from 'sonner';
-import { tokenStorage } from '../../lib/tokenStorage'; // tokenStorage 임포트
+import { tokenStorage } from '../../lib/tokenStorage';
 import api from '../../lib/authApi';
+
+// ✨ 폼 인코딩 유틸
+const toForm = (obj: Record<string, string>) =>
+  Object.entries(obj).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
 
 interface LoginProps {
   onLogin: () => void;
@@ -25,21 +29,21 @@ export function Login({ onLogin, onRegister }: LoginProps) {
     }
 
     try {
-     // src/components/Common/Login.tsx (요약)
-    const res = await api.post("/login", { email, password });
-    // 프록시 쓰면: await api.post("/api/login", { ... })
-
-    const { accessToken, refreshToken } = res.data || {};
-    if (accessToken && refreshToken) {
-      tokenStorage.setTokens({ accessToken, refreshToken });
-      onLogin();           // App.tsx에서 setIsLoggedIn(true) 처리
-    }
-
+      // ✅ 백엔드 LoginFilter가 읽는 기본 파라미터 이름: username / password
+      const res = await api.post("/login", { email, password });   // ← api의 baseURL이 /api 이므로 OK
+      // (명시적으로 적고 싶으면 api.post("/api/login", ...)로도 동작)
+      const { accessToken, refreshToken } = res.data || {};
+      if (accessToken && refreshToken) {
+        tokenStorage.setTokens({ accessToken, refreshToken });
+        onLogin();
+      } else {
+        toast.error("토큰 발급 실패");
+      }
     } catch (err: any) {
-      toast.error(err?.response?.status === 401 ? "이메일 또는 비밀번호를 확인하세요." : "로그인 오류");
+      const msg = err?.response?.status === 401 ? '이메일 또는 비밀번호를 확인하세요.' : '로그인 오류';
+      toast.error(msg);
     }
   };
-
   return (
     <div className="min-h-screen bg-light-gray flex items-center justify-center p-4">
       <Card className="w-full max-w-md p-8 bg-white rounded-xl shadow-lg">

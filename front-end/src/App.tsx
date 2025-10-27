@@ -33,42 +33,48 @@ import { tokenStorage } from "./lib/tokenStorage";
 import api, { setForceLogoutHandler } from "./lib/authApi"; // ✅ 인터셉터/강제로그아웃 핸들러
 
 export default function App() {
-  // 가맹점 모드 고정
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
   const [currentPage, setCurrentPage] = useState("dashboard");
 
-  const navigate = useNavigate(); // ✅ JSX 패턴과 동일하게 사용
+  // 🔹 추가: 부팅 중 플래그(깜빡임 방지)
+  const [booting, setBooting] = useState(true);
 
-  // ✅ 재발급 실패 등 강제 로그아웃 핸들러(인터셉터에서 호출)
+  // 강제 로그아웃(재발급 실패) 핸들러 등록 - 기존 그대로
   useEffect(() => {
     setForceLogoutHandler(() => {
       setIsLoggedIn(false);
       tokenStorage.clear();
       toast.error("로그인이 만료되었습니다. 다시 로그인해 주세요.");
-      navigate("/login", { replace: true });        // ✅ 로그인 화면으로 이동
     });
-  }, [navigate]);
+  }, []);
 
-  // ✅ 토큰 가드 + 인터셉터 동작 확인 (JSX 패턴 그대로)
-  //    - 초기 진입 시, accessToken 없으면 /login
-  //    - accessToken이 있어도 유효성 확인(/user). 실패하면 /login
+  // ✅ 세션 복구 로직 (새로고침 시 로그인 유지)
   useEffect(() => {
-    const access = tokenStorage.getAccess(); // localStorage.getItem("accessToken")와 동일한 역할
-    if (!access) {
-      setIsLoggedIn(false);
-      navigate("/login", { replace: true });
-      return;
-    }
-    api.get("/user")
-      .then(() => {
-        setIsLoggedIn(true);
-      })
-      .catch(() => {
+    (async () => {
+      try {
+        const access = tokenStorage.getAccess();
+        const refresh = tokenStorage.getRefresh();
+
+        // 토큰이 하나라도 있으면 세션 복구 시도
+        if (access || refresh) {
+          // 얕은 인증 체크(만료면 인터셉터가 자동 재발급 시도)
+          await api.get("/user");
+          setIsLoggedIn(true);
+          setCurrentPage("dashboard");
+        } else {
+          setIsLoggedIn(false);
+        }
+      } catch {
+        // 재발급도 실패 등 → 로그인 페이지 유지
         setIsLoggedIn(false);
-        navigate("/login", { replace: true });
-      });
-  }, [navigate]);
+      } finally {
+        setBooting(false);
+      }
+    })();
+  }, []);
+  
+  const navigate = useNavigate(); // ✅ JSX 패턴과 동일하게 사용
 
   // Login 컴포넌트가 토큰 저장 후 호출
   const handleLogin = () => {
