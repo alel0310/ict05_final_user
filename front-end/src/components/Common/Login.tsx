@@ -1,50 +1,56 @@
-import React, { useState } from 'react';
+import  {useState} from "react";
+import {useNavigate} from "react-router-dom";
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Store, Lock, Mail } from 'lucide-react';
 import { toast } from 'sonner';
-import { tokenStorage } from '../../lib/tokenStorage';
-import api from '../../lib/authApi';
+import axios from "axios";
+import api from "../../lib/authApi";
 
-// ✨ 폼 인코딩 유틸
-const toForm = (obj: Record<string, string>) =>
-  Object.entries(obj).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
 
-interface LoginProps {
-  onLogin: () => void;
-  onRegister: () => void;
-}
+export default function Login(){
+    const navigate = useNavigate();
 
-export function Login({ onLogin, onRegister }: LoginProps) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [error, setError] = useState("");
+    const [loading, setLoading] = useState<boolean>(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email || !password) {
-      toast.error('이메일과 비밀번호를 입력해주세요.');
-      return;
-    }
+    const handleLogin = async (e : any) => {
+        e.preventDefault();
+        if (loading) return;
+        setLoading(true);
+        setError("");
 
-    try {
-      // ✅ 백엔드 LoginFilter가 읽는 기본 파라미터 이름: username / password
-      const res = await api.post("/login", { email, password });   // ← api의 baseURL이 /api 이므로 OK
-      // (명시적으로 적고 싶으면 api.post("/api/login", ...)로도 동작)
-      const { accessToken, refreshToken } = res.data || {};
-      if (accessToken && refreshToken) {
-        tokenStorage.setTokens({ accessToken, refreshToken });
-        onLogin();
-      } else {
-        toast.error("토큰 발급 실패");
-      }
-    } catch (err: any) {
-      const msg = err?.response?.status === 401 ? '이메일 또는 비밀번호를 확인하세요.' : '로그인 오류';
-      toast.error(msg);
-    }
-  };
-  return (
+        if (!email || !password) {
+            setError("이메일과 비밀번호를 입력하세요.");
+            setLoading(false);
+            return;
+        }
+
+        try {
+            // axios 인스턴스로 로그인 (withCredentials 등 공통설정 사용)
+            const res = await api.post("/login", {email, password});
+
+            // 서버가 본문으로 토큰을 내려줄 수도/안 줄 수도 있으므로 안전 처리
+            const data = res?.data || {};
+            if (data.accessToken) localStorage.setItem("accessToken", data.accessToken);
+            if (data.refreshToken) localStorage.setItem("refreshToken", data.refreshToken);
+
+            // 라우팅
+            navigate("/", {replace:true});
+        }  catch(err: unknown){
+            console.error(err);
+            const status = axios.isAxiosError(err) ? err?.response?.status : undefined; 
+            if (status === 401) setError("이메일 또는 비밀번호를 확인하세요.");
+            else setError("로그인 중 오류가 발생했습니다.");
+        }  finally{
+            setLoading(false);
+        }
+    };
+    return (
     <div className="min-h-screen bg-light-gray flex items-center justify-center p-4">
       <Card className="w-full max-w-md p-8 bg-white rounded-xl shadow-lg">
         {/* Logo & Branding */}
@@ -57,7 +63,7 @@ export function Login({ onLogin, onRegister }: LoginProps) {
         </div>
 
         {/* Login Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <Label htmlFor="email" className="text-sm font-medium text-gray-700 mb-2 block">
               이메일
@@ -105,7 +111,7 @@ export function Login({ onLogin, onRegister }: LoginProps) {
             <Button
               type="button"
               variant="outline"
-              onClick={onRegister}
+              onClick={() => navigate("/register")}
               className="w-full h-12 rounded-lg font-medium border-gray-300 text-gray-700 hover:bg-gray-50"
             >
               회원가입

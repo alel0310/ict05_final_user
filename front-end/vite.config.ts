@@ -16,11 +16,12 @@ export default defineConfig({
     open: '/login',
     proxy: {
       '/api': {
-        target: 'http://localhost:8082',   // 백엔드
+        // ✅ target 에 base path 넣지 말기 (중복 /user 방지)
+        target: 'http://localhost:8082',
         changeOrigin: true,
-        // ✅ /api/user -> /user
-        // ✅ /api/login -> /user/login  등으로 변환
-        rewrite: (p) => p.replace(/^\/api/, '/user'),
+        // ✅ /api/login -> /login
+        // ✅ /api/user  -> /user
+        rewrite: (p) => p.replace(/^\/api/, ''),
       },
     },
   },

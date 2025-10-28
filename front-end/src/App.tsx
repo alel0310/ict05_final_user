@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";            // ✅ navigate 사용
 import { Layout } from "./components/Common/Layout";
-import { Login } from "./components/Common/Login";
+// import LoginPage from "./pages/LoginPage";
 import { Register } from "./components/Common/Register";
 import { StoreDashboard } from "./components/Store/Dashboard";
 import { StoreMenuManagement } from "./components/Store/MenuManagement";
@@ -30,92 +30,42 @@ import { ErrorBoundary } from "./components/Common/ErrorBoundary";
 import { OrderProvider } from "./components/Common/OrderContext";
 // src/App.tsx (상단 imports)
 import { StaffSchedule } from "./components/Store/StaffSchedule"; // ⬅️ 추가
-
-
-import { tokenStorage } from "./lib/tokenStorage";
-import api, { setForceLogoutHandler } from "./lib/authApi"; // ✅ 인터셉터/강제로그아웃 핸들러
+import api from "./lib/authApi";
+ // ✅ 인터셉터/강제로그아웃 핸들러
 
 export default function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [showRegister, setShowRegister] = useState(false);
+  const navigate = useNavigate();
   const [currentPage, setCurrentPage] = useState("dashboard");
 
-  // 🔹 추가: 부팅 중 플래그(깜빡임 방지)
-  const [booting, setBooting] = useState(true);
-
-  // 강제 로그아웃(재발급 실패) 핸들러 등록 - 기존 그대로
-  useEffect(() => {
-    setForceLogoutHandler(() => {
-      setIsLoggedIn(false);
-      tokenStorage.clear();
-      toast.error("로그인이 만료되었습니다. 다시 로그인해 주세요.");
+  useEffect(()=> {
+    const access = localStorage.getItem("accessToken");
+    if(!access){
+      navigate("/login", {replace: true});
+      return;
+    }
+    api.get("/user").catch(()=>{
+      navigate("/login", {replace: true});
     });
-  }, []);
+  }, [navigate]);
 
-  // ✅ 세션 복구 로직 (새로고침 시 로그인 유지)
-  useEffect(() => {
-    (async () => {
-      try {
-        const access = tokenStorage.getAccess();
-        const refresh = tokenStorage.getRefresh();
-
-        // 토큰이 하나라도 있으면 세션 복구 시도
-        if (access || refresh) {
-          // 얕은 인증 체크(만료면 인터셉터가 자동 재발급 시도)
-          await api.get("/user");
-          setIsLoggedIn(true);
-          setCurrentPage("dashboard");
-        } else {
-          setIsLoggedIn(false);
-        }
-      } catch {
-        // 재발급도 실패 등 → 로그인 페이지 유지
-        setIsLoggedIn(false);
-      } finally {
-        setBooting(false);
-      }
-    })();
-  }, []);
-  
-  const navigate = useNavigate(); // ✅ JSX 패턴과 동일하게 사용
-
-  // Login 컴포넌트가 토큰 저장 후 호출
-  const handleLogin = () => {
-    setIsLoggedIn(true);
-    setCurrentPage("dashboard");
-    toast.success("로그인되었습니다.");
-    navigate("/", { replace: true }); // 로그인 후 메인으로
-  };
-
-  const handleRegister = (_userData: any) => {
-    setShowRegister(false);
-    toast.success("회원가입 완료! 로그인해 주세요.");
-  };
-
-  const handleLogout = () => {
-    tokenStorage.clear();
-    setIsLoggedIn(false);
-    setCurrentPage("dashboard");
+  const handleLogout =() => {
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
     toast.success("로그아웃되었습니다.");
-    navigate("/login", { replace: true });
-  };
+    navigate("/login", {replace : true});
+  }
 
   const handlePageChange = (page: string) => setCurrentPage(page);
 
-  const renderContent = () => {
-    if (currentPage === "dashboard") {
-      return (
-        <ErrorBoundary>
-          <StoreDashboard />
-        </ErrorBoundary>
-      );
-    }
+  const renderPage = () => {
     switch (currentPage) {
+      case "dashboard": return <StoreDashboard/>;
       case "menu": return <ErrorBoundary><StoreMenuManagement /></ErrorBoundary>;
       case "orders":
       case "order-pos": return <ErrorBoundary><OrderSystem /></ErrorBoundary>;
       case "order-list": return <ErrorBoundary><OrderList /></ErrorBoundary>;
       case "order-kitchen": return <ErrorBoundary><KitchenDisplay /></ErrorBoundary>;
+      case "order-provider" : return <OrderProvider children={undefined} />;
       case "inventory":
       case "inventory-status": return <ErrorBoundary><InventoryStatus /></ErrorBoundary>;
       case "inventory-orders": return <ErrorBoundary><InventoryOrders /></ErrorBoundary>;
@@ -148,36 +98,18 @@ export default function App() {
     }
   };
 
-  // 로그인 전: 무조건 로그인/회원가입
-  if (!isLoggedIn) {
-    if (showRegister) {
-      return (
-        <>
-          <Register onRegister={handleRegister} onBackToLogin={() => setShowRegister(false)} />
-          <Toaster />
-        </>
-      );
-    }
-    return (
-      <>
-        <Login onLogin={handleLogin} onRegister={() => setShowRegister(true)} />
-        <Toaster />
-      </>
-    );
-  }
+return (
+  <>
+    <Layout
+      userType="Store"
+      currentPage={currentPage}
+      onPageChange={handlePageChange}
+      onLogout={handleLogout}
+    >
+      {renderPage()}
+    </Layout>
+    <Toaster />
+  </>
+);
 
-  // 로그인 후
-  return (
-    <OrderProvider>
-      <Layout
-        userType={"Store"}
-        currentPage={currentPage}
-        onPageChange={handlePageChange}
-        onLogout={handleLogout}
-      >
-        {renderContent()}
-      </Layout>
-      <Toaster />
-    </OrderProvider>
-  );
 }
