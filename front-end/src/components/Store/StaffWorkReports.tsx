@@ -122,9 +122,17 @@ export function StaffWorkReports() {
     { name: '결근', value: filteredReports.filter(r => r.status === 'absent').length }
   ];
 
-  function getStatusBadge(status: string): React.ReactNode {
-    throw new Error('Function not implemented.');
-  }
+ function getStatusBadge(status: WorkReport['status']): React.ReactNode {
+  const meta: Record<WorkReport['status'], { text: string; cls: string }> = {
+    present:     { text: '정상출근', cls: 'bg-green-100 text-green-700 border-green-200' },
+    late:        { text: '지각',     cls: 'bg-amber-100 text-amber-700 border-amber-200' },
+    early_leave: { text: '조퇴',     cls: 'bg-purple-100 text-purple-700 border-purple-200' },
+    absent:      { text: '결근',     cls: 'bg-red-100 text-red-700 border-red-200' },
+  };
+
+  const m = meta[status] ?? { text: status, cls: 'bg-gray-100 text-gray-700 border-gray-200' };
+  return <Badge className={`border ${m.cls}`}>{m.text}</Badge>;
+}
 
   return (
     <div className="space-y-6">
