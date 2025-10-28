@@ -1,17 +1,50 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card } from '../ui/card';
 import { KPICard } from '../Common/KPICard';
+import { KpiCardsResponse, KpiCardDTO } from '../Common/kpi'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { 
-  DollarSign, 
-  ShoppingCart, 
+import {
+  DollarSign,
+  ShoppingCart,
   Users,
   Package,
   TrendingUp,
   Calendar,
-  CalendarDays
+  CalendarDays,
 } from 'lucide-react';
-import { LineChart, Line, BarChart, Bar, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  ResponsiveContainer,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+} from 'recharts';
+import api from '../../lib/authApi';
+
+
+// 표시 순서
+const CARD_ORDER: Array<KpiCardDTO['key']> = [
+  'sales_today',
+  'orders_today',
+  'visitors_today',
+  'top_menu',
+];
+
+// key별 UI 매핑
+const cardConfig: Record<
+  string,
+  { title: string; icon: React.ComponentType<{ className?: string }>; color: 'red' | 'orange' | 'green' | 'purple' }
+> = {
+  sales_today: { title: '오늘 매출', icon: DollarSign, color: 'red' },
+  orders_today: { title: '오늘 주문수', icon: ShoppingCart, color: 'orange' },
+  visitors_today: { title: '오늘 방문자', icon: Users, color: 'green' },
+  top_menu: { title: 'TOP 메뉴', icon: Package, color: 'purple' },
+};
 
 // 샘플 데이터
 const dailyHourlyData = [
@@ -57,42 +90,74 @@ const monthlyData = [
 ];
 
 export function StoreDashboard() {
+
+  const [kpis, setKpis] = useState<KpiCardDTO[] | null>(null);
+  const [loadingKpi, setLoadingKpi] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { data } = await api.get<KpiCardsResponse>('/dashboard/kpis/today');
+
+        if (!alive) return;
+
+        const orderIndex = new Map(CARD_ORDER.map((k, i) => [k, i]));
+        const sorted = [...data.cards].sort(
+          (a, b) => (orderIndex.get(a.key) ?? 99) - (orderIndex.get(b.key) ?? 99)
+        );
+
+        setKpis(sorted);
+      } catch (e) {
+        // 폴백
+        setKpis([
+          { key: 'sales_today', value: '₩542만', change: '어제 대비 +8.2%', changeType: 'increase' },
+          { key: 'orders_today', value: '138건', change: '어제 대비 +12건', changeType: 'increase' },
+          { key: 'visitors_today', value: '156명', change: '어제 대비 +15명', changeType: 'increase' },
+          { key: 'top_menu', value: '치킨버거', change: '28개 판매', changeType: 'increase' },
+        ]);
+      } finally {
+        if (alive) setLoadingKpi(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   return (
     <div className="space-y-6">
-      {/* KPI Cards - 4개 카드 */}
+      {/* ====== KPI Cards: API 응답으로 렌더 ====== */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <KPICard
-          title="오늘 매출"
-          value="₩542만"
-          change="어제 대비 +8.2%"
-          changeType="increase"
-          icon={DollarSign}
-          color="red"
-        />
-        <KPICard
-          title="오늘 주문수"
-          value="138건"
-          change="어제 대비 +12건"
-          changeType="increase"
-          icon={ShoppingCart}
-          color="orange"
-        />
-        <KPICard
-          title="오늘 방문자"
-          value="156명"
-          change="어제 대비 +15명"
-          changeType="increase"
-          icon={Users}
-          color="green"
-        />
-        <KPICard
-          title="TOP 메뉴"
-          value="치킨버거"
-          change="28개 판매"
-          changeType="increase"
-          icon={Package}
-          color="purple"
-        />
+        {loadingKpi && (
+          <>
+            <Card className="h-28 animate-pulse bg-gray-100 rounded-xl" />
+            <Card className="h-28 animate-pulse bg-gray-100 rounded-xl" />
+            <Card className="h-28 animate-pulse bg-gray-100 rounded-xl" />
+            <Card className="h-28 animate-pulse bg-gray-100 rounded-xl" />
+          </>
+        )}
+        {!loadingKpi &&
+          (kpis ?? []).map((c) => {
+            const cfg = cardConfig[c.key] ?? {
+              title: c.key,
+              icon: Package,
+              color: "purple" as const,
+            };
+            return (
+              <KPICard
+                key={c.key}
+                id={c.key}
+                title={cfg.title}
+                value={c.value}
+                change={c.change}
+                changeType={c.changeType}
+                icon={cfg.icon}
+                color={cfg.color}
+              />
+            );
+          })}
       </div>
 
       {/* TOP 5 메뉴 카드 */}
