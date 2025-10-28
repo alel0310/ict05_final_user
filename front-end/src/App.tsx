@@ -28,6 +28,9 @@ import { toast } from "sonner";
 import { Toaster } from "./components/ui/sonner";
 import { ErrorBoundary } from "./components/Common/ErrorBoundary";
 import { OrderProvider } from "./components/Common/OrderContext";
+// src/App.tsx (상단 imports)
+import { StaffSchedule } from "./components/Store/StaffSchedule"; // ⬅️ 추가
+
 
 import { tokenStorage } from "./lib/tokenStorage";
 import api, { setForceLogoutHandler } from "./lib/authApi"; // ✅ 인터셉터/강제로그아웃 핸들러
@@ -124,6 +127,9 @@ export default function App() {
       case "staff-list": return <ErrorBoundary><StaffList /></ErrorBoundary>;
       case "staff-payroll": return <ErrorBoundary><StaffPayroll /></ErrorBoundary>;
       case "staff-reports": return <ErrorBoundary><StaffWorkReports /></ErrorBoundary>;
+      // renderContent() 내부 switch
+      case "staff-schedule": return <ErrorBoundary><StaffSchedule /></ErrorBoundary>;
+
       case "notice": return <ErrorBoundary><NoticeEducation /></ErrorBoundary>;
       case "reports": return <ErrorBoundary><StoreReports /></ErrorBoundary>;
       case "reports-sales": return <ErrorBoundary><ReportsSales /></ErrorBoundary>;
