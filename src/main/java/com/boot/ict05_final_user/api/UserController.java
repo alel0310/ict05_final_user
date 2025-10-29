@@ -28,7 +28,7 @@ public class UserController {
     }
 
     // POST /user  (회원가입)
-    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/join", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Map<String, Long>> joinApi(@Validated(UserRequestDTO.addGroup.class) @RequestBody UserRequestDTO dto) {
         Long id = userService.addUser(dto);
         return ResponseEntity.status(201).body(Collections.singletonMap("userEntityId", id));
