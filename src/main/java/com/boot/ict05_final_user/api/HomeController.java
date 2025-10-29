@@ -1,8 +1,6 @@
 package com.boot.ict05_final_user.api;
 
-import com.boot.ict05_final_user.domain.home.dto.ChangeType;
-import com.boot.ict05_final_user.domain.home.dto.KpiCardDTO;
-import com.boot.ict05_final_user.domain.home.dto.KpiCardsResponseDTO;
+import com.boot.ict05_final_user.domain.home.dto.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -41,7 +39,7 @@ public class HomeController {
                         .build(),
                 KpiCardDTO.builder()
                         .key("top_menu")
-                        .value("치킨맛버거")
+                        .value("치킨맛치킨")
                         .change("28개 판매")
                         .changeType(ChangeType.INCREASE) // 혹은 NEUTRAL
                         .build()
@@ -52,5 +50,33 @@ public class HomeController {
                 .storeId(storeId)
                 .cards(cards)
                 .build();
+    }
+
+    /**
+     * Top5 인기메뉴(오늘) — 임시 하드코딩 버전
+     * TODO: 나중에 HomeService.getTopMenus(storeId, periodStart, periodEnd, limit)로 교체
+     */
+    @GetMapping(value = "/menus/top5")
+    public TopMenusResponseDTO getTodayTopMenus(
+            @RequestParam(required = false) Long storeId,
+            @RequestParam(defaultValue = "5") Integer limit
+    ) {
+        LocalDateTime now = LocalDateTime.now();
+        TopMenusResponseDTO body = TopMenusResponseDTO.builder()
+                .date(now)
+                .periodStart(now.toLocalDate().atStartOfDay())
+                .periodEnd(now.withHour(23).withMinute(59).withSecond(59))
+                .storeId(storeId)
+                .limit(limit)
+                .items(List.of(
+                        TopMenuItemDTO.builder().menuId(101L).name("치킨치킨치킨").quantity(28).sales(420_000L).image("🍔").build(),
+                        TopMenuItemDTO.builder().menuId(102L).name("불고기버거").quantity(24).sales(360_000L).image("🍔").build(),
+                        TopMenuItemDTO.builder().menuId(203L).name("감자튀김(L)").quantity(35).sales(175_000L).image("🍟").build(),
+                        TopMenuItemDTO.builder().menuId(304L).name("콜라(L)").quantity(42).sales(126_000L).image("🥤").build(),
+                        TopMenuItemDTO.builder().menuId(305L).name("치즈스틱").quantity(18).sales(108_000L).image("🧀").build()
+                ))
+                .build();
+
+        return body;
     }
 }

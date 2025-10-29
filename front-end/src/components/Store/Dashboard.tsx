@@ -27,7 +27,7 @@ import {
 import api from '../../lib/authApi';
 
 
-// 표시 순서
+// 화면 구성용 상수
 const CARD_ORDER: Array<KpiCardDTO['key']> = [
   'sales_today',
   'orders_today',
@@ -35,7 +35,7 @@ const CARD_ORDER: Array<KpiCardDTO['key']> = [
   'top_menu',
 ];
 
-// key별 UI 매핑
+// KPI key마다 UI 매핑
 const cardConfig: Record<
   string,
   { title: string; icon: React.ComponentType<{ className?: string }>; color: 'red' | 'orange' | 'green' | 'purple' }
@@ -62,13 +62,27 @@ const dailyHourlyData = [
   { time: '20:00', sales: 590000, orders: 35, visitors: 42 },
 ];
 
-const topMenus = [
-  { rank: 1, name: '치킨버거', quantity: 28, sales: 420000, image: '🍔' },
-  { rank: 2, name: '불고기버거', quantity: 24, sales: 360000, image: '🍔' },
-  { rank: 3, name: '감자튀김(L)', quantity: 35, sales: 175000, image: '🍟' },
-  { rank: 4, name: '콜라(L)', quantity: 42, sales: 126000, image: '🥤' },
-  { rank: 5, name: '치즈스틱', quantity: 18, sales: 108000, image: '🧀' },
-];
+// 1) TOP 메뉴 타입과 응답 타입
+export type TopMenuItem = {
+  menuId: number;       // 백엔드 DTO에 존재
+  name: string;
+  quantity: number | string; // 혹시 문자열로 올 경우 대비
+  sales: number;    // ↑ 동일
+  image?: string;
+};
+export type TopMenusResponseDTO = {
+  date: string;            // LocalDateTime → 문자열로 옴
+  periodStart: string;
+  periodEnd: string;
+  storeId?: number | null;
+  limit: number;
+  items: TopMenuItem[];
+};
+
+// 2) 통화 포맷 유틸(만원 표기)
+const fmtKRW10k = (v: number) =>
+  `₩${(v / 10_000).toFixed(0)}만`;
+
 
 const weeklyData = [
   { date: '2024-01-22 (월)', sales: 5420000, orders: 138, visitors: 156 },
@@ -89,35 +103,77 @@ const monthlyData = [
   { month: '2023년 8월', sales: 152300000, orders: 3865, visitors: 4410, days: 31 },
 ];
 
+// 컴포넌트 시작
 export function StoreDashboard() {
 
   const [kpis, setKpis] = useState<KpiCardDTO[] | null>(null);
   const [loadingKpi, setLoadingKpi] = useState(true);
 
+  // 컴포넌트 시작 내부
+  const [topMenus, setTopMenus] = useState<TopMenuItem[] | null>(null);
+  const [loadingTop, setLoadingTop] = useState(true);
+  
+  // 안전한 숫자 변환 (콤마, 단위 문자 제거까지)
+  const toNumber = (v: unknown) => {
+    if (v == null) return 0;
+    const s = String(v).replace(/[^\d.-]/g, "");
+    const n = Number(s);
+    return Number.isFinite(n) ? n : 0;
+  };
+
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const { data } = await api.get<KpiCardsResponse>('/dashboard/kpis/today');
+        // ① KPI + ② TOP5 메뉴를 동시에
+        const [kpiRes, topRes] = await Promise.all([
+          api.get<KpiCardsResponse>('/dashboard/kpis/today'),
+          api.get<TopMenusResponseDTO>('/dashboard/menus/top5'),
+        ]);
 
         if (!alive) return;
 
         const orderIndex = new Map(CARD_ORDER.map((k, i) => [k, i]));
-        const sorted = [...data.cards].sort(
+        const sorted = [...kpiRes.data.cards].sort(
           (a, b) => (orderIndex.get(a.key) ?? 99) - (orderIndex.get(b.key) ?? 99)
         );
 
         setKpis(sorted);
+        // TOP 메뉴 셋
+        // 서버에서 rank를 안 주면 여기서 재계산 가능:
+        const items = (topRes.data.items ?? [])
+          .map(m => ({
+            ...m,
+            _q: toNumber(m.quantity),
+            _sales: toNumber(m.sales),
+          }))
+          .sort((a, b) => b._q - a._q)        // 판매개수 기준 내림차순
+          .map((m, i) => ({
+            ...m,
+          }));
+        setTopMenus(items);
       } catch (e) {
-        // 폴백
+        // 실패 시 폴백
+        // KPI
         setKpis([
           { key: 'sales_today', value: '₩542만', change: '어제 대비 +8.2%', changeType: 'increase' },
           { key: 'orders_today', value: '138건', change: '어제 대비 +12건', changeType: 'increase' },
           { key: 'visitors_today', value: '156명', change: '어제 대비 +15명', changeType: 'increase' },
           { key: 'top_menu', value: '치킨버거', change: '28개 판매', changeType: 'increase' },
         ]);
+        // TOP 메뉴
+        setTopMenus([
+          { name: '치킨버거',  quantity: 28, sales: 420000, image: '🍔', menuId:101},
+          { name: '불고기버거', quantity: 24, sales: 360000, image: '🍔', menuId:102},
+          { name: '감자튀김(L)', quantity: 35, sales: 175000, image: '🍟', menuId:103},
+          { name: '콜라(L)',   quantity: 42, sales: 126000, image: '🥤', menuId:104},
+          { name: '치즈스틱',   quantity: 18, sales: 108000, image: '🧀', menuId:105},
+        ]);
       } finally {
-        if (alive) setLoadingKpi(false);
+        if (alive) {
+          setLoadingKpi(false);
+          setLoadingTop(false);
+        }  
       }
     })();
 
@@ -128,7 +184,7 @@ export function StoreDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* ====== KPI Cards: API 응답으로 렌더 ====== */}
+      {/* ====== KPI 카드 영역. 로딩 중이면 스켈레톤, 아니면 실제 카드 ====== */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {loadingKpi && (
           <>
@@ -161,25 +217,40 @@ export function StoreDashboard() {
       </div>
 
       {/* TOP 5 메뉴 카드 */}
+      {/* TOP 5 메뉴 카드 */}
       <Card className="p-6 bg-white rounded-xl shadow-sm">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-gray-900">인기 메뉴 TOP 5</h3>
           <Package className="w-5 h-5 text-kpi-green" />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          {topMenus.map((menu) => (
-            <div key={menu.rank} className="flex flex-col items-center p-4 bg-light-gray rounded-lg">
-              <div className="w-8 h-8 bg-kpi-green text-white rounded-full flex items-center justify-center text-sm font-bold mb-2">
-                {menu.rank}
+
+        {loadingTop && (
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-32 bg-gray-100 animate-pulse rounded-lg" />
+            ))}
+          </div>
+        )}
+
+        {!loadingTop && (
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            {(topMenus ?? []).map((menu) => (
+              <div key={menu.menuId} className="flex flex-col items-center p-4 bg-light-gray rounded-lg">
+                
+                <div className="text-2xl mb-2">
+                  {menu.image ?? '🍽️'}
+                </div>
+                <h4 className="font-medium text-gray-900 text-center text-sm mb-1">
+                  {menu.name}
+                </h4>
+                <p className="text-xs text-dark-gray">{menu.quantity}개</p>
+                <p className="text-sm font-medium text-gray-900">{fmtKRW10k(menu.sales)}</p>
               </div>
-              <div className="text-2xl mb-2">{menu.image}</div>
-              <h4 className="font-medium text-gray-900 text-center text-sm mb-1">{menu.name}</h4>
-              <p className="text-xs text-dark-gray">{menu.quantity}개</p>
-              <p className="text-sm font-medium text-gray-900">₩{(menu.sales / 10000).toFixed(0)}만</p>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </Card>
+
 
       {/* 시간대별 데이터 차트 */}
       <Card className="p-6 bg-white rounded-xl shadow-sm">
