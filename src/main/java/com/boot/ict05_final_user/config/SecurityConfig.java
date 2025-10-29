@@ -97,7 +97,8 @@ public class SecurityConfig {
                 // 공개 엔드포인트
                 .requestMatchers("/login").permitAll()
                 .requestMatchers("/jwt/exchange", "/jwt/refresh").permitAll()
-                .requestMatchers(HttpMethod.POST, "/user/exist", "/user").permitAll()
+                .requestMatchers(HttpMethod.POST, "/user/exist", "/user","/me", "/user/dashboard/**").permitAll()
+
 
                 // 인증 필요
                 .requestMatchers(HttpMethod.GET, "/user").hasRole(UserRoleType.USER.name())

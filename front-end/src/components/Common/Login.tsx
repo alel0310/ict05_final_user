@@ -1,4 +1,4 @@
-import  {useState} from "react";
+import  react, {useState} from "react";
 import {useNavigate} from "react-router-dom";
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
@@ -39,8 +39,10 @@ export default function Login(){
             if (data.accessToken) localStorage.setItem("accessToken", data.accessToken);
             if (data.refreshToken) localStorage.setItem("refreshToken", data.refreshToken);
 
+            // const { accessToken, refreshToken } = res.data;
+            // localStorage.setTokens({ accessToken, refreshToken });
             // 라우팅
-            navigate("/", {replace:true});
+            navigate("/dashboard", {replace:true});
         }  catch(err: unknown){
             console.error(err);
             const status = axios.isAxiosError(err) ? err?.response?.status : undefined; 

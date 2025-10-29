@@ -3,7 +3,8 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";            // ✅ navigate 사용
 import { Layout } from "./components/Common/Layout";
 // import LoginPage from "./pages/LoginPage";
-import { Register } from "./components/Common/Register";
+// import { Register } from "./components/Common/Register";
+
 import { StoreDashboard } from "./components/Store/Dashboard";
 import { StoreMenuManagement } from "./components/Store/MenuManagement";
 import { OrderSystem } from "./components/Store/OrderSystem";
@@ -36,6 +37,7 @@ import api from "./lib/authApi";
 export default function App() {
   const navigate = useNavigate();
   const [currentPage, setCurrentPage] = useState("dashboard");
+  const [ready, setReady] = useState(false);
 
   useEffect(()=> {
     const access = localStorage.getItem("accessToken");
@@ -43,11 +45,14 @@ export default function App() {
       navigate("/login", {replace: true});
       return;
     }
-    api.get("/user").catch(()=>{
-      navigate("/login", {replace: true});
+    api.get("/me").then(()=>setReady(true)).catch(()=>{
+ 
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+      navigate("/login", { replace: true });
     });
   }, [navigate]);
-
+  if (!ready) return null; // <-- ready 전에 Dashboard가 useEffect 실행 못함
   const handleLogout =() => {
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
@@ -62,10 +67,10 @@ export default function App() {
       case "dashboard": return <StoreDashboard/>;
       case "menu": return <ErrorBoundary><StoreMenuManagement /></ErrorBoundary>;
       case "orders":
-      case "order-pos": return <ErrorBoundary><OrderSystem /></ErrorBoundary>;
-      case "order-list": return <ErrorBoundary><OrderList /></ErrorBoundary>;
-      case "order-kitchen": return <ErrorBoundary><KitchenDisplay /></ErrorBoundary>;
-      case "order-provider" : return <OrderProvider children={undefined} />;
+      case "order-pos": return (<OrderProvider><ErrorBoundary><OrderSystem /></ErrorBoundary></OrderProvider>);
+      case "order-list": return (<OrderProvider><ErrorBoundary><OrderList /></ErrorBoundary></OrderProvider> )
+      case "order-kitchen":return (<OrderProvider><ErrorBoundary><KitchenDisplay /></ErrorBoundary></OrderProvider>);
+      case "daily-closing": return (<OrderProvider><ErrorBoundary><DailyClosing /></ErrorBoundary></OrderProvider> );
       case "inventory":
       case "inventory-status": return <ErrorBoundary><InventoryStatus /></ErrorBoundary>;
       case "inventory-orders": return <ErrorBoundary><InventoryOrders /></ErrorBoundary>;
