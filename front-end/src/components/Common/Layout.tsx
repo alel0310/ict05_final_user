@@ -17,7 +17,8 @@ import {
   Calculator,
   UserCheck,
   BookOpen,
-  Calendar
+  Calendar,
+  CircleDollarSign
 } from 'lucide-react';
 import { Button } from '../ui/button';
 
@@ -75,7 +76,7 @@ const storeMenuItems: MenuItem[] = [
     label: '정산', 
     icon: Calculator,
     children: [
-      { id: 'daily-closing', label: '일일 마감/시재', icon: Calculator },
+      { id: 'daily-closing', label: '일일 시재/마감', icon: CircleDollarSign },
       { id: 'channel-revenue', label: '서비스 채널', icon: BarChart3 }
     ]
   },

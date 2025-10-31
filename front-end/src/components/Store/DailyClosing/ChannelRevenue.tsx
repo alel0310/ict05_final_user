@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
-import { Calendar } from '../ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { Card, CardHeader, CardTitle, CardContent } from '../../ui/card';
+import { Button } from '../../ui/button';
+import { Badge } from '../../ui/badge';
+import { Calendar } from '../../ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '../../ui/popover';
 import { 
   Smartphone, 
   Monitor, 
@@ -34,9 +34,6 @@ const channelData = [
     orders: 156,
     averageOrder: 15705,
     growth: +8.5,
-    peakHour: '12:00-13:00',
-    avgStayTime: '45분',
-    tableUtilization: '78%'
   },
   {
     id: 'takeout',
@@ -48,9 +45,6 @@ const channelData = [
     orders: 142,
     averageOrder: 13310,
     growth: +12.3,
-    peakHour: '18:00-19:00',
-    avgWaitTime: '8분',
-    packagingCost: '2.5%'
   },
   {
     id: 'delivery',
@@ -62,9 +56,6 @@ const channelData = [
     orders: 89,
     averageOrder: 36517,
     growth: -2.1,
-    peakHour: '19:00-20:00',
-    avgDeliveryTime: '28분',
-    deliveryRadius: '3km'
   }
 ];
 
@@ -206,30 +197,6 @@ export function ChannelRevenue() {
                   <div>
                     <p className="text-dark-gray">평균 주문액</p>
                     <p className="font-medium">₩{channel.averageOrder.toLocaleString()}</p>
-                  </div>
-                  <div>
-                    <p className="text-dark-gray">피크 시간</p>
-                    <p className="font-medium">{channel.peakHour}</p>
-                  </div>
-                  <div>
-                    <p className="text-dark-gray">
-                      {channel.id === 'visit' ? '평균 체류시간' : 
-                       channel.id === 'takeout' ? '평균 대기시간' : '평균 배달시간'}
-                    </p>
-                    <p className="font-medium">
-                      {channel.id === 'visit' ? channel.avgStayTime : 
-                       channel.id === 'takeout' ? channel.avgWaitTime : channel.avgDeliveryTime}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-dark-gray">
-                      {channel.id === 'visit' ? '테이블 이용률' : 
-                       channel.id === 'takeout' ? '포장재 비용' : '배달 반경'}
-                    </p>
-                    <p className="font-medium">
-                      {channel.id === 'visit' ? channel.tableUtilization : 
-                       channel.id === 'takeout' ? channel.packagingCost : channel.deliveryRadius}
-                    </p>
                   </div>
                 </div>
 
@@ -484,49 +451,6 @@ export function ChannelRevenue() {
                       <span className="text-dark-gray">평균 주문액</span>
                       <span className="font-medium">₩{channel.averageOrder.toLocaleString()}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-dark-gray">피크 시간대</span>
-                      <span className="font-medium">{channel.peakHour}</span>
-                    </div>
-                    
-                    {channel.id === 'visit' && (
-                      <>
-                        <div className="flex justify-between">
-                          <span className="text-dark-gray">평균 체류시간</span>
-                          <span className="font-medium">{channel.avgStayTime}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-dark-gray">테이블 이용률</span>
-                          <span className="font-medium text-kpi-green">{channel.tableUtilization}</span>
-                        </div>
-                      </>
-                    )}
-                    
-                    {channel.id === 'takeout' && (
-                      <>
-                        <div className="flex justify-between">
-                          <span className="text-dark-gray">평균 대기시간</span>
-                          <span className="font-medium">{channel.avgWaitTime}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-dark-gray">포장재 비용</span>
-                          <span className="font-medium text-kpi-orange">{channel.packagingCost}</span>
-                        </div>
-                      </>
-                    )}
-                    
-                    {channel.id === 'delivery' && (
-                      <>
-                        <div className="flex justify-between">
-                          <span className="text-dark-gray">평균 배달시간</span>
-                          <span className="font-medium">{channel.avgDeliveryTime}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-dark-gray">배달 반경</span>
-                          <span className="font-medium text-kpi-purple">{channel.deliveryRadius}</span>
-                        </div>
-                      </>
-                    )}
                   </div>
                 </div>
               );
