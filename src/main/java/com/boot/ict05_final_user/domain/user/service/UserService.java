@@ -1,6 +1,6 @@
 package com.boot.ict05_final_user.domain.user.service;
 
-import com.boot.ict05_final_user.domain.jwt.service.JwtService;
+import com.boot.ict05_final_user.security.jwt.service.JwtService;
 import com.boot.ict05_final_user.domain.user.dto.UserRequestDTO;
 import com.boot.ict05_final_user.domain.user.dto.UserResponseDTO;
 import com.boot.ict05_final_user.domain.user.entity.Member;
