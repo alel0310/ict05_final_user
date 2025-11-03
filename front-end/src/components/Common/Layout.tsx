@@ -274,7 +274,7 @@ export function Layout({ children, userType, currentPage, onPageChange, onLogout
               </div>
             </div>
             
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 cursor-pointer hover:opacity-80 transition" onClick={() => onPageChange("mypage")}>
               <div className="text-right">
                 <p className="text-sm font-medium text-gray-900">관리자</p>
                 <p className="text-xs text-dark-gray">
