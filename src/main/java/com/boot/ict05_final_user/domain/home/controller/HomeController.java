@@ -1,4 +1,4 @@
-package com.boot.ict05_final_user.api;
+package com.boot.ict05_final_user.domain.home.controller;
 
 import com.boot.ict05_final_user.domain.home.dto.*;
 import lombok.RequiredArgsConstructor;
