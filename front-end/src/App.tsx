@@ -23,8 +23,9 @@ import { ReportsSales } from "./components/Store/ReportsSales";
 import { ReportsOrders } from "./components/Store/ReportsOrders";
 import { ReportsMaterials } from "./components/Store/ReportsMaterials";
 import { ReportsMembers } from "./components/Store/ReportsMembers";
-import { DailyClosing } from "./components/Store/DailyClosing";
-import { ChannelRevenue } from "./components/Store/ChannelRevenue";
+import { DailyClosing } from "./components/Store/DailyClosing/DailyClosingPage";
+import { ChannelRevenue } from "./components/Store/DailyClosing/ChannelRevenue";
+import { MyPage} from "./components/Common/MyPage";
 import { toast } from "sonner";
 import { Toaster } from "./components/ui/sonner";
 import { ErrorBoundary } from "./components/Common/ErrorBoundary";
@@ -76,15 +77,15 @@ export default function App() {
       case "inventory-orders": return <ErrorBoundary><InventoryOrders /></ErrorBoundary>;
       case "inventory-new-order": return <ErrorBoundary><InventoryNewOrder /></ErrorBoundary>;
       case "finance": return <ErrorBoundary><FinanceManagement /></ErrorBoundary>;
-      case "daily-closing": return <ErrorBoundary><DailyClosing /></ErrorBoundary>;
-      case "channel-revenue": return <ErrorBoundary><ChannelRevenue /></ErrorBoundary>;
+      case "daily-closing": return (<OrderProvider><ErrorBoundary><DailyClosing /></ErrorBoundary></OrderProvider>);
+      case "channel-revenue": return (<OrderProvider><ErrorBoundary><ChannelRevenue /></ErrorBoundary></OrderProvider>);
+      case "mypage": return <ErrorBoundary><MyPage /></ErrorBoundary>
       case "staff":
       case "staff-list": return <ErrorBoundary><StaffList /></ErrorBoundary>;
       case "staff-payroll": return <ErrorBoundary><StaffPayroll /></ErrorBoundary>;
       case "staff-reports": return <ErrorBoundary><StaffWorkReports /></ErrorBoundary>;
       // renderContent() 내부 switch
       case "staff-schedule": return <ErrorBoundary><StaffSchedule /></ErrorBoundary>;
-
       case "notice": return <ErrorBoundary><NoticeEducation /></ErrorBoundary>;
       case "reports": return <ErrorBoundary><StoreReports /></ErrorBoundary>;
       case "reports-sales": return <ErrorBoundary><ReportsSales /></ErrorBoundary>;

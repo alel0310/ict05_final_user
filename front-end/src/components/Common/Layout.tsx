@@ -17,7 +17,8 @@ import {
   Calculator,
   UserCheck,
   BookOpen,
-  Calendar
+  Calendar,
+  CircleDollarSign
 } from 'lucide-react';
 import { Button } from '../ui/button';
 
@@ -75,7 +76,7 @@ const storeMenuItems: MenuItem[] = [
     label: '정산', 
     icon: Calculator,
     children: [
-      { id: 'daily-closing', label: '일일 마감/시재', icon: Calculator },
+      { id: 'daily-closing', label: '일일 시재/마감', icon: CircleDollarSign },
       { id: 'channel-revenue', label: '서비스 채널', icon: BarChart3 }
     ]
   },
@@ -273,7 +274,7 @@ export function Layout({ children, userType, currentPage, onPageChange, onLogout
               </div>
             </div>
             
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 cursor-pointer hover:opacity-80 transition" onClick={() => onPageChange("mypage")}>
               <div className="text-right">
                 <p className="text-sm font-medium text-gray-900">관리자</p>
                 <p className="text-xs text-dark-gray">
