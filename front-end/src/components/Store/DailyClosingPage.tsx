@@ -4,10 +4,10 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from "../../ui/card";
-import { Button } from "../../ui/button";
-import { Input } from "../../ui/input";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../ui/tabs";
+} from "../ui/card";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import {
   Calculator,
   DollarSign,
@@ -21,9 +21,9 @@ import {
   Package,
 } from "lucide-react";
 import { toast } from "sonner";
-import { KPICard } from "../../Common/KPICard";
-import { useOrder } from "../../Common/OrderContext";
-import { Label } from "../../ui/label";
+import { KPICard } from "../Common/KPICard";
+import { useOrder } from "../Common/OrderContext";
+import { Label } from "../ui/label";
 
 // 권종별 화폐
 const denominations = [
@@ -37,7 +37,7 @@ const denominations = [
   { value: 10, name: "10원", type: "coin", color: "text-gray-300" },
 ];
 
-export function DailyClosing() {
+export function DailyClosingPage() {
   const { getTodayCashPayments, getTodayCardPayments } = useOrder();
 
   // [ 기본 데이터 ]

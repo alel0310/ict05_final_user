@@ -12,7 +12,6 @@ import { OrderList } from "./components/Store/OrderList";
 import { KitchenDisplay } from "./components/Store/KitchenDisplay";
 import { InventoryStatus } from "./components/Store/InventoryStatus";
 import { InventoryOrders } from "./components/Store/InventoryOrders";
-import { InventoryNewOrder } from "./components/Store/InventoryNewOrder";
 import { FinanceManagement } from "./components/Store/FinanceManagement";
 import { StaffList } from "./components/Store/StaffList";
 import { StaffPayroll } from "./components/Store/StaffPayroll";
@@ -23,8 +22,7 @@ import { ReportsSales } from "./components/Store/ReportsSales";
 import { ReportsOrders } from "./components/Store/ReportsOrders";
 import { ReportsMaterials } from "./components/Store/ReportsMaterials";
 import { ReportsMembers } from "./components/Store/ReportsMembers";
-import { DailyClosing } from "./components/Store/DailyClosing/DailyClosingPage";
-import { ChannelRevenue } from "./components/Store/DailyClosing/ChannelRevenue";
+import { DailyClosingPage } from "./components/Store/DailyClosingPage";
 import { MyPage} from "./components/Common/MyPage";
 import { toast } from "sonner";
 import { Toaster } from "./components/ui/sonner";
@@ -71,14 +69,11 @@ export default function App() {
       case "order-pos": return (<OrderProvider><ErrorBoundary><OrderSystem /></ErrorBoundary></OrderProvider>);
       case "order-list": return (<OrderProvider><ErrorBoundary><OrderList /></ErrorBoundary></OrderProvider> )
       case "order-kitchen":return (<OrderProvider><ErrorBoundary><KitchenDisplay /></ErrorBoundary></OrderProvider>);
-      case "daily-closing": return (<OrderProvider><ErrorBoundary><DailyClosing /></ErrorBoundary></OrderProvider> );
       case "inventory":
       case "inventory-status": return <ErrorBoundary><InventoryStatus /></ErrorBoundary>;
       case "inventory-orders": return <ErrorBoundary><InventoryOrders /></ErrorBoundary>;
-      case "inventory-new-order": return <ErrorBoundary><InventoryNewOrder /></ErrorBoundary>;
       case "finance": return <ErrorBoundary><FinanceManagement /></ErrorBoundary>;
-      case "daily-closing": return (<OrderProvider><ErrorBoundary><DailyClosing /></ErrorBoundary></OrderProvider>);
-      case "channel-revenue": return (<OrderProvider><ErrorBoundary><ChannelRevenue /></ErrorBoundary></OrderProvider>);
+      case "daily-closing": return (<OrderProvider><ErrorBoundary><DailyClosingPage /></ErrorBoundary></OrderProvider>);
       case "mypage": return <ErrorBoundary><MyPage /></ErrorBoundary>
       case "staff":
       case "staff-list": return <ErrorBoundary><StaffList /></ErrorBoundary>;

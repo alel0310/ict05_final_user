@@ -43,5 +43,5 @@ public class MenuRecipe {
     @Column(name = "recipe_sort", nullable = false)
     private Integer recipeSort;
 
-    public enum RecipeRole { MAIN, SAUCE  }
+    public enum RecipeRole { MAIN, SAUCE }
 }

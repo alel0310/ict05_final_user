@@ -20,6 +20,9 @@ export function InventoryStatus() {
   const [isCartModalOpen, setIsCartModalOpen] = useState(false);
   const [cartItems, setCartItems] = useState<any[]>([]);
 
+  const [priority, setPriority] = useState("NORMAL");
+  const [remark, setRemark] = useState("");
+
   // 샘플 재고 데이터
   const [inventory, setInventory] = useState([
     {
@@ -878,6 +881,47 @@ export function InventoryStatus() {
                   </table>
                 </div>
                 
+                {/* 추가 입력 영역 */}
+                <div className="space-y-4">
+                  {/* 우선순위 선택 */}
+                  <div>
+                    <h3 className="font-semibold mb-2">우선순위</h3>
+                    <div className="flex items-center gap-6">
+                      <label className="flex items-center gap-2">
+                        <input 
+                          type="radio" 
+                          name="priority" 
+                          value="NORMAL" 
+                          defaultChecked 
+                          onChange={() => setPriority("NORMAL")} 
+                        />
+                        <span>일반</span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input 
+                          type="radio" 
+                          name="priority" 
+                          value="URGENT" 
+                          onChange={() => setPriority("URGENT")} 
+                        />
+                        <span className="text-red-600 font-medium">우선</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* 특이사항 입력 */}
+                  <div>
+                    <h3 className="font-semibold mb-2">특이사항</h3>
+                    <textarea
+                      value={remark}
+                      onChange={(e) => setRemark(e.target.value)}
+                      placeholder="특이사항을 입력하세요."
+                      className="w-full border rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-kpi-red resize-none"
+                      rows={3}
+                    />
+                  </div>
+                </div>      
+
                 <div className="flex gap-3 pt-4">
                   <Button 
                     onClick={() => {
