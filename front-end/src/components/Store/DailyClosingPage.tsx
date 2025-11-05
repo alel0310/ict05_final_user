@@ -37,7 +37,7 @@ const denominations = [
   { value: 10, name: "10원", type: "coin", color: "text-gray-300" },
 ];
 
-export function DailyClosing() {
+export function DailyClosingPage() {
   const { getTodayCashPayments, getTodayCardPayments } = useOrder();
 
   // [ 기본 데이터 ]

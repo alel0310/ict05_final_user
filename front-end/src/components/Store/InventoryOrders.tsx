@@ -146,8 +146,7 @@ export function InventoryOrders() {
         발주번호: order.orderNumber || '-',
         공급업체: order.supplier || '-',
         발주일자: order.requestDate || '-',
-        예정일자: order.expectedDate || '-',
-        완료일자: order.actualDate || '-',
+        실제납기일자: order.actualDate || '-',
         발주상태: getStatusText(order.status),
         우선순위: getPriorityText(order.priority),
         총금액: `${(order.totalAmount || 0).toLocaleString()}원`,
@@ -401,12 +400,8 @@ export function InventoryOrders() {
                         <div class="detail-value">${order.발주일자}</div>
                     </div>
                     <div class="detail-item">
-                        <div class="detail-label">예정일자</div>
-                        <div class="detail-value">${order.예정일자}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">완료일자</div>
-                        <div class="detail-value">${order.완료일자}</div>
+                        <div class="detail-label">실제납기일자</div>
+                        <div class="detail-value">${order.실제납기일자}</div>
                     </div>
                     <div class="detail-item">
                         <div class="detail-label">발주상태</div>
@@ -478,10 +473,8 @@ export function InventoryOrders() {
   // 우선순위 텍스트 변환
   const getPriorityText = (priority: string) => {
     switch (priority) {
-      case 'urgent': return '긴급';
-      case 'high': return '높음';
-      case 'normal': return '보통';
-      case 'low': return '낮음';
+      case 'urgent': return '우선';
+      case 'normal': return '일반';
       default: return '알수없음';
     }
   };
@@ -499,7 +492,6 @@ export function InventoryOrders() {
           >
             {value}
           </div>
-          <div className="text-xs text-dark-gray">{row.requestDate}</div>
         </div>
       )
     },
@@ -532,14 +524,21 @@ export function InventoryOrders() {
     },
     { 
       key: 'expectedDate', 
-      label: '희망납기', 
+      label: '발주주문일', 
       sortable: true,
       render: (value, row) => (
         <div>
           <div className="text-sm">{value}</div>
-          {row.actualDate && (
-            <div className="text-xs text-dark-gray">실제: {row.actualDate}</div>
-          )}
+        </div>
+      )
+    },
+    { 
+      key: 'actualDate', 
+      label: '실제납기일', 
+      sortable: true,
+      render: (value, row) => (
+        <div>
+          <div className="text-sm">{value}</div>
         </div>
       )
     },
@@ -575,7 +574,7 @@ export function InventoryOrders() {
               onClick={() => handleStatusChange(row.id, 'confirmed')}
             >
               <CheckCircle className="w-3 h-3 mr-1" />
-              승인
+              주문
             </Button>
           )}
         </div>
@@ -616,7 +615,7 @@ export function InventoryOrders() {
         <Card className="p-6 bg-kpi-purple text-white">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-purple-100">승인됨</p>
+              <p className="text-purple-100">주문됨</p>
               <p className="text-2xl font-bold">{confirmedOrders}</p>
             </div>
             <CheckCircle className="w-8 h-8 text-purple-200" />
@@ -658,7 +657,7 @@ export function InventoryOrders() {
           showActions={false}
           filters={[
             { label: '대기중', value: 'pending' },
-            { label: '승인됨', value: 'confirmed' },
+            { label: '주문됨', value: 'confirmed' },
             { label: '배송중', value: 'shipped' },
             { label: '완료', value: 'completed' },
             { label: '취소됨', value: 'cancelled' }
@@ -696,8 +695,8 @@ export function InventoryOrders() {
                   <p className="font-medium">{selectedOrder.requestDate}</p>
                 </div>
                 <div>
-                  <span className="text-sm text-dark-gray">희망납기일</span>
-                  <p className="font-medium">{selectedOrder.expectedDate}</p>
+                  <span className="text-sm text-dark-gray">실제납기일</span>
+                  <p className="font-medium">{selectedOrder.actualDate}</p>
                 </div>
                 <div>
                   <span className="text-sm text-dark-gray">우선순위</span>
