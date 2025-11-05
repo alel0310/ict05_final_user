@@ -2,19 +2,13 @@ package com.boot.ict05_final_user.domain.menu.entity;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-@Schema(description = "메뉴/재료 품절 처리 상태")
+@Schema(description = "메뉴/재료 판매 상태")
 public enum SoldOutStatus {
 
     @Schema(description = "정상 판매중")
     ON_SALE("판매중", true),
 
-    @Schema(description = "재고 소량(판매 가능)")
-    LOW_STOCK("소량 재고", true),
-
-    @Schema(description = "일시 품절(재입고 예정)")
-    TEMP_SOLD_OUT("일시 품절", false),
-
-    @Schema(description = "완전 품절(재고 0)")
+    @Schema(description = "품절(판매 불가)")
     SOLD_OUT("품절", false);
 
     private final String label;       // 한글 라벨
@@ -28,14 +22,8 @@ public enum SoldOutStatus {
     public String getLabel() { return label; }
     public boolean isSellable() { return sellable; }
 
-    /** 재고 수량으로 상태 추론 (threshold 기본 5개) */
-    public static SoldOutStatus fromQty(int qty, int lowStockThreshold) {
-        if (qty <= 0) return SOLD_OUT;
-        if (qty <= lowStockThreshold) return LOW_STOCK;
-        return ON_SALE;
-    }
-
+    /** 재고 수량으로 상태 추론 (기준: 재고 1 이상 = 판매중, 0 이하 = 품절) */
     public static SoldOutStatus fromQty(int qty) {
-        return fromQty(qty, 5);
+        return qty > 0 ? ON_SALE : SOLD_OUT;
     }
 }

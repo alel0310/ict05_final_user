@@ -39,7 +39,7 @@ public class Menu {
     @Column(name = "menu_kcal")
     private int menuKcal;
 
-    /** 품절 상태 */
+    /** 재고 상태 */
     @Enumerated(EnumType.STRING)
     @Column(name = "menu_soldOut")
     private SoldOutStatus soldOutStatus;
