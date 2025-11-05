@@ -62,7 +62,7 @@ public class PurchaseOrderListDTO {
 
     /** 발주 비고 */
     @Schema(description = "비고", example = "신선도 확인 필요")
-    private String remark;
+    private String notes;
 
     /**
      * 발주 상태(Enum)의 한글 설명 반환

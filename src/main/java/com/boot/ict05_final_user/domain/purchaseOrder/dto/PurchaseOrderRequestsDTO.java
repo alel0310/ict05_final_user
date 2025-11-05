@@ -17,7 +17,7 @@ import java.util.List;
 public class PurchaseOrderRequestsDTO {
 
     /** 발주 비고 */
-    private String remark;
+    private String notes;
 
     /** 발주 우선순위 */
     private PurchaseOrderPriority priority;

@@ -3,14 +3,20 @@ package com.boot.ict05_final_user.domain.purchaseOrder.entity;
 /** 발주 상태 */
 public enum PurchaseOrderStatus {
 
-    /** 주문됨 */
-    RECEIVED("주문됨"),
+    /** 대기중 */
+    PENDING("대기중"),
+
+    /** 접수됨 */
+    RECEIVED("접수됨"),
 
     /** 배송중 */
     SHIPPING("배송중"),
 
     /** 검수완료 */
-    DELIVERED("검수완료");
+    DELIVERED("검수완료"),
+
+    /** 주문(접수) 취소됨 */
+    CANCELED("취소됨");
 
     /** 한글 설명 */
     private final String description;

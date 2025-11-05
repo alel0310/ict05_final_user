@@ -27,8 +27,8 @@ export function InventoryOrders() {
       requestDate: '2024-01-15',
       expectedDate: '2024-01-17',
       actualDate: null,
-      status: 'pending',
-      priority: 'normal',
+      status: 'PENDING',
+      priority: 'NORMAL',
       notes: '신선도 확인 필요'
     },
     {
@@ -42,8 +42,8 @@ export function InventoryOrders() {
       requestDate: '2024-01-14',
       expectedDate: '2024-01-16',
       actualDate: '2024-01-16',
-      status: 'completed',
-      priority: 'high',
+      status: 'DELIVERED',
+      priority: 'URGENT',
       notes: ''
     },
     {
@@ -58,8 +58,8 @@ export function InventoryOrders() {
       requestDate: '2024-01-13',
       expectedDate: '2024-01-15',
       actualDate: null,
-      status: 'confirmed',
-      priority: 'urgent',
+      status: 'SHIPPING',
+      priority: 'URGENT',
       notes: '긴급 발주'
     },
     {
@@ -73,24 +73,24 @@ export function InventoryOrders() {
       requestDate: '2024-01-12',
       expectedDate: '2024-01-14',
       actualDate: null,
-      status: 'cancelled',
-      priority: 'low',
+      status: 'CANCELED',
+      priority: 'NORMAL',
       notes: '공급업체 사정으로 취소'
     }
   ]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'pending':
+      case 'PENDING':
         return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">대기중</Badge>;
-      case 'confirmed':
-        return <Badge className="bg-blue-100 text-blue-800 border-blue-200">승인됨</Badge>;
-      case 'shipped':
-        return <Badge className="bg-purple-100 text-purple-800 border-purple-200">배송중</Badge>;
-      case 'completed':
-        return <Badge className="bg-green-100 text-green-800 border-green-200">완료</Badge>;
-      case 'cancelled':
-        return <Badge className="bg-red-100 text-red-800 border-red-200">취소됨</Badge>;
+      case 'RECEIVED':
+        return <Badge className="bg-green-100 text-green-800 border-green-200">접수됨</Badge>;
+      case 'SHIPPING':
+        return <Badge className="bg-blue-100 text-blue-800 border-blue-200">배송중</Badge>;
+      case 'DELIVERED':
+        return <Badge className="bg-purple-100 text-purple-800 border-purple-200">검수완료</Badge>;
+      case 'CANCELED':
+        return <Badge className="bg-red-100 text-red-800 border-red-100">취소됨</Badge>;
       default:
         return <Badge variant="secondary">알수없음</Badge>;
     }
@@ -98,14 +98,10 @@ export function InventoryOrders() {
 
   const getPriorityBadge = (priority: string) => {
     switch (priority) {
-      case 'urgent':
-        return <Badge variant="destructive">긴급</Badge>;
-      case 'high':
-        return <Badge className="bg-orange-100 text-orange-800 border-orange-200">높음</Badge>;
-      case 'normal':
-        return <Badge className="bg-gray-100 text-gray-800 border-gray-200">보통</Badge>;
-      case 'low':
-        return <Badge className="bg-blue-100 text-blue-800 border-blue-200">낮음</Badge>;
+      case 'URGENT':
+        return <Badge variant="destructive">우선</Badge>;
+      case 'NORMAL':
+        return <Badge className="bg-gray-100 text-gray-800 border-gray-200">일반</Badge>;
       default:
         return <Badge variant="secondary">알수없음</Badge>;
     }
@@ -124,7 +120,7 @@ export function InventoryOrders() {
         ? { 
             ...order, 
             status: newStatus,
-            actualDate: newStatus === 'completed' ? new Date().toISOString().split('T')[0] : order.actualDate
+            actualDate: newStatus === 'DELIVERED' ? new Date().toISOString().split('T')[0] : order.actualDate
           }
         : order
     ));
@@ -406,7 +402,15 @@ export function InventoryOrders() {
                     <div class="detail-item">
                         <div class="detail-label">발주상태</div>
                         <div class="detail-value">
-                            <span class="status-badge ${order.발주상태 === '완료' ? 'status-completed' : order.발주상태 === '진행중' ? 'status-pending' : 'status-cancelled'}">${order.발주상태}</span>
+                            <span class="status-badge ${
+                              order.발주상태 === '검수완료'
+                                ? 'status-completed'
+                                : order.발주상태 === '대기중' || order.발주상태 === '접수됨' || order.발주상태 === '배송중'
+                                ? 'status-pending'
+                                : 'status-cancelled'
+                            }">
+                              ${order.발주상태}
+                            </span>
                         </div>
                     </div>
                     <div class="detail-item">
@@ -461,11 +465,11 @@ export function InventoryOrders() {
   // 상태 텍스트 변환
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'pending': return '대기중';
-      case 'processing': return '처리중';
-      case 'shipped': return '배송중';
-      case 'completed': return '완료';
-      case 'cancelled': return '취소';
+      case 'PENDING': return '대기중';
+      case 'RECEIVED': return '접수됨';
+      case 'SHIPPING': return '배송중';
+      case 'DELIVERED': return '검수완료';
+      case 'CANCELED': return '취소';
       default: return '알수없음';
     }
   };
@@ -473,8 +477,8 @@ export function InventoryOrders() {
   // 우선순위 텍스트 변환
   const getPriorityText = (priority: string) => {
     switch (priority) {
-      case 'urgent': return '우선';
-      case 'normal': return '일반';
+      case 'URGENT': return '우선';
+      case 'NORMAL': return '일반';
       default: return '알수없음';
     }
   };
@@ -538,7 +542,7 @@ export function InventoryOrders() {
       sortable: true,
       render: (value, row) => (
         <div>
-          <div className="text-sm">{value}</div>
+          <div className="text-sm">{value ? value : '-'}</div>
         </div>
       )
     },
@@ -567,14 +571,14 @@ export function InventoryOrders() {
             <Eye className="w-3 h-3 mr-1" />
             상세
           </Button>
-          {row.status === 'pending' && (
+          {row.status === 'PENDING' && (
             <Button 
               size="sm" 
               className="bg-kpi-green hover:bg-green-600 text-white"
-              onClick={() => handleStatusChange(row.id, 'confirmed')}
+              onClick={() => handleStatusChange(row.id, 'RECEIVED')}
             >
               <CheckCircle className="w-3 h-3 mr-1" />
-              주문
+              접수
             </Button>
           )}
         </div>
@@ -584,9 +588,9 @@ export function InventoryOrders() {
 
   // 발주 요약 통계
   const totalOrders = orders.length;
-  const pendingOrders = orders.filter(order => order.status === 'pending').length;
-  const confirmedOrders = orders.filter(order => order.status === 'confirmed').length;
-  const completedOrders = orders.filter(order => order.status === 'completed').length;
+  const pendingOrders = orders.filter(order => order.status === 'PENDING').length;
+  const confirmedOrders = orders.filter(order => order.status === 'RECEIVED').length;
+  const completedOrders = orders.filter(order => order.status === 'DELIVERED').length;
 
   return (
     <div className="space-y-6">
@@ -615,7 +619,7 @@ export function InventoryOrders() {
         <Card className="p-6 bg-kpi-purple text-white">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-purple-100">주문됨</p>
+              <p className="text-purple-100">접수됨</p>
               <p className="text-2xl font-bold">{confirmedOrders}</p>
             </div>
             <CheckCircle className="w-8 h-8 text-purple-200" />
@@ -625,7 +629,7 @@ export function InventoryOrders() {
         <Card className="p-6 bg-kpi-red text-white">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-red-100">완료</p>
+              <p className="text-red-100">검수완료</p>
               <p className="text-2xl font-bold">{completedOrders}</p>
             </div>
             <Package className="w-8 h-8 text-red-200" />
@@ -656,11 +660,11 @@ export function InventoryOrders() {
           searchPlaceholder="발주번호, 공급업체, 품목명 검색"
           showActions={false}
           filters={[
-            { label: '대기중', value: 'pending' },
-            { label: '주문됨', value: 'confirmed' },
-            { label: '배송중', value: 'shipped' },
-            { label: '완료', value: 'completed' },
-            { label: '취소됨', value: 'cancelled' }
+            { label: '대기중', value: 'PENDING' },
+            { label: '접수됨', value: 'RECEIVED' },
+            { label: '배송중', value: 'SHIPPING' },
+            { label: '검수완료', value: 'DELIVERED' },
+            { label: '취소됨', value: 'CANCELED' }
           ]}
         />
       </Card>
@@ -674,7 +678,7 @@ export function InventoryOrders() {
               발주 상세 정보
             </DialogTitle>
             <DialogDescription>
-              발주 내역과 관련 정보를 확인할 수 있습니다.
+              선택한 품목들의 발주 정보를 확인하고 수정할 수 있습니다.
             </DialogDescription>
           </DialogHeader>
           
@@ -696,7 +700,7 @@ export function InventoryOrders() {
                 </div>
                 <div>
                   <span className="text-sm text-dark-gray">실제납기일</span>
-                  <p className="font-medium">{selectedOrder.actualDate}</p>
+                  <p className="font-medium">{selectedOrder?.actualDate && selectedOrder.actualDate.trim() !== '' ? selectedOrder.actualDate : '-'}</p>
                 </div>
                 <div>
                   <span className="text-sm text-dark-gray">우선순위</span>

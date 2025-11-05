@@ -1,5 +1,6 @@
 package com.boot.ict05_final_user.domain.purchaseOrder.entity;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -50,6 +51,7 @@ public class PurchaseOrder {
 
     /** 비고 */
     @Column(name = "purchase_order_remark", columnDefinition = "TEXT")
+    @JsonProperty("notes")
     private String remark;
 
     /** 공급업체명 */
