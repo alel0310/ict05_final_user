@@ -102,7 +102,7 @@ public class SecurityConfig {
 
 
                 // 인증 필요
-                .requestMatchers(HttpMethod.GET, "/user").hasRole(UserRoleType.USER.name())
+                .requestMatchers(HttpMethod.GET, "/user").permitAll()
                 .requestMatchers(HttpMethod.PUT, "/user").hasRole(UserRoleType.USER.name())
                 .requestMatchers(HttpMethod.DELETE, "/user").hasRole(UserRoleType.USER.name())
 
