@@ -21,7 +21,8 @@ export default defineConfig({
         changeOrigin: true,
         // ✅ /api/login -> /login
         // ✅ /api/user  -> /user
-        //rewrite: (p) => p.replace(/^\/api/, ''),
+        // rewrite: (p) => p.replace(/^\/api/, ''),
+        rewrite: (path) => path,
       },
     },
   },

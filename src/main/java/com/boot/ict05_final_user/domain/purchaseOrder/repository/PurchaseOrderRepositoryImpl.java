@@ -32,6 +32,7 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
                         po.orderCode,
                         po.supplier,
                         po.mainItemName,
+                        po.itemCount,
                         po.totalPrice,
                         po.orderDate,
                         po.actualDeliveryDate,

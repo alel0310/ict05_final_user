@@ -33,20 +33,20 @@ export function InventoryOrders() {
       const list = Array.isArray(data) ? data : data.content || [];
       const fetchedOrders = list.map((po: any) => ({
         id: po.id,
-        orderNumber: po.orderCode,
+        orderCode: po.orderCode,
         supplier: po.supplier,
-        requestDate: po.orderDate,
+        orderDate: po.orderDate,
         actualDate: po.actualDeliveryDate,
-        totalAmount: Number(po.totalPrice ?? 0),
+        totalPrice: Number(po.totalPrice ?? 0),
         status: po.status,
         priority: po.priority,
         notes: po.remark || '',
         items: [
           {
-            name: po.mainItemName ?? '-',
-            quantity: po.itemCount,
+            mainItemName: po.mainItemName ?? '-',
+            quantity: po.itemCount ?? 0,
             unitPrice: 0,
-            totalPrice: po.totalPrice,
+            totalPrice: po.totalPrice ?? 0,
           },
         ],
       }));
@@ -487,11 +487,13 @@ export function InventoryOrders() {
       key: 'items', 
       label: '발주품목', 
       sortable: true,
-      render: (items) => (
+      render: (items, row) => (
         <div>
           <div className="font-medium">{items[0]?.mainItemName}</div>
-          {items.length > 1 && (
-            <div className="text-xs text-dark-gray">외 {items.length - 1}개</div>
+          {row.items[0]?.quantity > 1 && (
+            <div className="text-xs text-dark-gray">
+              외 {row.items[0].quantity - 1}개
+            </div>
           )}
         </div>
       )
