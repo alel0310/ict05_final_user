@@ -1,6 +1,6 @@
-package com.boot.ict05_final_user.security.config;
+package com.boot.ict05_final_user.config.security.config;
 
-import com.boot.ict05_final_user.security.jwt.repository.RefreshRepository;
+import com.boot.ict05_final_user.config.security.jwt.repository.RefreshRepository;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 

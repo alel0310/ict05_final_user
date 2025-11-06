@@ -1,5 +1,5 @@
 // src/main/java/com/boot/ict05_final_user/security/EmailAuthenticationProvider.java
-package com.boot.ict05_final_user.security.auth;
+package com.boot.ict05_final_user.config.security.auth;
 
 import com.boot.ict05_final_user.domain.user.entity.Member;
 import com.boot.ict05_final_user.domain.user.repository.MemberRepository;

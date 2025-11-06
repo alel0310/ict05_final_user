@@ -1,4 +1,4 @@
-package com.boot.ict05_final_user.security.jwt.entity;
+package com.boot.ict05_final_user.config.security.jwt.entity;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;

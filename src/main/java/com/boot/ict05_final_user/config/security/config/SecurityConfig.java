@@ -1,11 +1,11 @@
-package com.boot.ict05_final_user.security.config;
+package com.boot.ict05_final_user.config.security.config;
 
-import com.boot.ict05_final_user.security.jwt.service.JwtService;
+import com.boot.ict05_final_user.config.security.jwt.service.JwtService;
 import com.boot.ict05_final_user.domain.user.entity.UserRoleType;
-import com.boot.ict05_final_user.security.filter.JWTFilter;
-import com.boot.ict05_final_user.security.filter.LoginFilter;
-import com.boot.ict05_final_user.security.handler.RefreshTokenLogoutHandler;
-import com.boot.ict05_final_user.security.auth.EmailAuthenticationProvider;
+import com.boot.ict05_final_user.config.security.filter.JWTFilter;
+import com.boot.ict05_final_user.config.security.filter.LoginFilter;
+import com.boot.ict05_final_user.config.security.handler.RefreshTokenLogoutHandler;
+import com.boot.ict05_final_user.config.security.auth.EmailAuthenticationProvider;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -93,10 +93,12 @@ public class SecurityConfig {
                 // CORS preflight
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
+                .requestMatchers("/user/api/auth/**").permitAll()
+
                 // 공개 엔드포인트
                 .requestMatchers("/login").permitAll()
                 .requestMatchers("/jwt/exchange", "/jwt/refresh").permitAll()
-                .requestMatchers(HttpMethod.POST, "/user/exist", "/user","/me", "/user/dashboard/**", "/join").permitAll()
+                .requestMatchers(HttpMethod.POST, "/user/exist", "/user","/me", "/user/dashboard/**", "/join", "/user/member/exist-email", "/user/member").permitAll()
 
 
                 // 인증 필요

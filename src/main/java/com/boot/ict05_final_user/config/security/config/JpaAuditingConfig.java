@@ -1,4 +1,4 @@
-package com.boot.ict05_final_user.security.config;
+package com.boot.ict05_final_user.config.security.config;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.jpa.repository.config.EnableJpaAuditing;

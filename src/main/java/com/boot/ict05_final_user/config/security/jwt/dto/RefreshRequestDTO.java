@@ -1,4 +1,4 @@
-package com.boot.ict05_final_user.security.jwt.dto;
+package com.boot.ict05_final_user.config.security.jwt.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;

@@ -1,7 +1,7 @@
-package com.boot.ict05_final_user.security.jwt.repository;
+package com.boot.ict05_final_user.config.security.jwt.repository;
 
 
-import com.boot.ict05_final_user.security.jwt.entity.RefreshEntity;
+import com.boot.ict05_final_user.config.security.jwt.entity.RefreshEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.transaction.annotation.Transactional;
 
