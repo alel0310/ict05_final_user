@@ -1,11 +1,11 @@
-package com.boot.ict05_final_user.security.handler;
+package com.boot.ict05_final_user.config.security.handler;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import com.boot.ict05_final_user.security.jwt.service.JwtService;
-import com.boot.ict05_final_user.security.jwt.JWTUtil;
+import com.boot.ict05_final_user.config.security.jwt.service.JwtService;
+import com.boot.ict05_final_user.config.security.jwt.JWTUtil;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.authentication.logout.LogoutHandler;
 import org.springframework.util.StringUtils;

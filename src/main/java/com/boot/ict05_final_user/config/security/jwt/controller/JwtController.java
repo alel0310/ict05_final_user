@@ -1,10 +1,10 @@
-package com.boot.ict05_final_user.security.jwt.controller;
+package com.boot.ict05_final_user.config.security.jwt.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import com.boot.ict05_final_user.security.jwt.dto.JWTResponseDTO;
-import com.boot.ict05_final_user.security.jwt.dto.RefreshRequestDTO;
-import com.boot.ict05_final_user.security.jwt.service.JwtService;
+import com.boot.ict05_final_user.config.security.jwt.dto.JWTResponseDTO;
+import com.boot.ict05_final_user.config.security.jwt.dto.RefreshRequestDTO;
+import com.boot.ict05_final_user.config.security.jwt.service.JwtService;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 

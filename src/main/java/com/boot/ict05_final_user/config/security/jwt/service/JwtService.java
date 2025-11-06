@@ -1,10 +1,10 @@
-package com.boot.ict05_final_user.security.jwt.service;
+package com.boot.ict05_final_user.config.security.jwt.service;
 
-import com.boot.ict05_final_user.security.jwt.dto.JWTResponseDTO;
-import com.boot.ict05_final_user.security.jwt.dto.RefreshRequestDTO;
-import com.boot.ict05_final_user.security.jwt.entity.RefreshEntity;
-import com.boot.ict05_final_user.security.jwt.repository.RefreshRepository;
-import com.boot.ict05_final_user.security.jwt.JWTUtil;
+import com.boot.ict05_final_user.config.security.jwt.dto.JWTResponseDTO;
+import com.boot.ict05_final_user.config.security.jwt.dto.RefreshRequestDTO;
+import com.boot.ict05_final_user.config.security.jwt.entity.RefreshEntity;
+import com.boot.ict05_final_user.config.security.jwt.repository.RefreshRepository;
+import com.boot.ict05_final_user.config.security.jwt.JWTUtil;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;

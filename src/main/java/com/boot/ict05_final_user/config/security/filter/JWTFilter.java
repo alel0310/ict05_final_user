@@ -1,10 +1,10 @@
-package com.boot.ict05_final_user.security.filter;
+package com.boot.ict05_final_user.config.security.filter;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import com.boot.ict05_final_user.security.jwt.JWTUtil;
+import com.boot.ict05_final_user.config.security.jwt.JWTUtil;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;

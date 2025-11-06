@@ -1,4 +1,4 @@
-package com.boot.ict05_final_user.security.jwt;
+package com.boot.ict05_final_user.config.security.jwt;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -19,7 +19,7 @@ public class JWTUtil {
         String secretKeyString = "himynameiskimjihunmyyoutubechann";
         secretKey = new SecretKeySpec(secretKeyString.getBytes(StandardCharsets.UTF_8), Jwts.SIG.HS256.key().build().getAlgorithm());
 
-        accessTokenExpiresIn = 50L * 1000; // 1시간
+        accessTokenExpiresIn = 50000L * 1000; // 1시간
         refreshTokenExpiresIn = 604800L * 1000; // 7일
     }
 

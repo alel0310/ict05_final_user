@@ -1,4 +1,4 @@
-package com.boot.ict05_final_user.security.filter;
+package com.boot.ict05_final_user.config.security.filter;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
