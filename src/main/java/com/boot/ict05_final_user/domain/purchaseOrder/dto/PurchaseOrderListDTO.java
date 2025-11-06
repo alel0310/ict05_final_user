@@ -26,7 +26,7 @@ public class PurchaseOrderListDTO {
 
     /** 발주 코드 */
     @Schema(description = "발주 번호", example = "ORD20240115001")
-    private String purchaseOrderCode;
+    private String orderCode;
 
     /** 공급업체명 */
     @Schema(description = "공급업체명", example = "신선마트")
@@ -36,7 +36,7 @@ public class PurchaseOrderListDTO {
     @Schema(description = "발주 품목명 (대표 1개)", example = "토마토")
     private String mainItemName;
 
-    /** 발주 품목 수 */
+    /** 한 발주 내 품목 수 */
     @Schema(description = "발주 품목 수", example = "3")
     private Integer itemCount;
 
@@ -62,7 +62,7 @@ public class PurchaseOrderListDTO {
 
     /** 발주 비고 */
     @Schema(description = "비고", example = "신선도 확인 필요")
-    private String remark;
+    private String notes;
 
     /**
      * 발주 상태(Enum)의 한글 설명 반환

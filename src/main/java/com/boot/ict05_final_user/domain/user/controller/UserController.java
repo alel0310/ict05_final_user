@@ -15,7 +15,7 @@ import java.util.Map;
 
 @RestController
 @RequiredArgsConstructor
-@CrossOrigin(origins = {"http://localhost:3000"}, allowCredentials = "true")
+//@CrossOrigin(origins = {"http://localhost:3000"}, allowCredentials = "true")
 // 클래스에 @RequestMapping("/user") 쓰지 않음 (context-path=/user가 이미 있음)
 public class UserController {
 
@@ -34,7 +34,7 @@ public class UserController {
         return ResponseEntity.status(201).body(Collections.singletonMap("userEntityId", id));
     }
 
-    // ✅ GET /user/me  (세션 확인용)
+    //  GET /user/me  (세션 확인용)
     @GetMapping(value = "/me", produces = MediaType.APPLICATION_JSON_VALUE)
     public UserResponseDTO userMeApi() {
         return userService.readUser();  // 인증 실패 시 Security가 401
