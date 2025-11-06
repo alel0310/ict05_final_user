@@ -67,8 +67,7 @@ const storeMenuItems: MenuItem[] = [
     icon: Package,
     children: [
       { id: 'inventory-status', label: '재고 현황', icon: Package },
-      { id: 'inventory-orders', label: '발주 관리', icon: Truck },
-      { id: 'inventory-new-order', label: '발주 등록', icon: ShoppingCart }
+      { id: 'inventory-orders', label: '발주 관리', icon: Truck }
     ]
   },
   { 
@@ -76,8 +75,7 @@ const storeMenuItems: MenuItem[] = [
     label: '정산', 
     icon: Calculator,
     children: [
-      { id: 'daily-closing', label: '일일 시재/마감', icon: CircleDollarSign },
-      { id: 'channel-revenue', label: '서비스 채널', icon: BarChart3 }
+      { id: 'daily-closing', label: '일일 시재/마감', icon: CircleDollarSign }
     ]
   },
   { 
