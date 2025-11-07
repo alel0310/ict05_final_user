@@ -1,5 +1,7 @@
 package com.boot.ict05_final_user.domain.staff.entity;
 
+import com.boot.ict05_final_user.domain.store.entity.Store;
+import com.boot.ict05_final_user.domain.user.entity.Member;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -23,6 +25,21 @@ public class StaffProfile {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "staff_id")
     private Long id;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(
+            name = "member_id_fk",
+            referencedColumnName = "member_id",
+            foreignKey = @ForeignKey(name = "fk_staff_profile__member"),
+            nullable = true,
+            unique = true
+    )
+    private Member member;
+
+    /** 직원 근무지 */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "store_id_fk", nullable = false)
+    private Store store;
 
     /**
      * 직원 이름
