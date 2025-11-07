@@ -1,4 +1,4 @@
-package com.final.webviewapp;
+package com.example.webviewapp;
 
 import com.getcapacitor.BridgeActivity;
 

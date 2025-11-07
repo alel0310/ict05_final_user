@@ -1,13 +1,12 @@
 apply plugin: 'com.android.application'
-apply from: "../variables.gradle"
 
 android {
-    namespace "com.project.webviewapp"
-    compileSdk compileSdkVersion
+    namespace "com.example.webviewapp"
+    compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.project.webviewapp"
-        minSdkVersion minSdkVersion
-        targetSdkVersion targetSdkVersion
+        applicationId "com.example.webviewapp"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -43,7 +42,7 @@ dependencies {
     implementation project(':capacitor-cordova-android-plugins')
 }
 
-// apply from: 'capacitor.build.gradle'
+apply from: 'capacitor.build.gradle'
 
 try {
     def servicesJSON = file('google-services.json')
