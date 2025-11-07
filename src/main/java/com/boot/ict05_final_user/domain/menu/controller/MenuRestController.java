@@ -1,13 +1,19 @@
 package com.boot.ict05_final_user.domain.menu.controller;
 
 
+import com.boot.ict05_final_user.domain.menu.dto.MenuListDTO;
 import com.boot.ict05_final_user.domain.menu.dto.MenuModifyFormDTO;
+import com.boot.ict05_final_user.domain.menu.dto.MenuSearchDTO;
 import com.boot.ict05_final_user.domain.menu.dto.MenuWriteFormDTO;
 import com.boot.ict05_final_user.domain.menu.service.MenuService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -44,13 +50,23 @@ public class MenuRestController {
 
     private final MenuService menuService;
 
+    /** 메뉴 목록 API */
+    @GetMapping("/menu/list")
+    public Page<MenuListDTO> getMenuList(
+            MenuSearchDTO menuSearchDTO,
+            @PageableDefault(page = 0, size = 50, sort = "menuId", direction = Sort.Direction.DESC)
+            Pageable pageable
+    ) {
+        return menuService.selectAllStoreMenu(menuSearchDTO, pageable);
+    }
+
 //    /**
 //     * 매뉴 등록 API
 //     *
 //     * <p>본사에서 새로운 메뉴 등록하는 엔드포인트입니다.
-//     * 첨부파일을 포함한 메뉴 데이터를 저장합니다.</p>
+//     *  메뉴 데이터를 저장합니다.</p>
 //     *
-//     * @param dto 등록할 메뉴 데이터 (제목, 내용, 카테고리, 첨부파일 포함)
+//     * @param dto 등록할 메뉴 데이터 (제목, 내용, 카테고리 포함)
 //     * @param bindingResult 유효성 검증 결과
 //     * @return 등록 성공 여부 및 생성된 메뉴 ID
 //     * @throws Exception DB 저장 오류

@@ -7,7 +7,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
-import java.util.List;
 
 @Data       // getter, setter, toString 등 기본 메서드
 @AllArgsConstructor     // 매개변수 생성자
@@ -17,8 +16,8 @@ public class MenuListDTO {
     /** 메뉴 시퀀스 */
     private Long menuId;
 
-//    /** 판매상태(true: 판매중 / false: 중단) */
-//    private MenuShow menuShow;
+    /** 판매상태(true: 판매중 / false: 중단) */
+    private MenuShow menuShow;
 
     /** 메뉴명 */
     private String menuName;
