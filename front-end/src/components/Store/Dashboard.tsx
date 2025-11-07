@@ -90,6 +90,26 @@ export function StoreDashboard() {
   //
   const [dailyHourlyData, setDailyHourlyData] = useState<HourlyPoint[]>([]);
   
+  // 컴포넌트 상단 근처에 추가
+  const hasAnyHourlyValue = (rows: HourlyPoint[] = []) =>
+    rows?.some(r =>
+      (r?.sales ?? 0) > 0 ||
+      (r?.orders ?? 0) > 0 ||
+      (r?.visitOrders ?? 0) > 0 ||
+      (r?.takeoutOrders ?? 0) > 0 ||
+      (r?.deliveryOrders ?? 0) > 0
+    );
+
+  const EmptyState: React.FC<{label?: string}> = ({ label = '오늘 데이터가 없습니다' }) => (
+    <div className="flex items-center justify-center h-64 text-gray-500 bg-light-gray rounded-lg">
+      <div className="flex flex-col items-center gap-2">
+        <span className="text-3xl">📭</span>
+        <span className="text-sm">{label}</span>
+      </div>
+    </div>
+  );
+
+
   // 안전한 숫자 변환 (콤마, 단위 문자 제거까지)
   const toNumber = (v: unknown) => {
     if (v == null) return 0;
@@ -210,6 +230,9 @@ export function StoreDashboard() {
           <h3 className="text-lg font-semibold text-gray-900">인기 메뉴 TOP 5</h3>
           <Package className="w-5 h-5 text-kpi-green" />
         </div>
+        {(topMenus?.length ?? 0) === 0 ? (
+          <EmptyState label="오늘 판매된 메뉴가 없습니다" />
+        ) : (
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             {(topMenus ?? []).map((menu) => (
               <div key={menu.menuId} className="flex flex-col items-center p-4 bg-light-gray rounded-lg">
@@ -224,6 +247,7 @@ export function StoreDashboard() {
               </div>
             ))}
           </div>
+        )}
       </Card>
 
 
@@ -233,6 +257,9 @@ export function StoreDashboard() {
           <h3 className="text-lg font-semibold text-gray-900">오늘 시간대별 현황</h3>
           <TrendingUp className="w-5 h-5 text-kpi-red" />
         </div>
+        {!hasAnyHourlyValue(dailyHourlyData) ? (
+          <EmptyState label="오늘 집계된 시간대별 데이터가 없습니다" />
+        ) : (
         <Tabs defaultValue="sales" className="w-full">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="sales">매출</TabsTrigger>
@@ -288,6 +315,7 @@ export function StoreDashboard() {
             </ResponsiveContainer>
           </TabsContent>
         </Tabs>
+        )}
       </Card>
     </div>
   );
