@@ -1,6 +1,8 @@
 package com.boot.ict05_final_user.domain.purchaseOrder.controller;
 
+import com.boot.ict05_final_user.domain.purchaseOrder.dto.PurchaseOrderDetailDTO;
 import com.boot.ict05_final_user.domain.purchaseOrder.dto.PurchaseOrderListDTO;
+import com.boot.ict05_final_user.domain.purchaseOrder.dto.PurchaseOrderRequestsDTO;
 import com.boot.ict05_final_user.domain.purchaseOrder.dto.PurchaseOrderSearchDTO;
 import com.boot.ict05_final_user.domain.purchaseOrder.service.PurchaseOrderService;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -16,10 +18,6 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/purchase")
-//@CrossOrigin(
-//        origins = {"http://localhost:3000"}, // 운영/개발 도메인 맞춰서 교체
-//        allowCredentials = "true"
-//)
 @Tag(name = "발주 API", description = "발주 등록/조회/수정 기능 제공")
 @Slf4j
 public class PurchaseOrderRestController {
@@ -37,11 +35,40 @@ public class PurchaseOrderRestController {
         return ResponseEntity.ok(result);
     }
 
+    // 발주 상세 API
+    @GetMapping("/detail/{id}")
+    public ResponseEntity<PurchaseOrderDetailDTO> getPurchaseOrderDetail(@PathVariable Long id) {
+        PurchaseOrderDetailDTO detail = purchaseOrderService.getPurchaseOrderDetail(id);
+        return ResponseEntity.ok(detail);
+    }
+
     // 발주 등록 API
 
 
     // 발주 수정 API
+    @PutMapping("/{id}")
+    public ResponseEntity<?> updatePurchaseOrder(
+            @PathVariable Long id,
+            @RequestBody PurchaseOrderRequestsDTO dto) {
+        log.info("PUT 요청 들어옴 id={}", id);
+        log.info(dto.getItems().toString());
+        purchaseOrderService.updatePurchaseOrder(id, dto);
+        return ResponseEntity.ok().build();
+    }
 
+    // 발주 전체(헤더+품목) 삭제
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deletePurchaseOrder(@PathVariable Long id) {
+        purchaseOrderService.deletePurchaseOrder(id);
+        return ResponseEntity.noContent().build(); // 204 응답
+    }
+
+    // 발주 상세 품목 삭제
+    @DeleteMapping("/detail/item/{detailId}")
+    public ResponseEntity<?> deletePurchaseOrderDetail(@PathVariable Long detailId) {
+        purchaseOrderService.deletePurchaseOrderDetail(detailId);
+        return ResponseEntity.noContent().build();
+    }
 
     // 발주 상태 변경, 조회
 

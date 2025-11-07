@@ -14,12 +14,11 @@ import java.math.BigDecimal;
 public class PurchaseOrderItemDTO {
 
     /** 발주 상세 시퀀스 */
-    @Schema(description = "품목 ID")
-    private Long detailId;
+    private Long id;
 
     /** 발주 품목 재료명 */
-    @Schema(description = "재료명")
-    private String name;
+//    @Schema(description = "재료명")
+//    private Material material;
 
     /** 발주 품목 단위 */
     @Schema(description = "단위")
@@ -27,7 +26,7 @@ public class PurchaseOrderItemDTO {
 
     /** 발주 품목 수량 */
     @Schema(description = "발주 수량")
-    private Integer quantity;
+    private Integer count;
 
     /** 발주 품목 단가 */
     @Schema(description = "단가")

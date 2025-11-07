@@ -104,13 +104,13 @@ public class SecurityConfig {
                 // 공개 엔드포인트
                 .requestMatchers("/login").permitAll()
                 .requestMatchers("/jwt/exchange", "/jwt/refresh").permitAll()
-                .requestMatchers(HttpMethod.POST, "/user/exist", "/user","/me", "/user/dashboard/**", "/user/api/**", "/join", "/user/member/exist-email", "/user/member").permitAll()
+                .requestMatchers(HttpMethod.POST, "/user/exist", "/user","/me", "/user/api/**", "/join", "/user/member/exist-email", "/user/member").permitAll()
 
 
                 // 인증 필요
                 .requestMatchers(HttpMethod.GET, "/**").permitAll()
-                .requestMatchers(HttpMethod.PUT, "/user").hasRole(UserRoleType.USER.name())
-                .requestMatchers(HttpMethod.DELETE, "/user").hasRole(UserRoleType.USER.name())
+                .requestMatchers(HttpMethod.PUT, "/**").permitAll()
+                .requestMatchers(HttpMethod.DELETE, "/**").permitAll()
 
 
                 .anyRequest().authenticated()
