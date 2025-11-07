@@ -27,16 +27,19 @@ public class PurchaseOrder {
     @Column(name = "purchase_order_id", columnDefinition = "BIGINT UNSIGNED")
     private Long id;
 
-//    /** 가맹점 */
-//    @ManyToOne(fetch = FetchType.LAZY)
-//    @JoinColumn(name = "store_id_fk", nullable = false)
-//    private Store store;
-
     /** 발주 코드 */
     @Column(name = "purchase_order_code", length = 32, nullable = false, unique = true)
     private String orderCode;
 
-    /** 발주일 */
+    /** 발주 대표 품목명 */
+    @Column(name = "purchase_order_main_item_name", length = 100)
+    private String mainItemName;
+
+    /** 한 발주 내 품목 수 */
+    @Column(name = "purchase_order_item_count")
+    private Integer itemCount;
+
+    /** 발주 주문일 */
     @Column(name = "purchase_order_date", nullable = false)
     private LocalDate orderDate;
 
