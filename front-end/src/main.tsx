@@ -39,14 +39,20 @@ function RegisterPage() {
   );
 }
 
+// 'npm run build' 시에는 'production', 'npm run dev' 시에는 'development'가 됩니다.
+const basename = import.meta.env.MODE === 'production' ? '/user' : '/';
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={basename}>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/dashboard/*" element={<App />} />
         <Route path="/" element={<App />} />
+        {/* /user/ 경로에 대한 명시적 라우트 추가 */}
+        <Route path="/user" element={<App />} />
+        <Route path="/user/" element={<App />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>

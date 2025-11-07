@@ -21,6 +21,38 @@ public class JWTFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
 
+        System.out.println("[JWTFilter] Path: " + request.getRequestURI() + ", Auth Header: " + request.getHeader("Authorization"));
+
+        // 공개 경로 (JWT 검사 건너뛰기)
+        String requestURI = request.getRequestURI();
+        // 컨텍스트 경로를 동적으로 가져와서 비교
+        String contextPath = request.getContextPath(); // /user
+        if (requestURI.equals(contextPath) || // /user
+                requestURI.equals(contextPath + "/") || // /user/
+                requestURI.equals(contextPath + "/index.html") ||
+                requestURI.equals(contextPath + "/vite.svg") ||
+                requestURI.equals(contextPath + "/manifest.json") ||
+                requestURI.equals(contextPath + "/robots.txt") ||
+                requestURI.startsWith(contextPath + "/assets/") ||
+                requestURI.startsWith(contextPath + "/api/auth/") || // /user/api/auth/
+                requestURI.equals(contextPath + "/login") ||
+                requestURI.equals(contextPath + "/jwt/exchange") ||
+                requestURI.equals(contextPath + "/jwt/refresh") ||
+                (request.getMethod().equals("POST") && (
+                        requestURI.equals(contextPath + "/exist") ||
+                        requestURI.equals(contextPath) || // POST /user
+                        requestURI.equals(contextPath + "/me") ||
+                        requestURI.startsWith(contextPath + "/dashboard/") ||
+                        requestURI.equals(contextPath + "/join") ||
+                        requestURI.equals(contextPath + "/member/exist-email") ||
+                        requestURI.equals(contextPath + "/member")
+                ))
+        ) {
+            System.out.println("[JWTFilter] Public path, skipping JWT check: " + requestURI);
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         String authorization = request.getHeader("Authorization");
         if (authorization == null) {
             filterChain.doFilter(request, response);

@@ -6,7 +6,7 @@ const REFRESH_TOKEN_KEY = "refreshToken";
 
 // ✅ axios 인스턴스 생성
 const api = axios.create({
-  baseURL: "http://localhost:8082/user", //백엔드 api url
+  baseURL: import.meta.env.VITE_BACKEND_API_BASE_URL,
   withCredentials: true,
   headers: {"Content-Type": "application/json"},
 });
@@ -61,7 +61,7 @@ api.interceptors.response.use(
         if(!refreshToken) throw new Error("No refresh token");
 
         // 🔄 refresh 요청
-        const res = await axios.post("http://localhost:8082/user/jwt/refresh",
+        const res = await api.post("/jwt/refresh",
           null, 
           { headers: { "X-Refresh-Token": refreshToken }
         });
