@@ -1,5 +1,6 @@
 package com.boot.ict05_final_user.domain.order.entity;
 
+import com.boot.ict05_final_user.domain.store.entity.Store;
 import jakarta.persistence.*;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
@@ -30,9 +31,9 @@ public class CustomerOrder {
     private Long id;
 
     /** 매장 시퀀스(FK) - 아직 Store 엔티티가 없으므로 Long 보관 */
-    // @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    // @JoinColumn(name = "store_id_fk", nullable = false)
-    // private Store storeIdFk;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "store_id_fk", nullable = false)
+    private Store store;
 
     /** 주문 코드(예: YYYYMMDD-XXXX 등) */
     @Column(name = "customer_order_code", unique = true)
