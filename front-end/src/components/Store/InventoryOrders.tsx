@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from "axios";
 import { Truck, Search, Filter, Eye, CheckCircle, XCircle, Clock, AlertCircle, Package, Download } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
@@ -10,74 +11,51 @@ import { DownloadToggle } from '../Common/DownloadToggle';
 import { toast } from 'sonner';
 
 export function InventoryOrders() {
+  const [orders, setOrders] = useState<any[]>([]);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
 
-  // 샘플 발주 데이터
-  const [orders, setOrders] = useState([
-    {
-      id: 1,
-      orderNumber: 'ORD20240115001',
-      items: [
-        { name: '토마토', quantity: 30, unit: 'kg', unitPrice: 5000, totalPrice: 150000 },
-        { name: '양파', quantity: 20, unit: 'kg', unitPrice: 3000, totalPrice: 60000 }
-      ],
-      totalAmount: 210000,
-      supplier: '신선마트',
-      requestDate: '2024-01-15',
-      expectedDate: '2024-01-17',
-      actualDate: null,
-      status: 'PENDING',
-      priority: 'NORMAL',
-      notes: '신선도 확인 필요'
-    },
-    {
-      id: 2,
-      orderNumber: 'ORD20240114001',
-      items: [
-        { name: '소고기 등심', quantity: 15, unit: 'kg', unitPrice: 35000, totalPrice: 525000 }
-      ],
-      totalAmount: 525000,
-      supplier: '프리미엄 정육점',
-      requestDate: '2024-01-14',
-      expectedDate: '2024-01-16',
-      actualDate: '2024-01-16',
-      status: 'DELIVERED',
-      priority: 'URGENT',
-      notes: ''
-    },
-    {
-      id: 3,
-      orderNumber: 'ORD20240113001',
-      items: [
-        { name: '치즈', quantity: 10, unit: 'kg', unitPrice: 12000, totalPrice: 120000 },
-        { name: '밀가루', quantity: 25, unit: 'kg', unitPrice: 2500, totalPrice: 62500 }
-      ],
-      totalAmount: 182500,
-      supplier: '델리카트',
-      requestDate: '2024-01-13',
-      expectedDate: '2024-01-15',
-      actualDate: null,
-      status: 'SHIPPING',
-      priority: 'URGENT',
-      notes: '긴급 발주'
-    },
-    {
-      id: 4,
-      orderNumber: 'ORD20240112001',
-      items: [
-        { name: '양파', quantity: 50, unit: 'kg', unitPrice: 3000, totalPrice: 150000 }
-      ],
-      totalAmount: 150000,
-      supplier: '신선마트',
-      requestDate: '2024-01-12',
-      expectedDate: '2024-01-14',
-      actualDate: null,
-      status: 'CANCELED',
-      priority: 'NORMAL',
-      notes: '공급업체 사정으로 취소'
+  useEffect(() => {
+    fetchOrders();
+  }, []);
+
+  const fetchOrders = async () => {
+    try {
+      const res = await axios.get("/api/purchase/list", {
+        params: { page: 0, size: 10 },
+         withCredentials: false, // 세션 안 쓸거면 false. 세션 쓰면 true + CORS 설정 필요
+      });
+
+      const data = res.data;
+      console.log("✅ API 응답:", data); // <--- 무조건 추가
+
+      const list = Array.isArray(data) ? data : data.content || [];
+      const fetchedOrders = list.map((po: any) => ({
+        id: po.id,
+        orderCode: po.orderCode,
+        supplier: po.supplier,
+        orderDate: po.orderDate,
+        actualDate: po.actualDeliveryDate,
+        totalPrice: Number(po.totalPrice ?? 0),
+        status: po.status,
+        priority: po.priority,
+        notes: po.remark || '',
+        items: [
+          {
+            mainItemName: po.mainItemName ?? '-',
+            quantity: po.itemCount ?? 0,
+            unitPrice: 0,
+            totalPrice: po.totalPrice ?? 0,
+          },
+        ],
+      }));
+
+      setOrders(fetchedOrders);
+    } catch (error) {
+      console.error("🚨 발주 목록 조회 실패:", error);
     }
-  ]);
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -139,13 +117,13 @@ export function InventoryOrders() {
       }
       
       const exportData = orders.map(order => ({
-        발주번호: order.orderNumber || '-',
+        발주번호: order.orderCode || '-',
         공급업체: order.supplier || '-',
-        발주일자: order.requestDate || '-',
+        발주일자: order.orderDate || '-',
         실제납기일자: order.actualDate || '-',
         발주상태: getStatusText(order.status),
         우선순위: getPriorityText(order.priority),
-        총금액: `${(order.totalAmount || 0).toLocaleString()}원`,
+        총금액: `${(order.totalPrice || 0).toLocaleString()}원`,
         품목수: order.items ? order.items.length : 0,
         비고: order.notes || '-'
       }));
@@ -485,7 +463,7 @@ export function InventoryOrders() {
 
   const orderColumns: Column[] = [
     { 
-      key: 'orderNumber', 
+      key: 'orderCode', 
       label: '발주번호', 
       sortable: true,
       render: (value, row) => (
@@ -509,17 +487,19 @@ export function InventoryOrders() {
       key: 'items', 
       label: '발주품목', 
       sortable: true,
-      render: (items) => (
+      render: (items, row) => (
         <div>
-          <div className="font-medium">{items[0]?.name}</div>
-          {items.length > 1 && (
-            <div className="text-xs text-dark-gray">외 {items.length - 1}개</div>
+          <div className="font-medium">{items[0]?.mainItemName}</div>
+          {row.items[0]?.quantity > 1 && (
+            <div className="text-xs text-dark-gray">
+              외 {row.items[0].quantity - 1}개
+            </div>
           )}
         </div>
       )
     },
     { 
-      key: 'totalAmount', 
+      key: 'totalPrice', 
       label: '발주금액', 
       sortable: true,
       render: (value) => (
@@ -527,7 +507,7 @@ export function InventoryOrders() {
       )
     },
     { 
-      key: 'expectedDate', 
+      key: 'orderDate', 
       label: '발주주문일', 
       sortable: true,
       render: (value, row) => (
@@ -688,7 +668,7 @@ export function InventoryOrders() {
               <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
                 <div>
                   <span className="text-sm text-dark-gray">발주번호</span>
-                  <p className="font-medium">{selectedOrder.orderNumber}</p>
+                  <p className="font-medium">{selectedOrder.orderCode}</p>
                 </div>
                 <div>
                   <span className="text-sm text-dark-gray">공급업체</span>
@@ -696,7 +676,7 @@ export function InventoryOrders() {
                 </div>
                 <div>
                   <span className="text-sm text-dark-gray">발주일</span>
-                  <p className="font-medium">{selectedOrder.requestDate}</p>
+                  <p className="font-medium">{selectedOrder.orderDate}</p>
                 </div>
                 <div>
                   <span className="text-sm text-dark-gray">실제납기일</span>
@@ -728,30 +708,138 @@ export function InventoryOrders() {
                     <tbody>
                       {selectedOrder.items.map((item: any, index: number) => (
                         <tr key={index} className="border-t">
-                          <td className="px-4 py-3 font-medium">{item.name}</td>
-                          <td className="px-4 py-3 text-center">{item.quantity}{item.unit}</td>
-                          <td className="px-4 py-3 text-right">₩{item.unitPrice.toLocaleString()}</td>
-                          <td className="px-4 py-3 text-right font-medium">₩{item.totalPrice.toLocaleString()}</td>
+                          <td className="px-4 py-3 font-medium">{item.mainItemName}</td>
+
+                          <td className="px-4 py-3 text-center">
+                            {isEditMode ? (
+                              <Input
+                                type="number"
+                                value={item.itemCount}
+                                onChange={(e) => {
+                                  const newItemCount = parseInt(e.target.value) || 0;
+                                  setSelectedOrder((prev: any) => ({
+                                    ...prev,
+                                    items: prev.items.map((it: any, i: number) =>
+                                      i === index
+                                        ? {
+                                            ...it,
+                                            itemCount: newItemCount,
+                                            totalPrice: newItemCount * it.unitPrice,
+                                          }
+                                        : it
+                                    ),
+                                    totalPrice: prev.items.reduce(
+                                      (sum: number, it: any, i: number) =>
+                                        i === index
+                                          ? sum + newItemCount * it.unitPrice
+                                          : sum + it.totalPrice,
+                                      0
+                                    ),
+                                  }));
+                                }}
+                                className="w-20 text-center"
+                                min="1"
+                              />
+                            ) : (
+                              <span>
+                                {item.itemCount}
+                                {item.unit}
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="px-4 py-3 text-right">
+                            ₩{item.unitPrice.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 text-right font-medium">
+                            ₩{item.totalPrice.toLocaleString()}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
+
                     <tfoot className="bg-gray-50 font-semibold">
                       <tr>
-                        <td colSpan={3} className="px-4 py-3 text-right">총 발주 금액:</td>
-                        <td className="px-4 py-3 text-right text-lg">₩{selectedOrder.totalAmount.toLocaleString()}</td>
+                        <td colSpan={3} className="px-4 py-3 text-right">
+                          총 발주 금액:
+                        </td>
+                        <td className="px-4 py-3 text-right text-lg">
+                          ₩{selectedOrder.totalPrice.toLocaleString()}
+                        </td>
                       </tr>
                     </tfoot>
                   </table>
                 </div>
               </div>
 
-              {/* 특이사항 */}
-              {selectedOrder.notes && (
+
+              <div>
+                {/* 우선순위 */}
                 <div>
-                  <h3 className="font-semibold mb-2">특이사항</h3>
-                  <p className="p-3 bg-gray-50 rounded-lg">{selectedOrder.notes}</p>
+                  <span className="text-sm text-dark-gray">우선순위</span>
+                  {isEditMode ? (
+                    <select
+                      value={selectedOrder.priority}
+                      onChange={(e) =>
+                        setSelectedOrder({ ...selectedOrder, priority: e.target.value })
+                      }
+                      className="border rounded-md px-2 py-1 text-sm"
+                    >
+                      <option value="NORMAL">일반</option>
+                      <option value="URGENT">우선</option>
+                    </select>
+                  ) : (
+                    <div>{getPriorityBadge(selectedOrder.priority)}</div>
+                  )}
                 </div>
-              )}
+
+                {/* 특이사항 */}
+                <div className="mt-4">
+                  <h3 className="font-semibold mb-2">특이사항</h3>
+                  {isEditMode ? (
+                    <textarea
+                      value={selectedOrder.notes}
+                      onChange={(e) =>
+                        setSelectedOrder({ ...selectedOrder, notes: e.target.value })
+                      }
+                      className="w-full border rounded-lg p-2 text-sm"
+                      rows={3}
+                    />
+                  ) : (
+                    <p className="p-3 bg-gray-50 rounded-lg">{selectedOrder.notes || '-'}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* 수정 / 저장 / 취소 버튼 */}
+              <div className="flex justify-end gap-3 pt-4 border-t mt-6">
+                {isEditMode ? (
+                  <>
+                    <Button
+                      onClick={() => {
+                        toast.success('발주 정보가 수정되었습니다.');
+                        setIsEditMode(false);
+                      }}
+                      className="bg-kpi-green text-white hover:bg-green-600"
+                    >
+                      저장
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsEditMode(false)}
+                    >
+                      취소
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsEditMode(true)}
+                  >
+                    수정
+                  </Button>
+                )}
+              </div>
             </div>
           )}
         </DialogContent>
