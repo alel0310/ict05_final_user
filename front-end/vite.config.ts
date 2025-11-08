@@ -18,9 +18,9 @@ export default defineConfig(({ command, mode }) => {
       open: '/login',
       proxy: {
         '/api': {
-          target: 'http://localhost:8082',
+          target: 'http://localhost:8082/user',
           changeOrigin: true,
-          rewrite: (p) => p.replace(/^\/api/, ''),
+          rewrite: (p) => p.replace(/^\/api/, '/api'),
         },
       },
     },

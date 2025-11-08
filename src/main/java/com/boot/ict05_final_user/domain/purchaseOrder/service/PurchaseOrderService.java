@@ -29,13 +29,16 @@ public class PurchaseOrderService {
     }
 
     // 발주 등록
-
+//    @Transactional
+//    public Long createPurchaseOrder(PurchaseOrderRequestsDTO dto) {
+//        return purchaseOrderRepository.createPurchaseOrder(dto);
+//    }
 
     // 발주 수정
-    @Transactional
-    public void updatePurchaseOrder(Long id, PurchaseOrderRequestsDTO dto) {
-        purchaseOrderRepository.updatePurchaseOrder(id, dto);
-    }
+//    @Transactional
+//    public void updatePurchaseOrder(Long id, PurchaseOrderRequestsDTO dto) {
+//        purchaseOrderRepository.updatePurchaseOrder(id, dto);
+//    }
 
     // 발주 전체(헤더+품목) 삭제
     @Transactional

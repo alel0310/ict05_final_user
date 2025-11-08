@@ -18,9 +18,9 @@ public interface PurchaseOrderRepositoryCustom {
     // 발주 상세 조회
     PurchaseOrderDetailDTO findPurchaseOrderDetail(Long id);
     // 발주 등록
-
+    // long createPurchaseOrder(PurchaseOrderRequestsDTO dto);
     // 발주 수정
-    void updatePurchaseOrder(Long id, PurchaseOrderRequestsDTO dto);
+    // void updatePurchaseOrder(Long id, PurchaseOrderRequestsDTO dto);
     // 발주 전체(헤더+품목) 삭제
     void deletePurchaseOrder(Long id);
     // 발주 상세 품목 삭제

@@ -43,18 +43,23 @@ public class PurchaseOrderRestController {
     }
 
     // 발주 등록 API
-
+//    @PostMapping
+//    public ResponseEntity<Long> createPurchaseOrder(@RequestBody PurchaseOrderRequestsDTO dto) {
+//        log.info("발주 등록 요청 들어옴: {}", dto);
+//        Long newOrderId = purchaseOrderService.createPurchaseOrder(dto);
+//        return ResponseEntity.ok(newOrderId);
+//    }
 
     // 발주 수정 API
-    @PutMapping("/{id}")
-    public ResponseEntity<?> updatePurchaseOrder(
-            @PathVariable Long id,
-            @RequestBody PurchaseOrderRequestsDTO dto) {
-        log.info("PUT 요청 들어옴 id={}", id);
-        log.info(dto.getItems().toString());
-        purchaseOrderService.updatePurchaseOrder(id, dto);
-        return ResponseEntity.ok().build();
-    }
+//    @PutMapping("/{id}")
+//    public ResponseEntity<?> updatePurchaseOrder(
+//            @PathVariable Long id,
+//            @RequestBody PurchaseOrderRequestsDTO dto) {
+//        log.info("PUT 요청 들어옴 id={}", id);
+//        log.info(dto.getItems().toString());
+//        purchaseOrderService.updatePurchaseOrder(id, dto);
+//        return ResponseEntity.ok().build();
+//    }
 
     // 발주 전체(헤더+품목) 삭제
     @DeleteMapping("/{id}")
