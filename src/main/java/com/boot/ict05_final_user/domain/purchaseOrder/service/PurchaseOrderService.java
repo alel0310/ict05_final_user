@@ -3,6 +3,7 @@ package com.boot.ict05_final_user.domain.purchaseOrder.service;
 import com.boot.ict05_final_user.domain.purchaseOrder.dto.*;
 import com.boot.ict05_final_user.domain.purchaseOrder.entity.PurchaseOrder;
 import com.boot.ict05_final_user.domain.purchaseOrder.entity.PurchaseOrderDetail;
+import com.boot.ict05_final_user.domain.purchaseOrder.entity.PurchaseOrderStatus;
 import com.boot.ict05_final_user.domain.purchaseOrder.repository.PurchaseOrderRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -52,8 +53,17 @@ public class PurchaseOrderService {
         purchaseOrderRepository.deletePurchaseOrderDetail(detailId);
     }
 
-    // 발주 상태 전환
+    // 발주 상태 변경
+    @Transactional
+    public void updateStatusById(Long id, PurchaseOrderStatus status) {
+        purchaseOrderRepository.updateStatusById(id, status);
+    }
 
+    // 본사 상태 연동
+    @Transactional
+    public void updateStatusByOrderCode(String orderCode, PurchaseOrderStatus status) {
+        purchaseOrderRepository.updateStatusByOrderCode(orderCode, status);
+    }
 
     // 발주 상단 요약 데이터 조회
 

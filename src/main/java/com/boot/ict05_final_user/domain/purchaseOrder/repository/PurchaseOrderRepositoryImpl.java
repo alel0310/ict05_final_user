@@ -11,6 +11,7 @@ import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.stereotype.Repository;
@@ -22,9 +23,11 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 @Repository
 @RequiredArgsConstructor
+@Slf4j
 public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCustom{
 
     private final JPAQueryFactory queryFactory;
@@ -427,7 +430,7 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
         QPurchaseOrderDetail pod = QPurchaseOrderDetail.purchaseOrderDetail;
         QPurchaseOrder po = QPurchaseOrder.purchaseOrder;
 
-        // 1️⃣ 삭제할 상세의 발주 ID 조회
+        // 삭제할 상세의 발주 ID 조회
         Long orderId = queryFactory
                 .select(pod.purchaseOrder.id)
                 .from(pod)
@@ -438,27 +441,27 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
             throw new IllegalArgumentException("해당 발주 상세가 존재하지 않습니다. detailId=" + detailId);
         }
 
-        // 2️⃣ 상세 행 삭제
+        // 상세 행 삭제
         queryFactory
                 .delete(pod)
                 .where(pod.id.eq(detailId))
                 .execute();
 
-        // 3️⃣ 남은 상세 수 재계산
+        // 남은 상세 수 재계산
         Long remainingCount = queryFactory
                 .select(pod.count())
                 .from(pod)
                 .where(pod.purchaseOrder.id.eq(orderId))
                 .fetchOne();
 
-        // 4️⃣ 남은 상세가 0개면 발주 헤더도 삭제
+        // 남은 상세가 0개면 발주 헤더도 삭제
         if (remainingCount == null || remainingCount == 0) {
             queryFactory
                     .delete(po)
                     .where(po.id.eq(orderId))
                     .execute();
         } else {
-            // 5️⃣ 아니면 품목 수만 갱신
+            // 아니면 품목 수만 갱신
             queryFactory
                     .update(po)
                     .set(po.itemCount, remainingCount.intValue())
@@ -467,6 +470,49 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
         }
     }
 
+    // 발주 상태 변경
+    @Override
+    public void updateStatusById(Long id, PurchaseOrderStatus status) {
+        QPurchaseOrder po = QPurchaseOrder.purchaseOrder;
+
+        queryFactory.update(po)
+                .set(po.status, status)
+                .where(po.id.eq(id))
+                .execute();
+
+        log.info("✅ [STORE] 발주 상태 업데이트 완료: id={} → {}", id, status);
+    }
+
+    @Override
+    public Optional<String> findOrderCodeById(Long id) {
+        QPurchaseOrder po = QPurchaseOrder.purchaseOrder;
+
+        String code = queryFactory
+                .select(po.orderCode)
+                .from(po)
+                .where(po.id.eq(id))
+                .fetchOne();
+
+        return Optional.ofNullable(code);
+    }
+
+    // 본사와 상태 연동
+    @Override
+    public void updateStatusByOrderCode(String orderCode, PurchaseOrderStatus status) {
+        QPurchaseOrder po = QPurchaseOrder.purchaseOrder;
+
+        long updated = queryFactory
+                .update(po)
+                .set(po.status, status)
+                .where(po.orderCode.eq(orderCode))
+                .execute();
+
+        if (updated == 0) {
+            log.warn("⚠️ [STORE] 해당 발주코드({})를 찾을 수 없음 — 상태({}) 미반영", orderCode, status);
+        } else {
+            log.info("✅ [STORE] 상태 동기화 완료 — {} → {}", orderCode, status);
+        }
+    }
 
 
 }

@@ -130,17 +130,46 @@ export function InventoryOrders() {
     }
   };
 
-  const handleStatusChange = (orderId: number, newStatus: string) => {
-    setOrders(prev => prev.map(order => 
-      order.id === orderId 
-        ? { 
-            ...order, 
-            status: newStatus,
-            actualDate: newStatus === 'DELIVERED' ? new Date().toISOString().split('T')[0] : order.actualDate
-          }
-        : order
-    ));
-    toast.success('발주 상태가 업데이트되었습니다.');
+  const handleStatusChange = async (orderId: number, newStatus: string) => {
+    try {
+      // 1️⃣ 선택한 발주 찾기
+      const order = orders.find(o => o.id === orderId);
+      if (!order) return;
+
+      // 2️⃣ 로컬 상태 업데이트 (UI 즉시 반영)
+      setOrders(prev =>
+        prev.map(o =>
+          o.id === orderId
+            ? {
+                ...o,
+                status: newStatus,
+                actualDate:
+                  newStatus === "DELIVERED"
+                    ? new Date().toISOString().split("T")[0]
+                    : o.actualDate,
+              }
+            : o
+        )
+      );
+
+      // 3️⃣ 서버에 상태 변경 요청 (가맹점 자신의 상태 업데이트)
+      await axios.put(`/api/purchase/status/${orderId}`, null, {
+        params: { status: newStatus },
+      });
+
+      // 4️⃣ 본사로 상태 동기화 요청 (가맹점 → 본사)
+      await axios.put(`/api/purchase/sync/status`, null, {
+        params: {
+          orderCode: order.orderCode,
+          status: newStatus,
+        },
+      });
+
+      toast.success("발주 상태가 본사와 동기화되었습니다.");
+    } catch (error) {
+      console.error("🚨 상태 변경 및 동기화 실패:", error);
+      toast.error("상태 변경에 실패했습니다.");
+    }
   };
 
   // 다운로드 기능

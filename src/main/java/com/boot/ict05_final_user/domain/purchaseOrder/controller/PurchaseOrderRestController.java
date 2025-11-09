@@ -4,6 +4,9 @@ import com.boot.ict05_final_user.domain.purchaseOrder.dto.PurchaseOrderDetailDTO
 import com.boot.ict05_final_user.domain.purchaseOrder.dto.PurchaseOrderListDTO;
 import com.boot.ict05_final_user.domain.purchaseOrder.dto.PurchaseOrderRequestsDTO;
 import com.boot.ict05_final_user.domain.purchaseOrder.dto.PurchaseOrderSearchDTO;
+import com.boot.ict05_final_user.domain.purchaseOrder.entity.PurchaseOrderStatus;
+import com.boot.ict05_final_user.domain.purchaseOrder.repository.PurchaseOrderRepository;
+import com.boot.ict05_final_user.domain.purchaseOrder.service.OrderSyncService;
 import com.boot.ict05_final_user.domain.purchaseOrder.service.PurchaseOrderService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +26,8 @@ import org.springframework.web.bind.annotation.*;
 public class PurchaseOrderRestController {
 
     private final PurchaseOrderService purchaseOrderService;
+    private final PurchaseOrderRepository purchaseOrderRepository;
+    private final OrderSyncService orderSyncService;
 
     // 발주 목록 페이징 처리
     @GetMapping("/list")
@@ -75,8 +80,60 @@ public class PurchaseOrderRestController {
         return ResponseEntity.noContent().build();
     }
 
-    // 발주 상태 변경, 조회
+    /**
+     * 가맹점 발주 상태 변경
+     *
+     * <p>가맹점에서 배송상태(PENDING → RECEIVED → DELIVERED 등)를 직접 변경할 때 호출한다.<br>
+     * 상태 변경 후 본사 서버에 동기화 요청도 자동 수행한다.</p>
+     *
+     * @param id     변경할 발주 ID
+     * @param status 새 상태
+     */
+    @PutMapping("/status/{id}")
+    public ResponseEntity<?> updatePurchaseStatus(
+            @PathVariable Long id,
+            @RequestParam("status") String status
+    ) {
+        try {
+            // 1️⃣ 가맹점 DB에 상태 반영
+            PurchaseOrderStatus newStatus = PurchaseOrderStatus.valueOf(status.toUpperCase());
+            purchaseOrderService.updateStatusById(id, newStatus);
 
+            // 2️⃣ 발주 코드 조회
+            String orderCode = purchaseOrderRepository.findOrderCodeById(id)
+                    .orElseThrow(() -> new IllegalArgumentException("해당 발주를 찾을 수 없습니다. ID=" + id));
+
+            // 3️⃣ 본사로 상태 동기화
+            orderSyncService.syncToHQ(orderCode, newStatus.name());
+
+            log.info("✅ [STORE] 상태 변경 및 본사 동기화 완료: {} → {}", orderCode, newStatus);
+            return ResponseEntity.ok("상태 변경 및 본사 동기화 완료");
+
+        } catch (IllegalArgumentException e) {
+            log.warn("⚠️ 잘못된 상태 값: {}", status);
+            return ResponseEntity.badRequest().body("잘못된 상태 값입니다: " + status);
+        } catch (Exception e) {
+            log.error("🚨 상태 변경 실패: {}", e.getMessage(), e);
+            return ResponseEntity.internalServerError().body("상태 변경 중 오류가 발생했습니다.");
+        }
+    }
+
+    // 본사와 상태 연동
+    @PutMapping("/sync/status")
+    public ResponseEntity<?> syncStatusFromHQ(
+            @RequestParam("orderCode") String orderCode,
+            @RequestParam("status") String status
+    ) {
+        log.info("[STORE] 본사로부터 동기화 요청 수신: orderCode={}, status={}", orderCode, status);
+        try {
+            PurchaseOrderStatus newStatus = PurchaseOrderStatus.valueOf(status.toUpperCase());
+            purchaseOrderService.updateStatusByOrderCode(orderCode, newStatus);
+            return ResponseEntity.ok("가맹점 상태 동기화 완료");
+        } catch (IllegalArgumentException e) {
+            log.error("❌ [STORE] 상태 변환 실패: {}", status);
+            return ResponseEntity.badRequest().body("잘못된 상태 값: " + status);
+        }
+    }
 
     // 발주 목록 엑셀 다운로드
 

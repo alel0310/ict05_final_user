@@ -4,10 +4,13 @@ import com.boot.ict05_final_user.domain.purchaseOrder.dto.PurchaseOrderDetailDTO
 import com.boot.ict05_final_user.domain.purchaseOrder.dto.PurchaseOrderListDTO;
 import com.boot.ict05_final_user.domain.purchaseOrder.dto.PurchaseOrderRequestsDTO;
 import com.boot.ict05_final_user.domain.purchaseOrder.dto.PurchaseOrderSearchDTO;
+import com.boot.ict05_final_user.domain.purchaseOrder.entity.PurchaseOrder;
+import com.boot.ict05_final_user.domain.purchaseOrder.entity.PurchaseOrderStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface PurchaseOrderRepositoryCustom {
 
@@ -25,6 +28,11 @@ public interface PurchaseOrderRepositoryCustom {
     void deletePurchaseOrder(Long id);
     // 발주 상세 품목 삭제
     void deletePurchaseOrderDetail(Long detailId);
+    // 발주 상태 변경
+    void updateStatusById(Long id, PurchaseOrderStatus status);
+    Optional<String> findOrderCodeById(Long id);
+    // 본사와 상태 연동
+    void updateStatusByOrderCode(String orderCode, PurchaseOrderStatus status);
     // 상단 카드 데이터
 
 
