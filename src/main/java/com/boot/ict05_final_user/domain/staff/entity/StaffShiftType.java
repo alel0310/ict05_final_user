@@ -29,20 +29,20 @@ public class StaffShiftType {
     /** 근무시간대 이름 */
     @Column(name = "staff_shift_type_name", length = 100, nullable = false)
     @Comment("근무시간대 이름")
-    private String staffShiftTypeName;
+    private String TypeName;
 
     /** 근무 시작 시간 */
     @Column(name = "staff_shift_start_time", nullable = false)
     @Comment("시작")
-    private LocalTime staffShiftStartTime;
+    private LocalTime StartTime;
 
     /** 근무 종료 시간 */
     @Column(name = "staff_shift_end_time", nullable = false)
     @Comment("종료")
-    private LocalTime staffShiftEndTime;
+    private LocalTime EndTime;
 
     /** 근무시간대 설명 */
     @Column(name = "staff_shift_memo", columnDefinition = "TEXT")
     @Comment("근무시간대 설명")
-    private String staffShiftMemo;
+    private String ShiftMemo;
 }

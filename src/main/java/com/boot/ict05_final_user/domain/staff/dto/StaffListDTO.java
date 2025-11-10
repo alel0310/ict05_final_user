@@ -1,5 +1,6 @@
 package com.boot.ict05_final_user.domain.staff.dto;
 
+import com.boot.ict05_final_user.domain.staff.entity.AttendanceStatus;
 import com.boot.ict05_final_user.domain.staff.entity.StaffDepartment;
 import com.boot.ict05_final_user.domain.staff.entity.StaffEmploymentType;
 import lombok.AllArgsConstructor;
@@ -33,5 +34,8 @@ public class StaffListDTO {
     /** 사원 입사일자 (혹은 매장 근무 시작일) */
     @Schema(type="string", format="date-time")
     private LocalDateTime staffStartDate;
+
+    /** 근태 상태 */
+    private AttendanceStatus attendanceStatus;
 
 }

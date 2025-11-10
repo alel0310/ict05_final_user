@@ -66,7 +66,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
         // 개발/운영 도메인 추가
-        cfg.setAllowedOrigins(List.of("http://localhost:3000", "http://localhost:5173", "http://localhost"));
+        cfg.setAllowedOrigins(List.of("http://localhost:3000"));
         cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         cfg.setAllowedHeaders(List.of("*"));
         cfg.setAllowCredentials(true);
@@ -90,28 +90,21 @@ public class SecurityConfig {
 
         // 인가 규칙
         http.authorizeHttpRequests(auth -> auth
-
                 // CORS preflight
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-
-                // SPA UI 및 정적 리소스 (인증 없이 항상 허용)
-                .requestMatchers("/", "/index.html", "/assets/**", "/vite.svg", "/manifest.json", "/robots.txt").permitAll()
-
-
 
                 .requestMatchers("/user/api/auth/**").permitAll()
 
                 // 공개 엔드포인트
                 .requestMatchers("/login").permitAll()
                 .requestMatchers("/jwt/exchange", "/jwt/refresh").permitAll()
-                .requestMatchers(HttpMethod.POST, "/user/exist", "/user","/me", "/user/api/**", "/join", "/user/member/exist-email", "/user/member").permitAll()
+                .requestMatchers(HttpMethod.POST, "/user/exist", "/user/**","/me", "/user/dashboard/**", "/join", "/user/member/exist-email", "/user/member").permitAll()
 
 
                 // 인증 필요
                 .requestMatchers(HttpMethod.GET, "/**").permitAll()
-                .requestMatchers(HttpMethod.PUT, "/**").permitAll()
-                .requestMatchers(HttpMethod.DELETE, "/**").permitAll()
-
+                .requestMatchers(HttpMethod.PUT, "/user").hasRole(UserRoleType.USER.name())
+                .requestMatchers(HttpMethod.DELETE, "/user").hasRole(UserRoleType.USER.name())
 
                 .anyRequest().authenticated()
         );
@@ -126,7 +119,7 @@ public class SecurityConfig {
         http.sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
         // JWT 필터: UsernamePasswordAuthenticationFilter 보다 앞에서 토큰 검증
-		http.addFilterBefore(new JWTFilter(), UsernamePasswordAuthenticationFilter.class);
+        http.addFilterBefore(new JWTFilter(), UsernamePasswordAuthenticationFilter.class);
 
         // 커스텀 로그인 필터: /login 엔드포인트에서 인증 처리 + 성공시 핸들러
         http.addFilterAt(

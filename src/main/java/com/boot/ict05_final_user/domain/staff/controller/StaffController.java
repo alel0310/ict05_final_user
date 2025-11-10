@@ -27,30 +27,4 @@ public class StaffController {
 
     private final StaffService staffService;
 
-    /**
-     * 직원 목록을 페이징 처리하여 조회한다.
-     *
-     * @param staffSearchDTO (선택) 작성자 이름으로 검색할 경우 전달되는 값
-     * @param pageable       페이지 번호, 크기, 정렬 조건을 포함한 페이징 객체
-     * @param model          뷰에 전달할 모델 객체
-     * @return 직원 목록 페이지 뷰 이름
-     */
-    @GetMapping("/staff/list")
-    public String listStoreStaff(StaffSearchDTO staffSearchDTO, @PageableDefault(page = 1, size = 10, sort = "id", direction = Sort.Direction.DESC) Pageable pageable,
-                                 Model model,
-                                 HttpServletRequest request) {
-
-        PageRequest pageRequest = PageRequest.of(
-                pageable.getPageNumber()-1,
-                pageable.getPageSize(),
-                Sort.by("id").descending());
-
-        Page<StaffListDTO> staffs = staffService.selectAllStaff(staffSearchDTO, pageRequest);
-
-        model.addAttribute("staffs", staffs);
-        model.addAttribute("staffSearchDTO", staffSearchDTO);
-
-        return "staff/list";
-
-    }
 }

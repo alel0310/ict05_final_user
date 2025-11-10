@@ -1,0 +1,39 @@
+package com.boot.ict05_final_user.domain.staff.dto;
+
+import com.boot.ict05_final_user.domain.staff.entity.AttendanceStatus;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+public class AttendanceListDTO {
+
+    // attendance 테이블
+    /** 근무 시퀀스 */
+    private Long attendanceId;
+
+    /** 근무 일자 */
+    private LocalDate attendanceWorkDate;
+
+    /** 출근 시간 */
+    private LocalDateTime attendanceCheckIn;
+
+    /** 퇴근 시간 */
+    private LocalDateTime attendanceCheckOut;
+
+    /** 근태 상태 */
+    private AttendanceStatus attendanceStatus;
+
+    /** 실제 근무 시간 */
+    private BigDecimal attendanceWorkHours;
+
+    /** 근무시간대 이름 (오픈/미들/마감) */
+    private String staffShiftTypeName;
+
+}

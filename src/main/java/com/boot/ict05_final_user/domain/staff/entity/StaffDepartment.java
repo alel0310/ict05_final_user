@@ -15,7 +15,17 @@ public enum StaffDepartment {
 
     OFFICE("본사팀"),
 
-    STORE("판매팀");
+    STORE("판매팀"),
+
+    FRANCHISE("가맹관리팀"),
+
+    OPS("운영지원팀"),
+
+    HR("인사팀"),
+
+    ANALYTICS("데이터분석팀"),
+
+    ADMIN("관리팀");
 
     /** 한글 설명 */
     private final String description;
