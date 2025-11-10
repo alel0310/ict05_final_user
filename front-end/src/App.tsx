@@ -11,6 +11,7 @@ import { OrderSystem } from "./components/Store/OrderSystem";
 import { OrderList } from "./components/Store/OrderList";
 import { KitchenDisplay } from "./components/Store/KitchenDisplay";
 import { InventoryStatus } from "./components/Store/InventoryStatus";
+import { InventoryManagement } from "./components/Store/InventoryManagement";
 import { InventoryOrders } from "./components/Store/InventoryOrders";
 import { FinanceManagement } from "./components/Store/FinanceManagement";
 import { StaffList } from "./components/Store/StaffList";
@@ -72,6 +73,7 @@ export default function App() {
       case "inventory":
       case "inventory-status": return <ErrorBoundary><InventoryStatus /></ErrorBoundary>;
       case "inventory-orders": return <ErrorBoundary><InventoryOrders /></ErrorBoundary>;
+      case "inventory-management": return <ErrorBoundary><InventoryManagement /></ErrorBoundary>;
       case "finance": return <ErrorBoundary><FinanceManagement /></ErrorBoundary>;
       case "daily-closing": return (<OrderProvider><ErrorBoundary><DailyClosingPage /></ErrorBoundary></OrderProvider>);
       case "mypage": return <ErrorBoundary><MyPage /></ErrorBoundary>

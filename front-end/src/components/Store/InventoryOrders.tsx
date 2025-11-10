@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from "axios";
-import { Truck, Search, Filter, Eye, CheckCircle, XCircle, Clock, AlertCircle, Package, Download } from 'lucide-react';
+import { Truck, Search, Filter, Eye, CheckCircle, XCircle, Clock, AlertCircle, Package, Download, Trash } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -13,24 +13,32 @@ import { toast } from 'sonner';
 export function InventoryOrders() {
   const [orders, setOrders] = useState<any[]>([]);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [originalOrder, setOriginalOrder] = useState<any>(null);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [totalPages, setTotalPages] = useState(1);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
 
   useEffect(() => {
-    fetchOrders();
-  }, []);
+    fetchOrders(currentPage);
+  }, [currentPage]);
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (page = 0) => {
     try {
       const res = await axios.get("/api/purchase/list", {
-        params: { page: 0, size: 10 },
-         withCredentials: false, // 세션 안 쓸거면 false. 세션 쓰면 true + CORS 설정 필요
+        params: { page, size: 10 },
+        withCredentials: false,
       });
 
       const data = res.data;
-      console.log("✅ API 응답:", data); // <--- 무조건 추가
+      console.log("✅ page:", page, res.data);
+      console.log("🧭 totalPages:", data.totalPages);
+      console.log("📦 totalElements:", data.totalElements);
+      console.log("📄 content.length:", data.content?.length);
+      const list = Array.isArray(data.content) ? data.content : [];
 
-      const list = Array.isArray(data) ? data : data.content || [];
       const fetchedOrders = list.map((po: any) => ({
         id: po.id,
         orderCode: po.orderCode,
@@ -40,18 +48,15 @@ export function InventoryOrders() {
         totalPrice: Number(po.totalPrice ?? 0),
         status: po.status,
         priority: po.priority,
-        notes: po.remark || '',
-        items: [
-          {
-            mainItemName: po.mainItemName ?? '-',
-            quantity: po.itemCount ?? 0,
-            unitPrice: 0,
-            totalPrice: po.totalPrice ?? 0,
-          },
-        ],
+        notes: po.notes || '',
+        mainItemName: po.mainItemName ?? '-',
+        itemCount: po.itemCount ?? 0,
       }));
 
+      console.log("✅ 전체 건수:", data.totalElements);
       setOrders(fetchedOrders);
+      setTotalPages(data.totalPages || 1);
+      setTotalElements(data.totalElements || 0);
     } catch (error) {
       console.error("🚨 발주 목록 조회 실패:", error);
     }
@@ -87,22 +92,84 @@ export function InventoryOrders() {
 
   const filteredOrders = orders;
 
-  const handleOrderDetail = (order: any) => {
-    setSelectedOrder(order);
-    setIsDetailModalOpen(true);
+  const handleOrderDetail = async (order: any) => {
+    console.log("🔍 클릭한 발주 객체:", order);   // 전체 객체 확인
+    console.log("🆔 order.id =", order.id);        // id 값만 확인
+    try {
+      const res = await axios.get(`/api/purchase/detail/${order.id}`);
+      console.log("✅ 상세 조회 응답:", res.data);
+      setSelectedOrder(res.data);
+      setIsDetailModalOpen(true);
+    } catch (err) {
+      console.error("❌ 발주 상세 조회 실패:", err);
+      toast.error("상세 정보를 불러올 수 없습니다.");
+    }
+  };
+  
+  const handleSelectOrder = (id: number) => {
+    setSelectedIds(prev =>
+      prev.includes(id)
+        ? prev.filter(i => i !== id)
+        : [...prev, id]
+    );
   };
 
-  const handleStatusChange = (orderId: number, newStatus: string) => {
-    setOrders(prev => prev.map(order => 
-      order.id === orderId 
-        ? { 
-            ...order, 
-            status: newStatus,
-            actualDate: newStatus === 'DELIVERED' ? new Date().toISOString().split('T')[0] : order.actualDate
-          }
-        : order
-    ));
-    toast.success('발주 상태가 업데이트되었습니다.');
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`${selectedIds.length}건의 발주서를 삭제하시겠습니까?`)) return;
+
+    try {
+      await Promise.all(selectedIds.map(id => axios.delete(`/api/purchase/${id}`)));
+      toast.success(`${selectedIds.length}건의 발주서가 삭제되었습니다.`);
+      setOrders(prev => prev.filter(order => !selectedIds.includes(order.id)));
+      setSelectedIds([]);
+      fetchOrders(currentPage);
+    } catch (error) {
+      console.error("🚨 발주 삭제 실패:", error);
+      toast.error("삭제 중 오류가 발생했습니다.");
+    }
+  };
+
+  const handleStatusChange = async (orderId: number, newStatus: string) => {
+    try {
+      // 1️⃣ 선택한 발주 찾기
+      const order = orders.find(o => o.id === orderId);
+      if (!order) return;
+
+      // 2️⃣ 로컬 상태 업데이트 (UI 즉시 반영)
+      setOrders(prev =>
+        prev.map(o =>
+          o.id === orderId
+            ? {
+                ...o,
+                status: newStatus,
+                actualDate:
+                  newStatus === "DELIVERED"
+                    ? new Date().toISOString().split("T")[0]
+                    : o.actualDate,
+              }
+            : o
+        )
+      );
+
+      // 3️⃣ 서버에 상태 변경 요청 (가맹점 자신의 상태 업데이트)
+      await axios.put(`/api/purchase/status/${orderId}`, null, {
+        params: { status: newStatus },
+      });
+
+      // 4️⃣ 본사로 상태 동기화 요청 (가맹점 → 본사)
+      await axios.put(`/api/purchase/sync/status`, null, {
+        params: {
+          orderCode: order.orderCode,
+          status: newStatus,
+        },
+      });
+
+      toast.success("발주 상태가 본사와 동기화되었습니다.");
+    } catch (error) {
+      console.error("🚨 상태 변경 및 동기화 실패:", error);
+      toast.error("상태 변경에 실패했습니다.");
+    }
   };
 
   // 다운로드 기능
@@ -462,6 +529,18 @@ export function InventoryOrders() {
   };
 
   const orderColumns: Column[] = [
+    {
+      key: "select",
+      label: "",
+      render: (_, row) => (
+        <input
+          type="checkbox"
+          checked={selectedIds.includes(row.id)}
+          onChange={() => handleSelectOrder(row.id)}
+          className="w-4 h-4 accent-kpi-green"
+        />
+      ),
+    },
     { 
       key: 'orderCode', 
       label: '발주번호', 
@@ -483,20 +562,20 @@ export function InventoryOrders() {
       sortable: true,
       render: (value) => <span className="font-medium">{value}</span>
     },
-    { 
-      key: 'items', 
-      label: '발주품목', 
+    {
+      key: 'mainItemName',
+      label: '발주품목',
       sortable: true,
-      render: (items, row) => (
+      render: (value, row) => (
         <div>
-          <div className="font-medium">{items[0]?.mainItemName}</div>
-          {row.items[0]?.quantity > 1 && (
+          <div className="font-medium">{value ?? '-'}</div>
+          {row.itemCount > 1 && (
             <div className="text-xs text-dark-gray">
-              외 {row.items[0].quantity - 1}개
+              외 {row.itemCount - 1}개
             </div>
           )}
         </div>
-      )
+      ),
     },
     { 
       key: 'totalPrice', 
@@ -580,7 +659,7 @@ export function InventoryOrders() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-green-100">총 발주</p>
-              <p className="text-2xl font-bold">{totalOrders}</p>
+              <p className="text-2xl font-bold">{totalElements}</p>
             </div>
             <Truck className="w-8 h-8 text-green-200" />
           </div>
@@ -625,6 +704,14 @@ export function InventoryOrders() {
             발주 내역 관리
           </h3>
           <div className="flex items-center gap-3">
+            <Button
+            size="sm"
+            variant="destructive"
+            onClick={handleBulkDelete}
+            disabled={selectedIds.length === 0}
+          >
+            <Trash className="w-3 h-3 mr-1" /> 삭제
+          </Button>
             <DownloadToggle
               onDownload={handleDownload}
               filename={`발주관리_${new Date().toISOString().split('T')[0]}`}
@@ -646,11 +733,29 @@ export function InventoryOrders() {
             { label: '검수완료', value: 'DELIVERED' },
             { label: '취소됨', value: 'CANCELED' }
           ]}
+          serverSidePagination={true}
+          currentPage={currentPage + 1}
+          totalPageCount={totalPages}
+          totalElements={totalElements}
+          onPageChange={(page) => {
+            setCurrentPage(page - 1);
+            fetchOrders(page - 1);
+          }}
         />
       </Card>
 
       {/* 발주 상세 모달 */}
-      <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
+      <Dialog
+        open={isDetailModalOpen}
+        onOpenChange={(open) => {
+          setIsDetailModalOpen(open);
+          if (!open) {
+            // 모달 닫힐 때 초기화
+            setSelectedOrder(null);
+            setOriginalOrder(null);
+            setIsEditMode(false);
+          }
+        }}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -702,36 +807,36 @@ export function InventoryOrders() {
                         <th className="px-4 py-2 text-left">품목명</th>
                         <th className="px-4 py-2 text-center">수량</th>
                         <th className="px-4 py-2 text-right">단가</th>
-                        <th className="px-4 py-2 text-right">금액</th>
+                        {isEditMode && <th className="px-4 py-2 text-right">작업</th>}
                       </tr>
                     </thead>
                     <tbody>
                       {selectedOrder.items.map((item: any, index: number) => (
                         <tr key={index} className="border-t">
-                          <td className="px-4 py-3 font-medium">{item.mainItemName}</td>
+                          <td className="px-4 py-3 font-medium">{item.materialName}</td>
 
                           <td className="px-4 py-3 text-center">
                             {isEditMode ? (
                               <Input
                                 type="number"
-                                value={item.itemCount}
+                                value={item.count}
                                 onChange={(e) => {
-                                  const newItemCount = parseInt(e.target.value) || 0;
+                                  const newCount = parseInt(e.target.value) || 0;
                                   setSelectedOrder((prev: any) => ({
                                     ...prev,
                                     items: prev.items.map((it: any, i: number) =>
                                       i === index
                                         ? {
                                             ...it,
-                                            itemCount: newItemCount,
-                                            totalPrice: newItemCount * it.unitPrice,
+                                            count: newCount,
+                                            totalPrice: newCount * it.unitPrice,
                                           }
                                         : it
                                     ),
                                     totalPrice: prev.items.reduce(
                                       (sum: number, it: any, i: number) =>
                                         i === index
-                                          ? sum + newItemCount * it.unitPrice
+                                          ? sum + newCount * it.unitPrice
                                           : sum + it.totalPrice,
                                       0
                                     ),
@@ -741,19 +846,54 @@ export function InventoryOrders() {
                                 min="1"
                               />
                             ) : (
-                              <span>
-                                {item.itemCount}
-                                {item.unit}
-                              </span>
+                              <span>{item.count}</span>
                             )}
                           </td>
 
                           <td className="px-4 py-3 text-right">
-                            ₩{item.unitPrice.toLocaleString()}
+                            ₩{(item.unitPrice || 0).toLocaleString()}
                           </td>
                           <td className="px-4 py-3 text-right font-medium">
-                            ₩{item.totalPrice.toLocaleString()}
+                            ₩{(item.totalPrice || 0).toLocaleString()}
                           </td>
+
+                          {isEditMode && (
+                            <td className="px-4 py-3 text-right">
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={async () => {
+                                  if (!window.confirm("이 품목을 삭제하시겠습니까?")) return;
+                                  try {
+                                    // 서버에서 품목 삭제
+                                    await axios.delete(`/api/purchase/detail/item/${item.id}`);
+                                    toast.success("품목이 삭제되었습니다.");
+
+                                    // 프론트 상태에서 해당 품목 제거
+                                    setSelectedOrder((prev: any) => {
+                                      const updatedItems = prev.items.filter((i: any) => i.id !== item.id);
+
+                                      // 남은 품목이 없으면 모달 닫고 목록 새로고침
+                                      if (updatedItems.length === 0) {
+                                        setIsDetailModalOpen(false);
+                                        fetchOrders(currentPage); // 목록 새로 불러오기
+                                      }
+                                      // 남은 품목만 상태에 반영
+                                      return {
+                                        ...prev,
+                                        items: updatedItems,
+                                      };
+                                    });
+                                  } catch (error) {
+                                    console.error("🚨 품목 삭제 실패:", error);
+                                    toast.error("품목 삭제에 실패했습니다.");
+                                  }
+                                }}
+                              >
+                                삭제
+                              </Button>
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -816,9 +956,32 @@ export function InventoryOrders() {
                 {isEditMode ? (
                   <>
                     <Button
-                      onClick={() => {
-                        toast.success('발주 정보가 수정되었습니다.');
-                        setIsEditMode(false);
+                      onClick={async () => {
+                        try {
+                          const payload = {
+                            priority: selectedOrder.priority,
+                            notes: selectedOrder.notes,
+                            items: selectedOrder.items.map((item: any) => ({
+                              id: item.id,
+                              count: item.count,
+                              unitPrice: item.unitPrice,
+                              totalPrice: item.totalPrice,
+                            })),
+                          };
+
+                          await axios.put(`/api/purchase/${selectedOrder.id}`, payload, {
+                            withCredentials: false,
+                            headers: { 'Content-Type': 'application/json' },
+                          });
+
+                          toast.success('발주 정보가 수정되었습니다.');
+                          setIsEditMode(false);
+                          setOriginalOrder(JSON.parse(JSON.stringify(selectedOrder))); // 저장 후 원본 갱신
+                          fetchOrders(); // 목록 새로고침
+                        } catch (error) {
+                          console.error('🚨 발주 수정 실패:', error);
+                          toast.error('발주 수정에 실패했습니다.');
+                        }
                       }}
                       className="bg-kpi-green text-white hover:bg-green-600"
                     >
@@ -826,7 +989,12 @@ export function InventoryOrders() {
                     </Button>
                     <Button
                       variant="outline"
-                      onClick={() => setIsEditMode(false)}
+                      onClick={() => {
+                        if (originalOrder) {
+                          setSelectedOrder(JSON.parse(JSON.stringify(originalOrder)));
+                        }
+                        setIsEditMode(false);
+                      }}
                     >
                       취소
                     </Button>

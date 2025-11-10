@@ -7,6 +7,7 @@ import jakarta.persistence.EntityManager;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.client.RestTemplate;
 
 /**
  * QueryDSL 사용을 위해 사용하는 JPAQueryFactory
@@ -23,6 +24,9 @@ public class AppConfig {
         return new JPAQueryFactory(entityManager);
     }
 
-
+    @Bean
+    public RestTemplate restTemplate() {
+        return new RestTemplate();
+    }
 
 }
