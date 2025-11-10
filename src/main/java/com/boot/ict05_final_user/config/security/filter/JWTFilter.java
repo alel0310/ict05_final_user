@@ -21,7 +21,7 @@ public class JWTFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
 
-        System.out.println("[JWTFilter] Path: " + request.getRequestURI() + ", Auth Header: " + request.getHeader("Authorization"));
+        //System.out.println("[JWTFilter] Path: " + request.getRequestURI() + ", Auth Header: " + request.getHeader("Authorization"));
 
         // 공개 경로 (JWT 검사 건너뛰기)
         String requestURI = request.getRequestURI();
