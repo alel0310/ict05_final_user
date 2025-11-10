@@ -27,6 +27,11 @@ public class Attendance {
     @Column(name = "attendance_id", nullable = false, updatable = false)
     private Long id; // INT UNSIGNED → Long 매핑
 
+    /** 직원 프로필 (근태는 직원에 종속됨) */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "staff_id_fk", nullable = false)
+    private StaffProfile staffProfile;
+
     /** 근무 일자 */
     @Column(name = "attendance_work_date", nullable = false)
     private LocalDate workDate;

@@ -10,6 +10,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @RequiredArgsConstructor
 @Service
 @Transactional
@@ -19,14 +21,15 @@ public class StaffService {
     private final StaffRepository staffRepository;
 
     /**
-     * 검색어로 필터링하여 공지사항 목록을 페이지 단위로 조회한다.
+     * 전체 직원 목록을 조회한다. (페이징 없이 전체 반환)
      *
-     * @param staffSearchDTO 검색 (선택, null 가능)
-     * @param pageable       페이지 정보 (페이지 번호, 크기, 정렬)
-     * @return 페이징 처리된 직원 리스트 DTO
+     * @return 직원 리스트 DTO
      */
-    public Page<StaffListDTO> selectAllStaff(StaffSearchDTO staffSearchDTO, Pageable pageable) {
-        return staffRepository.listStaff(staffSearchDTO, pageable);
+    public List<StaffListDTO> selectAllStaff() {
+        StaffSearchDTO searchDTO = new StaffSearchDTO();
+        Pageable pageable = Pageable.unpaged(); // 전체 조회용
+
+        return staffRepository.listStaff(searchDTO, pageable).getContent();
     }
 
 }
