@@ -67,6 +67,7 @@ const storeMenuItems: MenuItem[] = [
     icon: Package,
     children: [
       { id: 'inventory-status', label: '재고 현황', icon: Package },
+      { id: 'inventory-management', label: '재고 관리', icon: Package},
       { id: 'inventory-orders', label: '발주 관리', icon: Truck }
     ]
   },

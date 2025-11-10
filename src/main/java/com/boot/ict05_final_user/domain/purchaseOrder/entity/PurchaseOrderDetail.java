@@ -17,36 +17,36 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 @Builder
 public class PurchaseOrderDetail {
-    /** 발주 상세 시퀀스 */
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "purchase_order_detail_id")
     private Long id;
 
-    /** 발주 본문 */
+    /** 발주 헤더 */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "purchase_order_id_fk", nullable = false)
     private PurchaseOrder purchaseOrder;
 
-//    /** 재고 */
-//    @ManyToOne(fetch = FetchType.LAZY)
-//    @JoinColumn(name = "inventory_id_fk", nullable = false)
-//    private Inventory inventory;
-//
-//    /** 재료 */
+    /** 발주 품목 Material */
 //    @ManyToOne(fetch = FetchType.LAZY)
 //    @JoinColumn(name = "material_id_fk", nullable = false)
 //    private Material material;
 
-    /** 단가 */
+    /** 단가 : 등록 시 Material.unitPrice 사용 */
     @Column(name = "purchase_order_detail_unit_price", precision = 12, scale = 2, nullable = false)
     private BigDecimal unitPrice;
 
-    /** 수량 */
+    /** 단위 : Material.unit 사용 (DTO에서만 필요할 수 있음) */
+    @Transient
+    private String unit;
+
+    /** 수량 : 등록 시 입력값 */
     @Column(name = "purchase_order_detail_count", nullable = false)
     private Integer count;
 
-    /** 총액 */
+    /** 총액 = 단가 * 수량 */
     @Column(name = "purchase_order_detail_total_price", precision = 12, scale = 2, nullable = false)
     private BigDecimal totalPrice;
 }
+
