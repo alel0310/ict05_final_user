@@ -20,7 +20,7 @@ public class RecipeItemDTO {
     private Long materialId;
 
     /** 레시피 항목명 — ‘체다치즈’, ‘소금’, ‘소스 베이스’ */
-    private String itemName;
+    private String materialName;
 
     /** 수량 */
     @DecimalMin(value = "0.0", inclusive = false, message = "수량은 0보다 커야 합니다")

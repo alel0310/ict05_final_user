@@ -39,10 +39,11 @@ public class Menu {
     @Column(name = "menu_kcal")
     private int menuKcal;
 
-    /** 재고 상태 */
+    /** 품절 상태 */
+    @Builder.Default
     @Enumerated(EnumType.STRING)
-    @Column(name = "menu_soldOut")
-    private SoldOutStatus soldOutStatus;
+    @Column(name = "sold_out_staus")
+    private SoldOutStatus soldOutStatus = SoldOutStatus.ON_SALE;
 
     /** 판매상태(0:중지, 1:판매중) */
     @Enumerated(EnumType.STRING)

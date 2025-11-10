@@ -1,5 +1,6 @@
 package com.boot.ict05_final_user.domain.menu.entity;
 
+import com.boot.ict05_final_user.domain.inventory.entity.Material;
 import jakarta.persistence.*;
 import lombok.*;
 

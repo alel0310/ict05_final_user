@@ -67,7 +67,7 @@ public class SecurityConfig {
         CorsConfiguration cfg = new CorsConfiguration();
         // 개발/운영 도메인 추가
         cfg.setAllowedOrigins(List.of("http://localhost:3000"));
-        cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE","PATCH", "OPTIONS"));
         cfg.setAllowedHeaders(List.of("*"));
         cfg.setAllowCredentials(true);
         // 쿠키 수신 시 브라우저가 확인 가능한 헤더
@@ -98,13 +98,14 @@ public class SecurityConfig {
                 // 공개 엔드포인트
                 .requestMatchers("/login").permitAll()
                 .requestMatchers("/jwt/exchange", "/jwt/refresh").permitAll()
-                .requestMatchers(HttpMethod.POST, "/user/exist", "/user/**","/me", "/user/dashboard/**", "/join", "/user/member/exist-email", "/user/member").permitAll()
+                .requestMatchers(HttpMethod.POST, "/user/exist", "/user/**","/me","/API/**", "/user/dashboard/**", "/join", "/user/member/exist-email", "/user/member").permitAll()
 
 
                 // 인증 필요
+                .requestMatchers(HttpMethod.PATCH, "/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/**").permitAll()
-                .requestMatchers(HttpMethod.PUT, "/user").hasRole(UserRoleType.USER.name())
-                .requestMatchers(HttpMethod.DELETE, "/user").hasRole(UserRoleType.USER.name())
+                .requestMatchers(HttpMethod.PUT, "/**").permitAll()
+                .requestMatchers(HttpMethod.DELETE, "/**").permitAll()
 
                 .anyRequest().authenticated()
         );

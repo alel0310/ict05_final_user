@@ -1,7 +1,10 @@
 package com.boot.ict05_final_user.domain.menu.service;
 
+import com.boot.ict05_final_user.domain.menu.dto.MenuDetailDTO;
 import com.boot.ict05_final_user.domain.menu.dto.MenuListDTO;
 import com.boot.ict05_final_user.domain.menu.dto.MenuSearchDTO;
+import com.boot.ict05_final_user.domain.menu.entity.Menu;
+import com.boot.ict05_final_user.domain.menu.entity.SoldOutStatus;
 import com.boot.ict05_final_user.domain.menu.repository.MenuCategoryRepository;
 import com.boot.ict05_final_user.domain.menu.repository.MenuRecipeRepository;
 import com.boot.ict05_final_user.domain.menu.repository.MenuRepository;
@@ -52,6 +55,21 @@ public class MenuService {
         return menus;
     }
 
+    /**
+     * 메뉴 상세 정보를 조회한다.
+     *
+     * @param menuId 공지사항 ID
+     * @return 메뉴 엔티티, 존재하지 않으면 null
+     */
+    public MenuDetailDTO selectStoreMenuDetail(Long menuId) {
+        return menuRepository.getMenuDetail(menuId);
+    }
+
+    public void updateSoldOutStatus(Long menuId, SoldOutStatus status) {
+        Menu menu = menuRepository.findById(menuId)
+                .orElseThrow(() -> new IllegalArgumentException("메뉴를 찾을 수 없습니다. id=" + menuId));
+        menu.setSoldOutStatus(status);   // JPA dirty checking으로 자동 update
+    }
 
 //    /**
 //     * 새로운 메뉴를 등록한다.

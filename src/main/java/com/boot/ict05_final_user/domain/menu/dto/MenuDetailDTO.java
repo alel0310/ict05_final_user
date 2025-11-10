@@ -2,6 +2,7 @@ package com.boot.ict05_final_user.domain.menu.dto;
 
 import com.boot.ict05_final_user.domain.menu.entity.MenuCategory;
 import com.boot.ict05_final_user.domain.menu.entity.MenuShow;
+import com.boot.ict05_final_user.domain.menu.entity.SoldOutStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -23,7 +24,7 @@ public class MenuDetailDTO {
     private Long menuCategoryId;
 
     /** 메뉴 카테고리 */
-    private MenuCategory menuCategory;
+    private String  menuCategoryName;
 
     /** 판매 상태 */
     private MenuShow menuShow;
@@ -43,11 +44,16 @@ public class MenuDetailDTO {
     /** 칼로리 */
     private Integer menuKcal;
 
+    /** 판매중 / 품절 */
+    private SoldOutStatus soldOutStatus;
+
     /** 설명 */
     private String menuInformation;
 
-    /** 재료구성 */
-    private List<RecipeItemDTO> mainMaterials;  // 주재료 리스트
-    private List<RecipeItemDTO> sauceMaterials; // 소스 구성 테이블
+//    /** 재료구성 */
+//    private List<RecipeItemDTO> recipeItems;
+
+    /** 재료 목록 ("," 로 이어붙인 문자열) */
+    private String ingredients;
 
 }

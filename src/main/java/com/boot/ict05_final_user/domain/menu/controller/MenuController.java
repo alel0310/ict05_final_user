@@ -42,68 +42,68 @@ public class MenuController {
     private final MenuCategoryRepository menuCategoryRepository;
     // private final MaterialRepository materialRepository;
 
-    /**
-     * 메뉴 목록을 페이징 처리하여 조회한다.
-     *
-     * @param menuSearchDTO 메뉴 이름으로 검색할 경우 전달되는 값
-     * @param pageable 페이지 번호, 크기, 정렬 조건을 포함한 페이징 객체
-     * @param model    뷰에 전달할 모델 객체
-     * @return 메뉴 목록 페이지 뷰 이름
-     */
-    @GetMapping("/menu/list")
-    public String listStoreMenu(
-            MenuSearchDTO menuSearchDTO,
-            @PageableDefault(page = 1, size = 10, sort = "menuId", direction = Sort.Direction.DESC) Pageable pageable,
-            Model model,
-            HttpServletRequest request) {
-
-        int size = resolveSize(menuSearchDTO.getSize(), pageable.getPageSize());
-        Sort sort = pageable.getSort().isSorted()
-                ? pageable.getSort()
-                : Sort.by(Sort.Direction.DESC, "menuId");
-
-        PageRequest pageRequest = PageRequest.of(pageable.getPageNumber()-1, size, sort);
-
-        Page<MenuListDTO> menus = menuService.selectAllStoreMenu(menuSearchDTO, pageRequest);
-
-        // 카테고리: 리프(레벨3)만 + "세트메뉴" 하나 추가
-        List<MenuCategory> categories = new ArrayList<>(
-                menuCategoryRepository.findAllByMenuCategoryLevel(3, Sort.by("menuCategoryName").ascending())
-        );
-        List<MenuCategory> finalCategories = categories;
-        menuCategoryRepository.findByMenuCategoryName("세트메뉴")
-                .ifPresent(c -> finalCategories.add(0, c));
-
-        // 혹시라도 중복 방지 (같은 ID가 들어갈 가능성 대비)
-        categories = categories.stream()
-                .collect(java.util.stream.Collectors.collectingAndThen(
-                        java.util.stream.Collectors.toMap(
-                                MenuCategory::getMenuCategoryId,
-                                c -> c,
-                                (a, b) -> a,
-                                LinkedHashMap::new
-                        ),
-                        m -> new ArrayList<>(m.values())
-                ));
-
-        model.addAttribute("menus", menus);
-        model.addAttribute("menuSearchDTO", menuSearchDTO);
-        model.addAttribute("menuCategories", categories);
-        model.addAttribute("urlBuilder", ServletUriComponentsBuilder.fromRequest(request));
-
-        return "menu/list";
-    }
-
-    // util
-    private int resolveSize(String s, int fallback) {
-        try {
-            if (s == null || s.isBlank()) return fallback;
-            int v = Integer.parseInt(s);
-            return (v < 1) ? fallback : v;
-        } catch (NumberFormatException e) {
-            return fallback;
-        }
-    }
+//    /**
+//     * 메뉴 목록을 페이징 처리하여 조회한다.
+//     *
+//     * @param menuSearchDTO 메뉴 이름으로 검색할 경우 전달되는 값
+//     * @param pageable 페이지 번호, 크기, 정렬 조건을 포함한 페이징 객체
+//     * @param model    뷰에 전달할 모델 객체
+//     * @return 메뉴 목록 페이지 뷰 이름
+//     */
+//    @GetMapping("/menu/list")
+//    public String listStoreMenu(
+//            MenuSearchDTO menuSearchDTO,
+//            @PageableDefault(page = 1, size = 10, sort = "menuId", direction = Sort.Direction.DESC) Pageable pageable,
+//            Model model,
+//            HttpServletRequest request) {
+//
+//        int size = resolveSize(menuSearchDTO.getSize(), pageable.getPageSize());
+//        Sort sort = pageable.getSort().isSorted()
+//                ? pageable.getSort()
+//                : Sort.by(Sort.Direction.DESC, "menuId");
+//
+//        PageRequest pageRequest = PageRequest.of(pageable.getPageNumber()-1, size, sort);
+//
+//        Page<MenuListDTO> menus = menuService.selectAllStoreMenu(menuSearchDTO, pageRequest);
+//
+//        // 카테고리: 리프(레벨3)만 + "세트메뉴" 하나 추가
+//        List<MenuCategory> categories = new ArrayList<>(
+//                menuCategoryRepository.findAllByMenuCategoryLevel(3, Sort.by("menuCategoryName").ascending())
+//        );
+//        List<MenuCategory> finalCategories = categories;
+//        menuCategoryRepository.findByMenuCategoryName("세트메뉴")
+//                .ifPresent(c -> finalCategories.add(0, c));
+//
+//        // 혹시라도 중복 방지 (같은 ID가 들어갈 가능성 대비)
+//        categories = categories.stream()
+//                .collect(java.util.stream.Collectors.collectingAndThen(
+//                        java.util.stream.Collectors.toMap(
+//                                MenuCategory::getMenuCategoryId,
+//                                c -> c,
+//                                (a, b) -> a,
+//                                LinkedHashMap::new
+//                        ),
+//                        m -> new ArrayList<>(m.values())
+//                ));
+//
+//        model.addAttribute("menus", menus);
+//        model.addAttribute("menuSearchDTO", menuSearchDTO);
+//        model.addAttribute("menuCategories", categories);
+//        model.addAttribute("urlBuilder", ServletUriComponentsBuilder.fromRequest(request));
+//
+//        return "menu/list";
+//    }
+//
+//    // util
+//    private int resolveSize(String s, int fallback) {
+//        try {
+//            if (s == null || s.isBlank()) return fallback;
+//            int v = Integer.parseInt(s);
+//            return (v < 1) ? fallback : v;
+//        } catch (NumberFormatException e) {
+//            return fallback;
+//        }
+//    }
 
 //    /**
 //     * 메뉴 작성 화면을 표시한다.

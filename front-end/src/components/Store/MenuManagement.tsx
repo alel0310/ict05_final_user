@@ -1,19 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { toast } from 'sonner'; // react-hot-toast 등 교체 가능
-import {
-  Package,
-  TrendingUp,
-  DollarSign,
-  ChefHat,
-  AlertTriangle,
-  Clock,
-  Power,
-  Eye,
-} from 'lucide-react';
+import { toast } from 'sonner';
+import { Package } from 'lucide-react';
 
 import { Card } from '../ui/card';
-import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
 import {
@@ -51,6 +41,10 @@ export type StoreMenu = {
 
 type PageResponse<T> = {
   content: T[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
 };
 
 // ======================
@@ -70,6 +64,7 @@ const getCategoryEmoji = (categoryName: string): string => {
 // ======================
 
 export const StoreMenuManagement: React.FC = () => {
+  // 전체 메뉴 목록 (모든 페이지)
   const [menus, setMenus] = useState<StoreMenu[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -80,13 +75,36 @@ export const StoreMenuManagement: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const { dialog, confirm } = useConfirmDialog();
 
-  //  백엔드 데이터 호출
+  // 클라이언트 페이징 상태
+  const [page, setPage] = useState(0); // 0-based
+  const pageSize = 10;
+
+  // ======================
+  // 백엔드에서 전체 목록 한 번만 받아오기
+  // ======================
   useEffect(() => {
+    setLoading(true);
+
     axios
-      .get<PageResponse<StoreMenu>>('/API/menu/list', {
-        params: { page: 0, size: 10 },
+      .get<PageResponse<StoreMenu>>(
+        'http://localhost:8082/user/API/menu/list',
+        {
+          // size를 크게 줘서 한 번에 다 가져오기
+          params: { page: 0, size: 1000 },
+        },
+      )
+      .then((res) => {
+        console.log('menu list response:', res.data);
+        const rawMenus = res.data.content ?? [];
+
+        // soldOutStatus 없으면 기본값 ON_SALE
+        const normalized: StoreMenu[] = rawMenus.map((m) => ({
+          ...m,
+          soldOutStatus: (m.soldOutStatus ?? 'ON_SALE') as SoldOutStatus,
+        }));
+
+        setMenus(normalized);
       })
-      .then((res) => setMenus(res.data.content))
       .catch((err) => {
         console.error(err);
         toast.error('메뉴 목록을 불러오지 못했습니다.');
@@ -94,6 +112,44 @@ export const StoreMenuManagement: React.FC = () => {
       .finally(() => setLoading(false));
   }, []);
 
+  // 검색어 / 카테고리 바뀌면 첫 페이지로 리셋
+  useEffect(() => {
+    setPage(0);
+  }, [searchTerm, selectedCategory]);
+
+  // ======================
+  // 필터 + 페이징 계산
+  // ======================
+
+  // 전체 개수 (상단 "총 N개 항목")
+  const totalElements = menus.length;
+
+  // 검색/카테고리로 필터링 (전체 목록 기준)
+  const filteredMenus = menus.filter((menu) => {
+    const matchesSearch =
+      searchTerm === '' ||
+      menu.menuName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      menu.menuCategoryName.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesCategory =
+      selectedCategory === 'all' ||
+      menu.menuCategoryName.includes(selectedCategory) ||
+      (selectedCategory === 'available' && menu.soldOutStatus === 'ON_SALE') ||
+      (selectedCategory === 'soldout' && menu.soldOutStatus === 'SOLD_OUT');
+
+    return matchesSearch && matchesCategory;
+  });
+
+  // 전체 페이지 수 / 현재 페이지 데이터
+  const totalPages =
+    filteredMenus.length === 0 ? 1 : Math.ceil(filteredMenus.length / pageSize);
+
+  const currentPage = Math.min(page, totalPages - 1);
+  const pageStart = currentPage * pageSize;
+  const pageEnd = pageStart + pageSize;
+  const pageMenus = filteredMenus.slice(pageStart, pageEnd);
+
+  // 카테고리/판매상태 카운트는 "전체 메뉴" 기준으로
   const categories = [
     { label: '전체', value: 'all', count: menus.length },
     {
@@ -128,38 +184,51 @@ export const StoreMenuManagement: React.FC = () => {
     },
   ];
 
-  // 필터링된 메뉴
-  const filteredMenus = menus.filter((menu) => {
-    const matchesSearch =
-      searchTerm === '' ||
-      menu.menuName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      menu.menuCategoryName.toLowerCase().includes(searchTerm.toLowerCase());
+  // ======================
+  // 공통: 서버에 품절 상태 업데이트
+  // ======================
 
-    const matchesCategory =
-      selectedCategory === 'all' ||
-      menu.menuCategoryName.includes(selectedCategory) ||
-      (selectedCategory === 'available' && menu.soldOutStatus === 'ON_SALE') ||
-      (selectedCategory === 'soldout' && menu.soldOutStatus === 'SOLD_OUT');
-
-    return matchesSearch && matchesCategory;
-  });
-
-  // 판매 상태 토글
-  const handleToggleStatus = (menuId: number, isOnSale: boolean) => {
-    setMenus((prev) =>
-      prev.map((menu) =>
-        menu.menuId === menuId
-          ? { ...menu, soldOutStatus: isOnSale ? 'ON_SALE' : 'SOLD_OUT' }
-          : menu,
-      ),
+  const updateSoldOutOnServer = async (
+    menuId: number,
+    status: SoldOutStatus,
+  ) => {
+    await axios.patch(
+      `http://localhost:8082/user/API/menu/${menuId}/sold-out`,
+      { soldOutStatus: status },
     );
-    const target = menus.find((m) => m.menuId === menuId);
-    if (target)
-      toast.success(
-        `${target.menuName}을(를) ${
-          isOnSale ? '판매중으로 변경했습니다.' : '품절 처리했습니다.'
-        }`,
+  };
+
+  // ======================
+  // 이벤트 핸들러
+  // ======================
+
+  // 판매 상태 토글 (Switch)
+  const handleToggleStatus = async (menuId: number, isOnSale: boolean) => {
+    const newStatus: SoldOutStatus = isOnSale ? 'ON_SALE' : 'SOLD_OUT';
+
+    try {
+      await updateSoldOutOnServer(menuId, newStatus);
+
+      setMenus((prev) =>
+        prev.map((menu) =>
+          menu.menuId === menuId
+            ? { ...menu, soldOutStatus: newStatus }
+            : menu,
+        ),
       );
+
+      const target = menus.find((m) => m.menuId === menuId);
+      if (target) {
+        toast.success(
+          `${target.menuName}을(를) ${
+            newStatus === 'ON_SALE' ? '판매중으로 변경했습니다.' : '품절 처리했습니다.'
+          }`,
+        );
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error('판매 상태 변경에 실패했습니다.');
+    }
   };
 
   const handleSoldOut = (menu: StoreMenu) => {
@@ -168,34 +237,64 @@ export const StoreMenuManagement: React.FC = () => {
       description: `${menu.menuName}을(를) 품절 처리하시겠습니까?`,
       type: 'warning',
       confirmText: '품절 처리',
-      onConfirm: () => {
-        setMenus((prev) =>
-          prev.map((m) =>
-            m.menuId === menu.menuId ? { ...m, soldOutStatus: 'SOLD_OUT' } : m,
-          ),
-        );
-        toast.success(`${menu.menuName}을(를) 품절 처리했습니다.`);
+      onConfirm: async () => {
+        try {
+          await updateSoldOutOnServer(menu.menuId, 'SOLD_OUT');
+
+          setMenus((prev) =>
+            prev.map((m) =>
+              m.menuId === menu.menuId
+                ? { ...m, soldOutStatus: 'SOLD_OUT' }
+                : m,
+            ),
+          );
+          toast.success(`${menu.menuName}을(를) 품절 처리했습니다.`);
+        } catch (e) {
+          console.error(e);
+          toast.error('품절 처리에 실패했습니다.');
+        }
       },
     });
   };
 
-  const handleRestock = (menu: StoreMenu) => {
-    setMenus((prev) =>
-      prev.map((m) =>
-        m.menuId === menu.menuId
-          ? { ...m, soldOutStatus: 'ON_SALE' }
-          : m,
-      ),
-    );
-    toast.success(`${menu.menuName} 재입고 완료되었습니다.`);
+  const handleRestock = async (menu: StoreMenu) => {
+    try {
+      await updateSoldOutOnServer(menu.menuId, 'ON_SALE');
+
+      setMenus((prev) =>
+        prev.map((m) =>
+          m.menuId === menu.menuId ? { ...m, soldOutStatus: 'ON_SALE' } : m,
+        ),
+      );
+      toast.success(`${menu.menuName} 재입고 완료되었습니다.`);
+    } catch (e) {
+      console.error(e);
+      toast.error('재입고 처리에 실패했습니다.');
+    }
   };
 
-  const handleMenuDetail = (menu: StoreMenu) => {
-    setSelectedMenu(menu);
-    setIsDetailModalOpen(true);
+  // 상세 모달 열기 (재료 포함)
+  const handleMenuDetail = async (menu: StoreMenu) => {
+    try {
+      const res = await axios.get<StoreMenu>(
+        `http://localhost:8082/user/API/menu/${menu.menuId}`,
+      );
+
+      const detail: StoreMenu = {
+        ...menu,
+        ...res.data,
+        soldOutStatus: (res.data.soldOutStatus ?? 'ON_SALE') as SoldOutStatus,
+      };
+
+      setSelectedMenu(detail);
+      setIsDetailModalOpen(true);
+    } catch (err) {
+      console.error(err);
+      toast.error('메뉴 상세 정보를 불러오지 못했습니다.');
+    }
   };
 
-  // 메뉴 추가 폼 필드 (단순 구조)
+  // 메뉴 추가 폼 필드
   const formFields = [
     {
       name: 'category',
@@ -250,7 +349,10 @@ export const StoreMenuManagement: React.FC = () => {
   const handleSubmit = async (data: Record<string, any>) => {
     setIsSubmitting(true);
     try {
-      const newId = menus.length ? Math.max(...menus.map((m) => m.menuId)) + 1 : 1;
+      const newId = menus.length
+        ? Math.max(...menus.map((m) => m.menuId)) + 1
+        : 1;
+
       const newMenu: StoreMenu = {
         menuId: newId,
         menuName: data.name,
@@ -265,6 +367,7 @@ export const StoreMenuManagement: React.FC = () => {
         soldOutStatus: 'ON_SALE',
         menuShow: 'SHOW',
       };
+
       setMenus((prev) => [...prev, newMenu]);
       toast.success('새 메뉴가 추가되었습니다.');
       setIsModalOpen(false);
@@ -287,7 +390,7 @@ export const StoreMenuManagement: React.FC = () => {
         <div>
           <h1>메뉴 관리</h1>
           <p className="text-dark-gray">
-            {loading ? '불러오는 중...' : `총 ${menus.length}개 항목`}
+            {loading ? '불러오는 중...' : `총 ${totalElements}개 항목`}
           </p>
         </div>
         <Button
@@ -335,77 +438,106 @@ export const StoreMenuManagement: React.FC = () => {
         <div className="overflow-x-auto">
           {loading ? (
             <div className="text-center py-10 text-gray-500">불러오는 중...</div>
-          ) : filteredMenus.length === 0 ? (
+          ) : pageMenus.length === 0 ? (
             <div className="text-center py-16">
               <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-500">조건에 맞는 메뉴가 없습니다.</p>
             </div>
           ) : (
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
-                    메뉴정보
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
-                    가격
-                  </th>
-                  <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
-                    판매상태
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredMenus.map((menu) => (
-                  <tr key={menu.menuId} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center text-lg">
-                          {getCategoryEmoji(menu.menuCategoryName)}
-                        </div>
-                        <div>
-                          <div
-                            className="font-medium text-gray-900 cursor-pointer hover:text-kpi-orange"
-                            onClick={() => handleMenuDetail(menu)}
-                          >
-                            {menu.menuName}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {menu.menuCategoryName}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4">
-                      ₩{menu.menuPrice.toLocaleString()}
-                    </td>
-
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <Switch
-                          checked={menu.soldOutStatus === 'ON_SALE'}
-                          onCheckedChange={(checked) =>
-                            handleToggleStatus(menu.menuId, checked)
-                          }
-                        />
-                        <span
-                          className={`text-sm ${
-                            menu.soldOutStatus === 'SOLD_OUT'
-                              ? 'text-gray-400'
-                              : 'text-green-600'
-                          }`}
-                        >
-                          {menu.soldOutStatus === 'SOLD_OUT'
-                            ? '품절'
-                            : '판매중'}
-                        </span>
-                      </div>
-                    </td>
+            <>
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
+                      메뉴정보
+                    </th>
+                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
+                      가격
+                    </th>
+                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
+                      판매상태
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {pageMenus.map((menu) => (
+                    <tr key={menu.menuId} className="hover:bg-gray-50">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center text-lg">
+                            {getCategoryEmoji(menu.menuCategoryName)}
+                          </div>
+                          <div>
+                            <div
+                              className="font-medium text-gray-900 cursor-pointer hover:text-kpi-orange"
+                              onClick={() => handleMenuDetail(menu)}
+                            >
+                              {menu.menuName}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {menu.menuCategoryName}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="px-6 py-4">
+                        ₩{menu.menuPrice.toLocaleString()}
+                      </td>
+
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <Switch
+                            checked={menu.soldOutStatus === 'ON_SALE'}
+                            onCheckedChange={(checked) =>
+                              handleToggleStatus(menu.menuId, checked)
+                            }
+                          />
+                          <span
+                            className={`text-sm ${
+                              menu.soldOutStatus === 'SOLD_OUT'
+                                ? 'text-gray-400'
+                                : 'text-green-600'
+                            }`}
+                          >
+                            {menu.soldOutStatus === 'SOLD_OUT'
+                              ? '품절'
+                              : '판매중'}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* 페이징 바 */}
+              <div className="flex items-center justify-between px-6 py-4 border-t">
+                <span className="text-sm text-gray-500">
+                  {`${currentPage + 1} / ${totalPages} 페이지`}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage === 0}
+                    onClick={() => setPage((prev) => Math.max(prev - 1, 0))}
+                  >
+                    이전
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage >= totalPages - 1}
+                    onClick={() =>
+                      setPage((prev) => Math.min(prev + 1, totalPages - 1))
+                    }
+                  >
+                    다음
+                  </Button>
+                </div>
+              </div>
+            </>
           )}
         </div>
       </Card>
@@ -444,9 +576,21 @@ export const StoreMenuManagement: React.FC = () => {
                 <p className="text-sm text-gray-500">
                   칼로리: {selectedMenu.menuKcal}kcal
                 </p>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-500 mb-4">
                   가격: ₩{selectedMenu.menuPrice.toLocaleString()}
                 </p>
+
+                {/* 재료 정보 섹션 */}
+                <div className="mt-4 border rounded-xl p-4 bg-gray-50">
+                  <h3 className="text-sm font-semibold mb-2">재료 정보</h3>
+                  <p className="text-sm text-gray-700">
+                    {selectedMenu.ingredients &&
+                    selectedMenu.ingredients.trim().length > 0
+                      ? selectedMenu.ingredients
+                      : '등록된 재료 정보가 없습니다.'}
+                  </p>
+                </div>
+
                 <div className="mt-4 flex gap-2">
                   {selectedMenu.soldOutStatus === 'SOLD_OUT' ? (
                     <Button

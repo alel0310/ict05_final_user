@@ -1,14 +1,14 @@
 package com.boot.ict05_final_user.domain.menu.controller;
 
 
-import com.boot.ict05_final_user.domain.menu.dto.MenuListDTO;
-import com.boot.ict05_final_user.domain.menu.dto.MenuModifyFormDTO;
-import com.boot.ict05_final_user.domain.menu.dto.MenuSearchDTO;
-import com.boot.ict05_final_user.domain.menu.dto.MenuWriteFormDTO;
+import com.boot.ict05_final_user.domain.menu.dto.*;
+import com.boot.ict05_final_user.domain.menu.entity.SoldOutStatus;
 import com.boot.ict05_final_user.domain.menu.service.MenuService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -46,6 +46,7 @@ import java.util.stream.Collectors;
 @RequestMapping("/API")
 @Tag(name= "메뉴 API", description = "메뉴 등록/조회/수정 기능 제공")
 @Slf4j
+@CrossOrigin(origins = "http://localhost:3000")
 public class MenuRestController {
 
     private final MenuService menuService;
@@ -54,12 +55,37 @@ public class MenuRestController {
     @GetMapping("/menu/list")
     public Page<MenuListDTO> getMenuList(
             MenuSearchDTO menuSearchDTO,
-            @PageableDefault(page = 0, size = 50, sort = "menuId", direction = Sort.Direction.DESC)
+            @PageableDefault(page = 0, size = 10, sort = "menuId", direction = Sort.Direction.DESC)
             Pageable pageable
     ) {
         return menuService.selectAllStoreMenu(menuSearchDTO, pageable);
     }
 
+    /** 메뉴 상세 API */
+    @GetMapping("/menu/{id}")
+    public ResponseEntity<MenuDetailDTO> getMenuDetail(@PathVariable Long id) {
+        MenuDetailDTO dto = menuService.selectStoreMenuDetail(id);
+        if (dto == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(dto);
+    }
+
+    @Getter
+    @Setter
+    public static class SoldOutUpdateRequest {
+        private SoldOutStatus soldOutStatus;
+    }
+
+    /** 품절 상태 변경 API */
+    @PatchMapping("/menu/{id}/sold-out")
+    public ResponseEntity<Void> updateSoldOutStatus(
+            @PathVariable Long id,
+            @RequestBody SoldOutUpdateRequest request
+    ) {
+        menuService.updateSoldOutStatus(id, request.getSoldOutStatus());
+        return ResponseEntity.noContent().build();
+    }
 //    /**
 //     * 매뉴 등록 API
 //     *
