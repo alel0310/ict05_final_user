@@ -33,9 +33,6 @@ public class MenuListDTO {
 
     private String menuNameEnglish;
 
-//    /** 주재료 리스트 */
-//    private List<String> materialNames;
-
     /** 가격 */
     private BigDecimal menuPrice;
 
@@ -52,8 +49,4 @@ public class MenuListDTO {
         return menuCategoryName != null ? menuCategoryName : "";
     }
 
-//    /** 화면에서 문자열로 쓸 때 */
-//    public String getMaterialNamesJoined() {
-//        return materialNames != null ? String.join(", ", materialNames) : "";
-//    }
 }

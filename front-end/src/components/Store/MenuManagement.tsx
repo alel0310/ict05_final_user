@@ -18,6 +18,26 @@ import { FormModal } from '../Common/FormModal';
 import { useConfirmDialog } from '../Common/ConfirmDialog';
 
 // ======================
+// 공통 axios 인스턴스 (JWT 자동 첨부)
+// ======================
+
+const api = axios.create({
+  baseURL: 'http://localhost:8082',
+});
+
+api.interceptors.request.use((config) => {
+  // 로그인 후 localStorage 에 저장해 둔 토큰 키 이름으로 바꿔줘도 됨
+  const token = localStorage.getItem('accessToken');
+
+  if (token) {
+    config.headers = config.headers ?? {};
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  return config;
+});
+
+// ======================
 // 타입 정의
 // ======================
 
@@ -80,36 +100,39 @@ export const StoreMenuManagement: React.FC = () => {
   const pageSize = 10;
 
   // ======================
-  // 백엔드에서 전체 목록 한 번만 받아오기
+  // 메뉴 목록 조회 함수 (재사용)
   // ======================
-  useEffect(() => {
+  const fetchMenus = async () => {
     setLoading(true);
-
-    axios
-      .get<PageResponse<StoreMenu>>(
-        'http://localhost:8082/user/API/menu/list',
+    try {
+      const res = await api.get<PageResponse<StoreMenu>>(
+        '/user/API/menu/list',
         {
-          // size를 크게 줘서 한 번에 다 가져오기
           params: { page: 0, size: 1000 },
         },
-      )
-      .then((res) => {
-        console.log('menu list response:', res.data);
-        const rawMenus = res.data.content ?? [];
+      );
 
-        // soldOutStatus 없으면 기본값 ON_SALE
-        const normalized: StoreMenu[] = rawMenus.map((m) => ({
-          ...m,
-          soldOutStatus: (m.soldOutStatus ?? 'ON_SALE') as SoldOutStatus,
-        }));
+      console.log('menu list response:', res.data);
+      const rawMenus = res.data.content ?? [];
 
-        setMenus(normalized);
-      })
-      .catch((err) => {
-        console.error(err);
-        toast.error('메뉴 목록을 불러오지 못했습니다.');
-      })
-      .finally(() => setLoading(false));
+      // soldOutStatus 없으면 기본값 ON_SALE
+      const normalized: StoreMenu[] = rawMenus.map((m) => ({
+        ...m,
+        soldOutStatus: (m.soldOutStatus ?? 'ON_SALE') as SoldOutStatus,
+      }));
+
+      setMenus(normalized);
+    } catch (err) {
+      console.error(err);
+      toast.error('메뉴 목록을 불러오지 못했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 초기 로딩
+  useEffect(() => {
+    fetchMenus();
   }, []);
 
   // 검색어 / 카테고리 바뀌면 첫 페이지로 리셋
@@ -192,10 +215,9 @@ export const StoreMenuManagement: React.FC = () => {
     menuId: number,
     status: SoldOutStatus,
   ) => {
-    await axios.patch(
-      `http://localhost:8082/user/API/menu/${menuId}/sold-out`,
-      { soldOutStatus: status },
-    );
+    await api.patch(`/user/API/menu/${menuId}/sold-out`, {
+      soldOutStatus: status,
+    });
   };
 
   // ======================
@@ -276,9 +298,7 @@ export const StoreMenuManagement: React.FC = () => {
   // 상세 모달 열기 (재료 포함)
   const handleMenuDetail = async (menu: StoreMenu) => {
     try {
-      const res = await axios.get<StoreMenu>(
-        `http://localhost:8082/user/API/menu/${menu.menuId}`,
-      );
+      const res = await api.get<StoreMenu>(`/user/API/menu/${menu.menuId}`);
 
       const detail: StoreMenu = {
         ...menu,
@@ -294,7 +314,10 @@ export const StoreMenuManagement: React.FC = () => {
     }
   };
 
-  // 메뉴 추가 폼 필드
+  // ======================
+  // 메뉴 추가 폼 필드 (재료 입력 추가)
+  // ======================
+
   const formFields = [
     {
       name: 'category',
@@ -339,6 +362,13 @@ export const StoreMenuManagement: React.FC = () => {
       required: true,
     },
     {
+      name: 'ingredients',
+      label: '재료 정보',
+      type: 'textarea' as const,
+      required: false,
+      placeholder: '예) 마가린, 딥치즈소스...',
+    },
+    {
       name: 'menuCode',
       label: '상품코드 *',
       type: 'text' as const,
@@ -346,34 +376,33 @@ export const StoreMenuManagement: React.FC = () => {
     },
   ];
 
+  // ======================
+  // 메뉴 추가 (DB 저장 + 목록 재조회)
+  // ======================
+
   const handleSubmit = async (data: Record<string, any>) => {
     setIsSubmitting(true);
     try {
-      const newId = menus.length
-        ? Math.max(...menus.map((m) => m.menuId)) + 1
-        : 1;
-
-      const newMenu: StoreMenu = {
-        menuId: newId,
+      await api.post('/user/API/menu', {
         menuName: data.name,
         menuNameEnglish: data.nameEnglish,
-        menuCategoryId: 0,
-        menuCategoryName: data.category,
+        menuCategoryName: data.category, // 백엔드 DTO 에 맞게 조정
         menuPrice: Number(data.price),
         menuKcal: Number(data.kcal) || 0,
         menuInformation: data.description,
         menuCode: data.menuCode,
-        ingredients: '',
+        ingredients: data.ingredients ?? '',
         soldOutStatus: 'ON_SALE',
         menuShow: 'SHOW',
-      };
+      });
 
-      setMenus((prev) => [...prev, newMenu]);
+      await fetchMenus();
+
       toast.success('새 메뉴가 추가되었습니다.');
       setIsModalOpen(false);
     } catch (err) {
       console.error(err);
-      toast.error('오류가 발생했습니다.');
+      toast.error('메뉴 저장 중 오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
     }
@@ -511,12 +540,13 @@ export const StoreMenuManagement: React.FC = () => {
                 </tbody>
               </table>
 
-              {/* 페이징 바 */}
+              {/* 페이징 바 - 숫자 버튼 버전 */}
               <div className="flex items-center justify-between px-6 py-4 border-t">
                 <span className="text-sm text-gray-500">
                   {`${currentPage + 1} / ${totalPages} 페이지`}
                 </span>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-2">
+                  {/* 이전 버튼 */}
                   <Button
                     variant="outline"
                     size="sm"
@@ -525,6 +555,22 @@ export const StoreMenuManagement: React.FC = () => {
                   >
                     이전
                   </Button>
+
+                  {/* 숫자 페이지 버튼들 */}
+                  {Array.from({ length: totalPages }, (_, idx) => idx).map(
+                    (idx) => (
+                      <Button
+                        key={idx}
+                        size="sm"
+                        variant={idx === currentPage ? 'default' : 'outline'}
+                        onClick={() => setPage(idx)}
+                      >
+                        {idx + 1}
+                      </Button>
+                    ),
+                  )}
+
+                  {/* 다음 버튼 */}
                   <Button
                     variant="outline"
                     size="sm"
