@@ -1,396 +1,418 @@
-import React, { useState } from 'react';
-import { FormModal } from '../Common/FormModal';
-import { ConfirmDialog, useConfirmDialog } from '../Common/ConfirmDialog';
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
+import { toast } from 'sonner';
+import { Package } from 'lucide-react';
+
 import { Card } from '../ui/card';
-import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '../ui/dialog';
 import { ScrollArea } from '../ui/scroll-area';
-import { 
-  Package, 
-  ChefHat, 
-  DollarSign, 
-  TrendingUp, 
-  Star, 
-  Clock,
-  AlertTriangle,
-  Eye,
-  Power
-} from 'lucide-react';
-import { toast } from 'sonner';
+import { FormModal } from '../Common/FormModal';
+import { useConfirmDialog } from '../Common/ConfirmDialog';
 
-// 가맹점용 메뉴 샘플 데이터 (본사에서 동기화됨)
-const sampleMenus = [
-  {
-    id: 1,
-    name: '치킨버거 세트',
-    category: '세트',
-    price: 12000,
-    description: '치킨버거 + 감자튀김 + 음료',
-    ingredients: '치킨패티, 양상추, 토마토, 마요네즈, 피클, 감자튀김, 콜라',
-    calories: 890,
-    allergens: ['계란', '밀', '대두', '닭고기'],
-    isAvailable: true,
-    soldOut: false,
-    todaySales: 28,
-    stockLevel: 'sufficient',
-    lastOrdered: '2024-12-30 14:30',
-    image: '🍔'
-  },
-  {
-    id: 2,
-    name: '불고기버거 세트',
-    category: '세트',
-    price: 12500,
-    description: '불고기버거 + 감자튀김 + 음료',
-    ingredients: '불고기패티, 치즈, 양파, 불고기소스, 감자튀김, 콜라',
-    calories: 950,
-    allergens: ['밀', '대두', '우유', '쇠고기'],
-    isAvailable: true,
-    soldOut: false,
-    todaySales: 24,
-    stockLevel: 'sufficient',
-    lastOrdered: '2024-12-30 13:45',
-    image: '🍔'
-  },
-  {
-    id: 3,
-    name: '새우버거 세트',
-    category: '세트',
-    price: 13000,
-    description: '새우버거 + 감자튀김 + 음료',
-    ingredients: '새우패티, 아보카도, 양상추, 타르타르소스, 감자튀김, 콜라',
-    calories: 860,
-    allergens: ['갑각류', '계란', '밀', '대두'],
-    isAvailable: true,
-    soldOut: true,
-    todaySales: 18,
-    stockLevel: 'out',
-    lastOrdered: '2024-12-30 12:20',
-    image: '🍤'
-  },
-  {
-    id: 4,
-    name: '햄치즈 토스트',
-    category: '토스트',
-    price: 4500,
-    description: '바삭한 토스트에 햄과 치즈를 넣은 클래식 토스트',
-    ingredients: '식빵, 햄, 치즈, 버터',
-    calories: 380,
-    allergens: ['밀', '우유', '돼지고기'],
-    isAvailable: true,
-    soldOut: false,
-    todaySales: 22,
-    stockLevel: 'sufficient',
-    lastOrdered: '2024-12-30 14:10',
-    image: '🍞'
-  },
-  {
-    id: 5,
-    name: '참치 토스트',
-    category: '토스트',
-    price: 5000,
-    description: '참치와 야채가 들어간 영양만점 토스트',
-    ingredients: '식빵, 참치, 양파, 마요네즈, 치즈',
-    calories: 420,
-    allergens: ['밀', '생선', '계란', '우유'],
-    isAvailable: true,
-    soldOut: false,
-    todaySales: 18,
-    stockLevel: 'low',
-    lastOrdered: '2024-12-30 13:55',
-    image: '🍞'
-  },
-  {
-    id: 6,
-    name: '피자 토스트',
-    category: '토스트',
-    price: 5500,
-    description: '피자처럼 토핑을 올린 특별한 토스트',
-    ingredients: '식빵, 토마토소스, 치즈, 햄, 피망, 양파',
-    calories: 480,
-    allergens: ['밀', '우유', '토마토', '돼지고기'],
-    isAvailable: true,
-    soldOut: false,
-    todaySales: 15,
-    stockLevel: 'sufficient',
-    lastOrdered: '2024-12-30 12:40',
-    image: '🍕'
-  },
-  {
-    id: 7,
-    name: '감자튀김(L)',
-    category: '사이드',
-    price: 3500,
-    description: '바삭하게 튀긴 황금 감자튀김',
-    ingredients: '감자, 식용유, 소금',
-    calories: 320,
-    allergens: [],
-    isAvailable: true,
-    soldOut: false,
-    todaySales: 35,
-    stockLevel: 'low',
-    lastOrdered: '2024-12-30 14:25',
-    image: '🍟'
-  },
-  {
-    id: 8,
-    name: '치킨너겟(6조각)',
-    category: '사이드',
-    price: 4000,
-    description: '바삭한 치킨너겟 6조각',
-    ingredients: '치킨, 튀김옷, 식용유',
-    calories: 420,
-    allergens: ['닭고기', '밀', '계란'],
-    isAvailable: true,
-    soldOut: false,
-    todaySales: 25,
-    stockLevel: 'sufficient',
-    lastOrdered: '2024-12-30 14:15',
-    image: '🍗'
-  },
-  {
-    id: 9,
-    name: '양파링',
-    category: '사이드',
-    price: 3000,
-    description: '바삭한 양파링',
-    ingredients: '양파, 튀김옷, 식용유',
-    calories: 280,
-    allergens: ['밀', '계란'],
-    isAvailable: true,
-    soldOut: false,
-    todaySales: 12,
-    stockLevel: 'sufficient',
-    lastOrdered: '2024-12-30 13:20',
-    image: '🧅'
-  },
-  {
-    id: 10,
-    name: '콜라(L)',
-    category: '음료',
-    price: 2500,
-    description: '시원하고 상쾌한 콜라',
-    ingredients: '탄산수, 콜라시럽, 얼음',
-    calories: 150,
-    allergens: [],
-    isAvailable: true,
-    soldOut: false,
-    todaySales: 42,
-    stockLevel: 'sufficient',
-    lastOrdered: '2024-12-30 14:32',
-    image: '🥤'
-  },
-  {
-    id: 11,
-    name: '사이다(L)',
-    category: '음료',
-    price: 2500,
-    description: '시원하고 깔끔한 사이다',
-    ingredients: '탄산수, 사이다시럽, 얼음',
-    calories: 140,
-    allergens: [],
-    isAvailable: true,
-    soldOut: false,
-    todaySales: 28,
-    stockLevel: 'sufficient',
-    lastOrdered: '2024-12-30 14:20',
-    image: '🥤'
-  },
-  {
-    id: 12,
-    name: '아메리카노',
-    category: '음료',
-    price: 3000,
-    description: '깊고 진한 아메리카노',
-    ingredients: '에스프레소, 물',
-    calories: 10,
-    allergens: [],
-    isAvailable: true,
-    soldOut: false,
-    todaySales: 35,
-    stockLevel: 'sufficient',
-    lastOrdered: '2024-12-30 14:28',
-    image: '☕'
-  },
-  {
-    id: 13,
-    name: '카페라떼',
-    category: '음료',
-    price: 3500,
-    description: '부드럽고 달콤한 카페라떼',
-    ingredients: '에스프레소, 우유, 시럽',
-    calories: 180,
-    allergens: ['우유'],
-    isAvailable: true,
-    soldOut: false,
-    todaySales: 22,
-    stockLevel: 'low',
-    lastOrdered: '2024-12-30 13:50',
-    image: '☕'
+// ======================
+// 공통 axios 인스턴스 (JWT 자동 첨부)
+// ======================
+
+const api = axios.create({
+  baseURL: import.meta.env.VITE_BACKEND_API_BASE_URL,
+  withCredentials: true,
+  headers: {"Content-Type": "application/json"},
+});
+
+api.interceptors.request.use((config) => {
+  // 로그인 후 localStorage 에 저장해 둔 토큰 키 이름으로 바꿔줘도 됨
+  const token = localStorage.getItem('accessToken');
+
+  if (token) {
+    config.headers = config.headers ?? {};
+    config.headers.Authorization = `Bearer ${token}`;
   }
-];
 
+  return config;
+});
 
+// ======================
+// 타입 정의
+// ======================
 
-export function StoreMenuManagement() {
-  const [menus, setMenus] = useState(sampleMenus);
+type SoldOutStatus = 'ON_SALE' | 'SOLD_OUT';
+type MenuShow = 'SHOW' | 'HIDE';
+
+export type StoreMenu = {
+  menuId: number;
+  menuName: string;
+  menuNameEnglish: string;
+  menuCategoryId: number;
+  menuCategoryName: string;
+  menuPrice: number;
+  menuKcal: number;
+  menuInformation: string;
+  menuCode: string;
+  ingredients: string;
+  soldOutStatus: SoldOutStatus;
+  menuShow: MenuShow;
+};
+
+type PageResponse<T> = {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
+};
+
+// ======================
+// 헬퍼 함수
+// ======================
+
+const getCategoryEmoji = (categoryName: string): string => {
+  if (categoryName.includes('세트')) return '🍔';
+  if (categoryName.includes('토스트')) return '🍞';
+  if (categoryName.includes('사이드')) return '🍟';
+  if (categoryName.includes('음료')) return '🥤';
+  return '🍽️';
+};
+
+// ======================
+// 컴포넌트
+// ======================
+
+export const StoreMenuManagement: React.FC = () => {
+  // 전체 메뉴 목록 (모든 페이지)
+  const [menus, setMenus] = useState<StoreMenu[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-  const [selectedMenu, setSelectedMenu] = useState<any>(null);
-  const [editingMenu, setEditingMenu] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [selectedMenu, setSelectedMenu] = useState<StoreMenu | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const { dialog, confirm } = useConfirmDialog();
 
-  const categories = [
-    { label: '전체', value: 'all', count: menus.length },
-    { label: '세트', value: '세트', count: menus.filter(m => m.category === '세트').length },
-    { label: '토스트', value: '토스트', count: menus.filter(m => m.category === '토스트').length },
-    { label: '사이드', value: '사이드', count: menus.filter(m => m.category === '사이드').length },
-    { label: '음료', value: '음료', count: menus.filter(m => m.category === '음료').length },
-    { label: '판매중', value: 'available', count: menus.filter(m => m.isAvailable && !m.soldOut).length },
-    { label: '품절', value: 'soldout', count: menus.filter(m => m.soldOut).length }
-  ];
+  // 클라이언트 페이징 상태
+  const [page, setPage] = useState(0); // 0-based
+  const pageSize = 10;
 
-  // 필터링된 메뉴
-  const filteredMenus = menus.filter(menu => {
-    const matchesSearch = searchTerm === '' || 
-      menu.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      menu.category.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesCategory = selectedCategory === 'all' ||
-      menu.category === selectedCategory ||
-      (selectedCategory === 'available' && menu.isAvailable && !menu.soldOut) ||
-      (selectedCategory === 'soldout' && menu.soldOut);
-    
+  // ======================
+  // 메뉴 목록 조회 함수 (재사용)
+  // ======================
+  const fetchMenus = async () => {
+    setLoading(true);
+    try {
+      const res = await api.get<PageResponse<StoreMenu>>(
+        '/API/menu/list',
+        {
+          params: { page: 0, size: 1000 },
+        },
+      );
+
+      console.log('menu list response:', res.data);
+      const rawMenus = res.data.content ?? [];
+
+      // soldOutStatus 없으면 기본값 ON_SALE
+      const normalized: StoreMenu[] = rawMenus.map((m) => ({
+        ...m,
+        soldOutStatus: (m.soldOutStatus ?? 'ON_SALE') as SoldOutStatus,
+      }));
+
+      setMenus(normalized);
+    } catch (err) {
+      console.error(err);
+      toast.error('메뉴 목록을 불러오지 못했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 초기 로딩
+  useEffect(() => {
+    fetchMenus();
+  }, []);
+
+  // 검색어 / 카테고리 바뀌면 첫 페이지로 리셋
+  useEffect(() => {
+    setPage(0);
+  }, [searchTerm, selectedCategory]);
+
+  // ======================
+  // 필터 + 페이징 계산
+  // ======================
+
+  // 전체 개수 (상단 "총 N개 항목")
+  const totalElements = menus.length;
+
+  // 검색/카테고리로 필터링 (전체 목록 기준)
+  const filteredMenus = menus.filter((menu) => {
+    const matchesSearch =
+      searchTerm === '' ||
+      menu.menuName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      menu.menuCategoryName.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesCategory =
+      selectedCategory === 'all' ||
+      menu.menuCategoryName.includes(selectedCategory) ||
+      (selectedCategory === 'available' && menu.soldOutStatus === 'ON_SALE') ||
+      (selectedCategory === 'soldout' && menu.soldOutStatus === 'SOLD_OUT');
+
     return matchesSearch && matchesCategory;
   });
 
+  // 전체 페이지 수 / 현재 페이지 데이터
+  const totalPages =
+    filteredMenus.length === 0 ? 1 : Math.ceil(filteredMenus.length / pageSize);
 
+  const currentPage = Math.min(page, totalPages - 1);
+  const pageStart = currentPage * pageSize;
+  const pageEnd = pageStart + pageSize;
+  const pageMenus = filteredMenus.slice(pageStart, pageEnd);
 
-  // 빠른 추가 폼 필드 (가맹점용 간소화)
-  const formFields = [
-    { 
-      name: 'name', 
-      label: '메뉴명', 
-      type: 'text' as const, 
-      required: true,
-      placeholder: '메뉴명을 입력하세요'
+  // 카테고리/판매상태 카운트는 "전체 메뉴" 기준으로
+  const categories = [
+    { label: '전체', value: 'all', count: menus.length },
+    {
+      label: '세트',
+      value: '세트',
+      count: menus.filter((m) => m.menuCategoryName.includes('세트')).length,
     },
-    { 
-      name: 'category', 
-      label: '카테고리', 
-      type: 'select' as const, 
-      required: true,
-      options: [
-        { value: '세트', label: '세트' },
-        { value: '토스트', label: '토스트' },
-        { value: '사이드', label: '사이드' },
-        { value: '음료', label: '음료' }
-      ]
+    {
+      label: '토스트',
+      value: '토스트',
+      count: menus.filter((m) => m.menuCategoryName.includes('토스트')).length,
     },
-    { 
-      name: 'price', 
-      label: '가격 (원)', 
-      type: 'number' as const, 
-      required: true,
-      placeholder: '가격을 입력하세요'
+    {
+      label: '사이드',
+      value: '사이드',
+      count: menus.filter((m) => m.menuCategoryName.includes('사이드')).length,
     },
-    { 
-      name: 'description', 
-      label: '메뉴 설명', 
-      type: 'textarea' as const, 
-      required: false,
-      placeholder: '메뉴에 대한 간단한 설명을 입력하세요'
+    {
+      label: '음료',
+      value: '음료',
+      count: menus.filter((m) => m.menuCategoryName.includes('음료')).length,
     },
-    { 
-      name: 'allergens', 
-      label: '알러지 정보', 
-      type: 'textarea' as const, 
-      required: false,
-      placeholder: '알러지 유발 성분을 쉼표로 구분하여 입력하세요 (예: 계란, 밀, 우유)'
-    }
+    {
+      label: '판매중',
+      value: 'available',
+      count: menus.filter((m) => m.soldOutStatus === 'ON_SALE').length,
+    },
+    {
+      label: '품절',
+      value: 'soldout',
+      count: menus.filter((m) => m.soldOutStatus === 'SOLD_OUT').length,
+    },
   ];
 
-  const handleToggleAvailability = (menuId: number, isAvailable: boolean) => {
-    setMenus(prev => prev.map(menu => 
-      menu.id === menuId 
-        ? { ...menu, isAvailable }
-        : menu
-    ));
-    
-    const menuName = menus.find(m => m.id === menuId)?.name;
-    toast.success(`${menuName} ${isAvailable ? '판매 시작' : '판매 중지'}했습니다.`);
-  };
+  // ======================
+  // 공통: 서버에 품절 상태 업데이트
+  // ======================
 
-  const handleSoldOut = (menu: any) => {
-    confirm({
-      title: '품절 처리',
-      description: `${menu.name}을(를) 품절 처리하시겠습니까?`,
-      type: 'warning',
-      confirmText: '품절 처리',
-      onConfirm: () => {
-        setMenus(prev => prev.map(m => 
-          m.id === menu.id ? { ...m, soldOut: true } : m
-        ));
-        toast.success(`${menu.name}을(를) 품절 처리했습니다.`);
-      }
+  const updateSoldOutOnServer = async (
+    menuId: number,
+    status: SoldOutStatus,
+  ) => {
+    await api.patch(`/API/menu/${menuId}/sold-out`, {
+      soldOutStatus: status,
     });
   };
 
-  const handleRestock = (menu: any) => {
-    setMenus(prev => prev.map(m => 
-      m.id === menu.id 
-        ? { ...m, soldOut: false, stockLevel: 'sufficient' } 
-        : m
-    ));
-    toast.success(`${menu.name} 재입고 완료되었습니다.`);
-  };
+  // ======================
+  // 이벤트 핸들러
+  // ======================
 
-  const handleAdd = () => {
-    setEditingMenu(null);
-    setIsModalOpen(true);
-  };
+  // 판매 상태 토글 (Switch)
+  const handleToggleStatus = async (menuId: number, isOnSale: boolean) => {
+    const newStatus: SoldOutStatus = isOnSale ? 'ON_SALE' : 'SOLD_OUT';
 
-  const handleMenuDetail = (menu: any) => {
-    setSelectedMenu(menu);
-    setIsDetailModalOpen(true);
-  };
-
-
-
-  const handleSubmit = async (data: any) => {
-    setIsLoading(true);
-    
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const newMenu = {
-        ...data,
-        id: Math.max(...menus.map(m => m.id)) + 1,
-        allergens: data.allergens ? data.allergens.split(',').map((item: string) => item.trim()).filter((item: string) => item.length > 0) : [],
-        isAvailable: true,
-        soldOut: false,
-        todaySales: 0,
-        stockLevel: 'sufficient',
-        lastOrdered: null,
-        calories: 0,
-        ingredients: '',
-        image: '🍽️'
-      };
-      
-      setMenus(prev => [...prev, newMenu]);
-      toast.success('새 메뉴가 추가되었습니다.');
-      setIsModalOpen(false);
-    } catch (error) {
-      toast.error('오류가 발생했습니다.');
-    } finally {
-      setIsLoading(false);
+      await updateSoldOutOnServer(menuId, newStatus);
+
+      setMenus((prev) =>
+        prev.map((menu) =>
+          menu.menuId === menuId
+            ? { ...menu, soldOutStatus: newStatus }
+            : menu,
+        ),
+      );
+
+      const target = menus.find((m) => m.menuId === menuId);
+      if (target) {
+        toast.success(
+          `${target.menuName}을(를) ${
+            newStatus === 'ON_SALE' ? '판매중으로 변경했습니다.' : '품절 처리했습니다.'
+          }`,
+        );
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error('판매 상태 변경에 실패했습니다.');
     }
   };
+
+  const handleSoldOut = (menu: StoreMenu) => {
+    confirm({
+      title: '품절 처리',
+      description: `${menu.menuName}을(를) 품절 처리하시겠습니까?`,
+      type: 'warning',
+      confirmText: '품절 처리',
+      onConfirm: async () => {
+        try {
+          await updateSoldOutOnServer(menu.menuId, 'SOLD_OUT');
+
+          setMenus((prev) =>
+            prev.map((m) =>
+              m.menuId === menu.menuId
+                ? { ...m, soldOutStatus: 'SOLD_OUT' }
+                : m,
+            ),
+          );
+          toast.success(`${menu.menuName}을(를) 품절 처리했습니다.`);
+        } catch (e) {
+          console.error(e);
+          toast.error('품절 처리에 실패했습니다.');
+        }
+      },
+    });
+  };
+
+  const handleRestock = async (menu: StoreMenu) => {
+    try {
+      await updateSoldOutOnServer(menu.menuId, 'ON_SALE');
+
+      setMenus((prev) =>
+        prev.map((m) =>
+          m.menuId === menu.menuId ? { ...m, soldOutStatus: 'ON_SALE' } : m,
+        ),
+      );
+      toast.success(`${menu.menuName} 재입고 완료되었습니다.`);
+    } catch (e) {
+      console.error(e);
+      toast.error('재입고 처리에 실패했습니다.');
+    }
+  };
+
+  // 상세 모달 열기 (재료 포함)
+  const handleMenuDetail = async (menu: StoreMenu) => {
+    try {
+      const res = await api.get<StoreMenu>(`/API/menu/${menu.menuId}`);
+
+      const detail: StoreMenu = {
+        ...menu,
+        ...res.data,
+        soldOutStatus: (res.data.soldOutStatus ?? 'ON_SALE') as SoldOutStatus,
+      };
+
+      setSelectedMenu(detail);
+      setIsDetailModalOpen(true);
+    } catch (err) {
+      console.error(err);
+      toast.error('메뉴 상세 정보를 불러오지 못했습니다.');
+    }
+  };
+
+  // ======================
+  // 메뉴 추가 폼 필드 (재료 입력 추가)
+  // ======================
+
+  const formFields = [
+    {
+      name: 'category',
+      label: '카테고리',
+      type: 'select' as const,
+      required: true,
+      options: [
+        { value: '1', label: '세트메뉴' },
+        { value: '2', label: '토스트' },
+        { value: '3', label: '사이드' },
+        { value: '4', label: '음료' },
+      ],
+    },
+    {
+      name: 'name',
+      label: '메뉴명',
+      type: 'text' as const,
+      required: true,
+    },
+    {
+      name: 'nameEnglish',
+      label: '영문명',
+      type: 'text' as const,
+      required: true,
+    },
+    {
+      name: 'price',
+      label: '가격(원)',
+      type: 'number' as const,
+      required: true,
+    },
+    {
+      name: 'kcal',
+      label: '칼로리(kcal)',
+      type: 'number' as const,
+      required: false,
+    },
+    {
+      name: 'description',
+      label: '설명',
+      type: 'textarea' as const,
+      required: true,
+    },
+    {
+      name: 'ingredients',
+      label: '재료 정보',
+      type: 'textarea' as const,
+      required: false,
+      placeholder: '예) 마가린, 딥치즈소스...',
+    },
+    {
+      name: 'menuCode',
+      label: '상품코드',
+      type: 'text' as const,
+      required: true,
+    },
+  ];
+
+  // ======================
+  // 메뉴 추가 (DB 저장 + 목록 재조회)
+  // ======================
+
+  const handleSubmit = async (data: Record<string, any>) => {
+    setIsSubmitting(true);
+    try {
+      await api.post('/API/menu/add', {
+        menuName: data.name,
+        menuNameEnglish: data.nameEnglish,
+        menuCategoryId: Number(data.category), // 백엔드 DTO 에 맞게 조정
+        menuPrice: Number(data.price),
+        menuKcal: Number(data.kcal) || 0,
+        menuInformation: data.description,
+        menuCode: data.menuCode,
+        ingredients: data.ingredients ?? '',
+        soldOutStatus: 'ON_SALE',
+        menuShow: 'SHOW',
+      });
+
+      await fetchMenus();
+
+      toast.success('새 메뉴가 추가되었습니다.');
+      setIsModalOpen(false);
+    } catch (err) {
+      console.error(err);
+      toast.error('메뉴 저장 중 오류가 발생했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // ======================
+  // JSX 렌더링
+  // ======================
 
   return (
     <div className="space-y-6">
@@ -398,9 +420,14 @@ export function StoreMenuManagement() {
       <div className="flex items-center justify-between">
         <div>
           <h1>메뉴 관리</h1>
-          <p className="text-dark-gray">총 {menus.length}개 항목</p>
+          <p className="text-dark-gray">
+            {loading ? '불러오는 중...' : `총 ${totalElements}개 항목`}
+          </p>
         </div>
-        <Button onClick={handleAdd} className="bg-kpi-red hover:bg-red-600 text-white">
+        <Button
+          onClick={() => setIsModalOpen(true)}
+          className="bg-kpi-red hover:bg-red-600 text-white"
+        >
           + 메뉴 추가
         </Button>
       </div>
@@ -408,7 +435,6 @@ export function StoreMenuManagement() {
       {/* Search & Filters */}
       <Card className="p-4">
         <div className="flex flex-col gap-4">
-          {/* Search */}
           <div className="relative max-w-md">
             <Package className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
@@ -420,7 +446,6 @@ export function StoreMenuManagement() {
             />
           </div>
 
-          {/* Category Tabs */}
           <div className="flex flex-wrap gap-2">
             {categories.map((category) => (
               <button
@@ -439,149 +464,128 @@ export function StoreMenuManagement() {
         </div>
       </Card>
 
-      {/* Menu Grid */}
-      <div className="grid grid-cols-1 gap-4">
-        <Card>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">메뉴정보</th>
-                  <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">가격</th>
-                  <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">오늘 판매</th>
-                  <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">재고상태</th>
-                  <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">판매상태</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredMenus.map((menu) => (
-                  <tr key={menu.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-kpi-orange rounded-lg flex items-center justify-center text-lg relative">
-                          {menu.image}
-                          {menu.soldOut && (
-                            <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
-                              <span className="text-xs font-bold text-white">품절</span>
-                            </div>
-                          )}
-                        </div>
-                        <div>
-                          <div 
-                            className={`font-medium cursor-pointer hover:text-kpi-orange transition-colors ${
-                              menu.isAvailable ? 'text-gray-900' : 'text-gray-400'
-                            }`}
-                            onClick={() => handleMenuDetail(menu)}
-                          >
-                            {menu.name}
-                          </div>
-                          <div className="text-sm text-gray-500">{menu.category}</div>
-                          <div className="text-xs text-gray-500">
-                            {menu.calories}kcal
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-semibold text-gray-900">
-                        ₩{(menu.price || 0).toLocaleString()}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div>
-                        <div className="font-medium text-gray-900">{menu.todaySales}개</div>
-                        <div className="text-xs text-gray-500">
-                          {menu.lastOrdered ? `최근: ${new Date(menu.lastOrdered).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}` : '주문 없음'}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      {menu.soldOut ? (
-                        <Badge className="bg-gray-100 text-gray-800">품절</Badge>
-                      ) : (
-                        <Badge 
-                          className={
-                            menu.stockLevel === 'sufficient' ? 'bg-green-100 text-green-800' :
-                            menu.stockLevel === 'low' ? 'bg-orange-100 text-orange-800' :
-                            'bg-red-100 text-red-800'
-                          }
-                        >
-                          {menu.stockLevel === 'sufficient' ? '충분' : 
-                           menu.stockLevel === 'low' ? '부족' : '없음'}
-                        </Badge>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <Switch
-                          checked={menu.isAvailable && !menu.soldOut}
-                          onCheckedChange={(checked:any) => handleToggleAvailability(menu.id, checked)}
-                          disabled={menu.soldOut}
-                        />
-                        <span className={`text-sm ${
-                          menu.soldOut ? 'text-gray-400' : 
-                          menu.isAvailable ? 'text-green-600' : 'text-gray-400'
-                        }`}>
-                          {menu.soldOut ? '품절' : menu.isAvailable ? '판매중' : '비활성'}
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Empty State */}
-          {filteredMenus.length === 0 && (
+      {/* Menu Table */}
+      <Card>
+        <div className="overflow-x-auto">
+          {loading ? (
+            <div className="text-center py-10 text-gray-500">불러오는 중...</div>
+          ) : pageMenus.length === 0 ? (
             <div className="text-center py-16">
               <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">메뉴가 없습니다</h3>
               <p className="text-gray-500">조건에 맞는 메뉴가 없습니다.</p>
             </div>
-          )}
-        </Card>
-      </div>
+          ) : (
+            <>
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
+                      메뉴정보
+                    </th>
+                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
+                      가격
+                    </th>
+                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
+                      판매상태
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {pageMenus.map((menu) => (
+                    <tr key={menu.menuId} className="hover:bg-gray-50">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center text-lg">
+                            {getCategoryEmoji(menu.menuCategoryName)}
+                          </div>
+                          <div>
+                            <div
+                              className="font-medium text-gray-900 cursor-pointer hover:text-kpi-orange"
+                              onClick={() => handleMenuDetail(menu)}
+                            >
+                              {menu.menuName}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {menu.menuCategoryName}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
 
-      {/* 품절/재입고 관리 */}
-      <Card className="p-6 bg-white rounded-xl shadow-sm">
-        <h3 className="font-semibold text-gray-900 mb-4">재고 관리</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {menus.filter(m => m.soldOut || m.stockLevel === 'low').map((menu) => (
-            <div key={menu.id} className="p-4 border rounded-lg">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="text-2xl">{menu.image}</div>
-                <div className="flex-1">
-                  <h4 className="font-medium text-gray-900">{menu.name}</h4>
-                  <p className="text-sm text-dark-gray">{menu.category}</p>
+                      <td className="px-6 py-4">
+                        ₩{menu.menuPrice.toLocaleString()}
+                      </td>
+
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <Switch
+                            checked={menu.soldOutStatus === 'ON_SALE'}
+                            onCheckedChange={(checked) =>
+                              handleToggleStatus(menu.menuId, checked)
+                            }
+                          />
+                          <span
+                            className={`text-sm ${
+                              menu.soldOutStatus === 'SOLD_OUT'
+                                ? 'text-gray-400'
+                                : 'text-green-600'
+                            }`}
+                          >
+                            {menu.soldOutStatus === 'SOLD_OUT'
+                              ? '품절'
+                              : '판매중'}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* 페이징 바 - 숫자 버튼 버전 */}
+              <div className="flex items-center justify-between px-6 py-4 border-t">
+                <span className="text-sm text-gray-500">
+                  {`${currentPage + 1} / ${totalPages} 페이지`}
+                </span>
+                <div className="flex items-center gap-2">
+                  {/* 이전 버튼 */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage === 0}
+                    onClick={() => setPage((prev) => Math.max(prev - 1, 0))}
+                  >
+                    이전
+                  </Button>
+
+                  {/* 숫자 페이지 버튼들 */}
+                  {Array.from({ length: totalPages }, (_, idx) => idx).map(
+                    (idx) => (
+                      <Button
+                        key={idx}
+                        size="sm"
+                        variant={idx === currentPage ? 'default' : 'outline'}
+                        onClick={() => setPage(idx)}
+                      >
+                        {idx + 1}
+                      </Button>
+                    ),
+                  )}
+
+                  {/* 다음 버튼 */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage >= totalPages - 1}
+                    onClick={() =>
+                      setPage((prev) => Math.min(prev + 1, totalPages - 1))
+                    }
+                  >
+                    다음
+                  </Button>
                 </div>
               </div>
-              
-              {menu.soldOut ? (
-                <Button 
-                  onClick={() => handleRestock(menu)}
-                  className="w-full bg-kpi-green hover:bg-green-600 text-white"
-                  size="sm"
-                >
-                  재입고 완료
-                </Button>
-              ) : (
-                <Button 
-                  onClick={() => handleSoldOut(menu)}
-                  variant="outline"
-                  className="w-full border-kpi-orange text-kpi-orange hover:bg-orange-50"
-                  size="sm"
-                >
-                  품절 처리
-                </Button>
-              )}
-            </div>
-          ))}
-          
-          {menus.filter(m => m.soldOut || m.stockLevel === 'low').length === 0 && (
-            <div className="col-span-full text-center py-8 text-dark-gray">
-              재고 문제가 있는 메뉴가 없습니다.
-            </div>
+            </>
           )}
         </div>
       </Card>
@@ -593,203 +597,79 @@ export function StoreMenuManagement() {
         title="메뉴 추가"
         fields={formFields}
         onSubmit={handleSubmit}
-        initialData={{}}
-        isLoading={isLoading}
-        maxWidth="md"
+        isLoading={isSubmitting}
       />
 
-      {/* Menu Detail Modal with Scroll */}
+      {/* Menu Detail Modal */}
       <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] p-0">
-          <DialogHeader className="px-6 py-4 border-b bg-gray-50">
-            <DialogTitle className="text-lg">메뉴 상세 정보</DialogTitle>
-            <DialogDescription className="text-sm">
-              선택한 메뉴의 상세 정보와 판매 데이터를 확인할 수 있습니다.
-            </DialogDescription>
-          </DialogHeader>
-          
+        <DialogContent className="max-w-2xl">
           {selectedMenu && (
-            <ScrollArea className="flex-1 px-6 py-4 max-h-[calc(85vh-120px)]">
-              <div className="space-y-6 pr-4">
-                {/* 메뉴 기본 정보 */}
-                <div className="flex items-start gap-6">
-                  <div className="w-24 h-24 bg-gradient-to-br from-kpi-orange to-kpi-red rounded-xl flex items-center justify-center text-3xl relative">
-                    {selectedMenu.image}
-                    {selectedMenu.soldOut && (
-                      <div className="absolute inset-0 bg-black/50 rounded-xl flex items-center justify-center">
-                        <span className="text-sm font-bold text-white">품절</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-xl font-semibold text-gray-900">{selectedMenu.name}</h3>
-                      <Badge className={
-                        selectedMenu.category === '세트' ? 'bg-kpi-red text-white' :
-                        selectedMenu.category === '토스트' ? 'bg-kpi-orange text-white' :
-                        selectedMenu.category === '사이드' ? 'bg-kpi-green text-white' :
-                        'bg-kpi-purple text-white'
-                      }>
-                        {selectedMenu.category}
-                      </Badge>
-                    </div>
-                    <p className="text-dark-gray mb-3">{selectedMenu.description}</p>
-                    <div className="text-2xl font-bold text-kpi-red">₩{(selectedMenu.price || 0).toLocaleString()}</div>
-                  </div>
+            <>
+              <DialogHeader>
+                <DialogTitle>{selectedMenu.menuName}</DialogTitle>
+                <DialogDescription>
+                  {selectedMenu.menuNameEnglish}
+                </DialogDescription>
+              </DialogHeader>
+              <ScrollArea className="p-4">
+                <p className="text-gray-700 mb-3">
+                  {selectedMenu.menuInformation}
+                </p>
+                <p className="text-sm text-gray-500">
+                  상품코드: {selectedMenu.menuCode}
+                </p>
+                <p className="text-sm text-gray-500">
+                  카테고리: {selectedMenu.menuCategoryName}
+                </p>
+                <p className="text-sm text-gray-500">
+                  칼로리: {selectedMenu.menuKcal}kcal
+                </p>
+                <p className="text-sm text-gray-500 mb-4">
+                  가격: ₩{selectedMenu.menuPrice.toLocaleString()}
+                </p>
+
+                {/* 재료 정보 섹션 */}
+                <div className="mt-4 border rounded-xl p-4 bg-gray-50">
+                  <h3 className="text-sm font-semibold mb-2">재료 정보</h3>
+                  <p className="text-sm text-gray-700">
+                    {selectedMenu.ingredients &&
+                    selectedMenu.ingredients.trim().length > 0
+                      ? selectedMenu.ingredients
+                      : '등록된 재료 정보가 없습니다.'}
+                  </p>
                 </div>
 
-                {/* 상세 정보 그리드 */}
-                <div className="grid grid-cols-2 gap-4">
-                  <Card className="p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <TrendingUp className="w-4 h-4 text-kpi-purple" />
-                      <h4 className="font-medium text-gray-900">영양 정보</h4>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-dark-gray">칼로리</span>
-                        <span className="font-medium">{selectedMenu.calories}kcal</span>
-                      </div>
-                    </div>
-                  </Card>
-
-                  <Card className="p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <DollarSign className="w-4 h-4 text-kpi-green" />
-                      <h4 className="font-medium text-gray-900">판매 현황</h4>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-dark-gray">오늘 판매</span>
-                        <span className="font-medium text-kpi-green">{selectedMenu.todaySales}개</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-dark-gray">재고 상태</span>
-                        <Badge className={
-                          selectedMenu.stockLevel === 'sufficient' ? 'bg-kpi-green text-white' :
-                          selectedMenu.stockLevel === 'low' ? 'bg-kpi-orange text-white' :
-                          'bg-kpi-red text-white'
-                        }>
-                          {selectedMenu.stockLevel === 'sufficient' ? '충분' : 
-                           selectedMenu.stockLevel === 'low' ? '부족' : '없음'}
-                        </Badge>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-dark-gray">판매 상태</span>
-                        <Badge className={
-                          selectedMenu.soldOut ? 'bg-gray-500 text-white' :
-                          selectedMenu.isAvailable ? 'bg-kpi-green text-white' : 'bg-gray-400 text-white'
-                        }>
-                          {selectedMenu.soldOut ? '품절' : selectedMenu.isAvailable ? '판매중' : '비활성'}
-                        </Badge>
-                      </div>
-                    </div>
-                  </Card>
-                </div>
-
-                {/* 재료 정보 */}
-                <Card className="p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <ChefHat className="w-4 h-4 text-kpi-orange" />
-                    <h4 className="font-medium text-gray-900">재료 정보</h4>
-                  </div>
-                  <p className="text-dark-gray leading-relaxed">{selectedMenu.ingredients}</p>
-                </Card>
-
-                {/* 알러지 정보 */}
-                <Card className="p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <AlertTriangle className="w-4 h-4 text-kpi-red" />
-                    <h4 className="font-medium text-gray-900">알러지 정보</h4>
-                  </div>
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {selectedMenu.allergens && selectedMenu.allergens.length > 0 ? (
-                      selectedMenu.allergens.map((allergen: string, index: number) => (
-                        <Badge 
-                          key={index}
-                          className="bg-kpi-red text-white"
-                        >
-                          <AlertTriangle className="w-3 h-3 mr-1" />
-                          {allergen}
-                        </Badge>
-                      ))
-                    ) : (
-                      <div className="text-dark-gray">알러지 유발 가능 성분이 없습니다.</div>
-                    )}
-                  </div>
-                  <div className="p-3 bg-orange-50 rounded-lg border-l-4 border-kpi-orange">
-                    <p className="text-sm text-orange-800">
-                      <AlertTriangle className="w-4 h-4 inline mr-1" />
-                      알러지가 있으신 분은 주의해 주세요. 조리 과정에서 다른 알러지 성분과 교차 오염될 수 있습니다.
-                    </p>
-                  </div>
-                </Card>
-
-                {/* 최근 주문 정보 */}
-                <Card className="p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Clock className="w-4 h-4 text-kpi-purple" />
-                    <h4 className="font-medium text-gray-900">최근 주문</h4>
-                  </div>
-                  <div className="text-dark-gray">
-                    {selectedMenu.lastOrdered ? (
-                      <div>
-                        <span>마지막 주문: </span>
-                        <span className="font-medium text-gray-900">
-                          {new Date(selectedMenu.lastOrdered).toLocaleString('ko-KR')}
-                        </span>
-                      </div>
-                    ) : (
-                      '주문 내역이 없습니다.'
-                    )}
-                  </div>
-                </Card>
-
-                {/* 액션 버튼 */}
-                <div className="sticky bottom-0 bg-white pt-4 border-t">
-                  <div className="flex gap-3">
-                    {selectedMenu.soldOut ? (
-                      <Button 
-                        onClick={() => {
-                          handleRestock(selectedMenu);
-                          setIsDetailModalOpen(false);
-                        }}
-                        className="bg-kpi-green hover:bg-green-600 text-white"
-                      >
-                        <Package className="w-4 h-4 mr-2" />
-                        재입고 완료
-                      </Button>
-                    ) : (
-                      <Button 
-                        onClick={() => {
-                          handleSoldOut(selectedMenu);
-                          setIsDetailModalOpen(false);
-                        }}
-                        variant="outline"
-                        className="border-kpi-orange text-kpi-orange hover:bg-orange-50"
-                      >
-                        <Power className="w-4 h-4 mr-2" />
-                        품절 처리
-                      </Button>
-                    )}
-                    <Button 
-                      variant="outline"
-                      onClick={() => setIsDetailModalOpen(false)}
-                      className="ml-auto"
+                <div className="mt-4 flex gap-2">
+                  {selectedMenu.soldOutStatus === 'SOLD_OUT' ? (
+                    <Button
+                      onClick={() => handleRestock(selectedMenu)}
+                      className="bg-kpi-green text-white"
                     >
-                      <Eye className="w-4 h-4 mr-2" />
-                      닫기
+                      재입고
                     </Button>
-                  </div>
+                  ) : (
+                    <Button
+                      onClick={() => handleSoldOut(selectedMenu)}
+                      variant="outline"
+                      className="text-kpi-orange border-kpi-orange"
+                    >
+                      품절 처리
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsDetailModalOpen(false)}
+                  >
+                    닫기
+                  </Button>
                 </div>
-              </div>
-            </ScrollArea>
+              </ScrollArea>
+            </>
           )}
         </DialogContent>
       </Dialog>
 
-      {/* Confirm Dialog */}
       {dialog}
     </div>
   );
-}
+};
