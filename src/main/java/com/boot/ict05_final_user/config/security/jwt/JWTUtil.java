@@ -23,6 +23,26 @@ public class JWTUtil {
         refreshTokenExpiresIn = 604800L * 1000; // 7일
     }
 
+    private static Claims parseClaims(String token) {
+        // jjwt 0.12+ API: verifyWith(secretKey)
+        return Jwts.parser()
+                .verifyWith(secretKey)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+    }
+
+    private static Long toLongOrNull(Object v) {
+        if (v == null) return null;
+        if (v instanceof Long l)     return l;
+        if (v instanceof Integer i)  return i.longValue();
+        if (v instanceof Double d)   return d.longValue();
+        if (v instanceof String s) {
+            try { return Long.valueOf(s); } catch (NumberFormatException ignore) { return null; }
+        }
+        return null;
+    }
+
     // JWT 클레임 username 파싱
     public static String getUsername(String token) {
         return Jwts.parser().verifyWith(secretKey).build().parseSignedClaims(token).getPayload().get("sub", String.class);
@@ -31,6 +51,26 @@ public class JWTUtil {
     // JWT 클레임 role 파싱
     public static String getRole(String token) {
         return Jwts.parser().verifyWith(secretKey).build().parseSignedClaims(token).getPayload().get("role", String.class);
+    }
+
+    public static Long getStoreId(String token) {
+        Object v = parseClaims(token).get("storeId");
+        if (v == null) return null;
+        if (v instanceof Long l)    return l;
+        if (v instanceof Integer i) return i.longValue();
+        if (v instanceof Double d)  return d.longValue();
+        return Long.valueOf(v.toString());
+    }
+
+    // ★ 추가: memberId
+    public static Long getMemberId(String token) {
+        Object v = parseClaims(token).get("memberId");
+        return toLongOrNull(v);
+    }
+
+    // ★ 추가: memberName
+    public static String getMemberName(String token) {
+        return parseClaims(token).get("memberName", String.class);
     }
 
     // JWT 유효 여부 (위조, 시간, Access/Refresh 여부)
@@ -56,7 +96,11 @@ public class JWTUtil {
     }
 
     // JWT(Access/Refresh) 생성
-    public static String createJWT(String username, String role, Boolean isAccess) {
+    public static String createJWT(
+            String username, String role,
+            Long storeId, Long memberId, String memberName,
+            Boolean isAccess
+    ) {
 
         long now = System.currentTimeMillis();
         long expiry = isAccess ? accessTokenExpiresIn : refreshTokenExpiresIn;
@@ -65,6 +109,9 @@ public class JWTUtil {
         return Jwts.builder()
                 .claim("sub", username)
                 .claim("role", role)
+                .claim("storeId", storeId)
+                .claim("memberId", memberId)
+                .claim("memberName", memberName)
                 .claim("type", type)
                 .issuedAt(new Date(now))
                 .expiration(new Date(now + expiry))

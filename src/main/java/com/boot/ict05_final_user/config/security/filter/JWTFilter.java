@@ -1,5 +1,6 @@
 package com.boot.ict05_final_user.config.security.filter;
 
+import com.boot.ict05_final_user.config.security.principal.AppUser;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -70,10 +71,15 @@ public class JWTFilter extends OncePerRequestFilter {
 
             String username = JWTUtil.getUsername(accessToken);
             String role = JWTUtil.getRole(accessToken);
+            Long storeId = JWTUtil.getStoreId(accessToken);
+            Long memberId = JWTUtil.getMemberId(accessToken);
+            String memberName = JWTUtil.getMemberName(accessToken);
 
             List<GrantedAuthority> authorities = Collections.singletonList(new SimpleGrantedAuthority(role));
 
-            Authentication auth = new UsernamePasswordAuthenticationToken(username, null, authorities);
+            AppUser principal = new AppUser(username, storeId, memberId, memberName, authorities);
+            Authentication auth =
+                    new UsernamePasswordAuthenticationToken(principal, null, authorities);
             SecurityContextHolder.getContext().setAuthentication(auth);
 
             filterChain.doFilter(request, response);
