@@ -38,3 +38,7 @@ out/
 
 ### Log files ###
 *.log
+
+# Firebase Admin JSON (만약 레포 내부에 둘 경우)
+**/firebase-admin.json
+**/service-account*.json
