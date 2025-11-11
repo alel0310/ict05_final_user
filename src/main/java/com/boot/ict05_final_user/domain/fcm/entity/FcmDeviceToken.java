@@ -25,6 +25,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor @Builder
 public class FcmDeviceToken {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "fcm_device_token_id")
     private Long id;
 
     @Enumerated(EnumType.STRING)
