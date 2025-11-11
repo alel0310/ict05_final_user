@@ -323,7 +323,7 @@ export const StoreMenuManagement: React.FC = () => {
   const formFields = [
     {
       name: 'category',
-      label: '카테고리 *',
+      label: '카테고리',
       type: 'select' as const,
       required: true,
       options: [
@@ -335,19 +335,19 @@ export const StoreMenuManagement: React.FC = () => {
     },
     {
       name: 'name',
-      label: '메뉴명 *',
+      label: '메뉴명',
       type: 'text' as const,
       required: true,
     },
     {
       name: 'nameEnglish',
-      label: '영문명 *',
+      label: '영문명',
       type: 'text' as const,
       required: true,
     },
     {
       name: 'price',
-      label: '가격(원) *',
+      label: '가격(원)',
       type: 'number' as const,
       required: true,
     },
@@ -359,7 +359,7 @@ export const StoreMenuManagement: React.FC = () => {
     },
     {
       name: 'description',
-      label: '설명 *',
+      label: '설명',
       type: 'textarea' as const,
       required: true,
     },
@@ -372,7 +372,7 @@ export const StoreMenuManagement: React.FC = () => {
     },
     {
       name: 'menuCode',
-      label: '상품코드 *',
+      label: '상품코드',
       type: 'text' as const,
       required: true,
     },
