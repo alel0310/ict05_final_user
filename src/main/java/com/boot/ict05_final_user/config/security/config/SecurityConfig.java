@@ -16,6 +16,7 @@ import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -33,6 +34,7 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity(prePostEnabled = true)
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -93,18 +95,19 @@ public class SecurityConfig {
                 // CORS preflight
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                .requestMatchers("/user/api/auth/**").permitAll()
+                .requestMatchers("/api/auth/**").permitAll()
 
                 // 공개 엔드포인트
                 .requestMatchers("/login").permitAll()
                 .requestMatchers("/jwt/exchange", "/jwt/refresh").permitAll()
-                .requestMatchers(HttpMethod.POST, "/user/exist", "/user/**","/me", "/user/dashboard/**", "/join", "/user/member/exist-email", "/user/member").permitAll()
+                .requestMatchers(HttpMethod.POST, "/exist", "/me", "/dashboard/**", "/join", "/member/exist-email", "/member").permitAll()
 
+                .requestMatchers(HttpMethod.POST, "/fcm/token", "/fcm/topic/**").authenticated()
 
                 // 인증 필요
                 .requestMatchers(HttpMethod.GET, "/**").permitAll()
-                .requestMatchers(HttpMethod.PUT, "/user").hasRole(UserRoleType.USER.name())
-                .requestMatchers(HttpMethod.DELETE, "/user").hasRole(UserRoleType.USER.name())
+                .requestMatchers(HttpMethod.PUT, "/**").hasRole(UserRoleType.USER.name())
+                .requestMatchers(HttpMethod.DELETE, "/**").hasRole(UserRoleType.USER.name())
 
                 .anyRequest().authenticated()
         );

@@ -5,7 +5,7 @@ import { CalendarIcon, Download } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../components/ui/popover';
 import { Calendar } from '../../../components/ui/calendar';
 import { fmtMoneyInt, fmtUPT, fmtPercent1, tz } from '../../../lib/format';
-import api from '../../../lib/authApi';  // ✅ Dashboard와 동일한 axios 인스턴스 사용
+import api from '../../../lib/authApi';
 
 // ====== 로컬 타입(서비스 의존 제거, 파일 단독 사용 가능) ======
 type ViewBy = 'DAY' | 'MONTH';
