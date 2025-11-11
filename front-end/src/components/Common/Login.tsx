@@ -1,58 +1,128 @@
-import  react, {useState} from "react";
-import {useNavigate} from "react-router-dom";
-import { Card } from '../ui/card';
-import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-import { Label } from '../ui/label';
-import { Store, Lock, Mail } from 'lucide-react';
-import { toast } from 'sonner';
+// src/components/Common/Login.tsx
+import react, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Card } from "../ui/card";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Label } from "../ui/label";
+import { Store, Lock, Mail } from "lucide-react";
+import { toast } from "sonner";
 import axios from "axios";
 import api from "../../lib/authApi";
+import { requestFcmToken } from "../../lib/firebase"; // ⬅️ 추가
 
+// JWT 파싱(스토어ID를 토큰에서 꺼낼 때 사용; 없으면 /me 호출)
+function parseJwt(token: string): any | null {
+  try {
+    const payload = token.split(".")[1];
+    return JSON.parse(atob(payload));
+  } catch {
+    return null;
+  }
+}
 
-export default function Login(){
-    const navigate = useNavigate();
+export default function Login() {
+  const navigate = useNavigate();
 
-    const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
-    const [error, setError] = useState("");
-    const [loading, setLoading] = useState<boolean>(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState<boolean>(false);
 
-    const handleLogin = async (e : any) => {
-        e.preventDefault();
-        if (loading) return;
-        setLoading(true);
-        setError("");
+  const handleLogin = async (e: any) => {
+    e.preventDefault();
+    if (loading) return;
+    setLoading(true);
+    setError("");
 
-        if (!email || !password) {
-            setError("이메일과 비밀번호를 입력하세요.");
-            setLoading(false);
-            return;
-        }
+    if (!email || !password) {
+      setError("이메일과 비밀번호를 입력하세요.");
+      setLoading(false);
+      return;
+    }
 
+    try {
+      // 1) 로그인
+      const res = await api.post("/login", { email, password });
+      const data = res?.data || {};
+
+      // 토큰 저장(응답 형태에 맞춰 보강)
+      const accessToken =
+        data.accessToken ??
+        res.headers?.authorization?.replace("Bearer ", "");
+      const refreshToken = data.refreshToken;
+
+      if (accessToken) {
+        localStorage.setItem("accessToken", accessToken);
+        api.defaults.headers.common["Authorization"] = `Bearer ${accessToken}`;
+      }
+      
+      if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
+
+      // 2) storeId 확보 (우선순위: 응답 -> /me -> JWT claims)
+      let storeId: number | undefined =
+        data.storeId ?? data.user?.storeId ?? data.store?.id;
+
+      if (!storeId) {
+        // (추천) 백엔드에 me 프로필이 있으면 여기서 가져오기
         try {
-            // axios 인스턴스로 로그인 (withCredentials 등 공통설정 사용)
-            const res = await api.post("/login", {email, password});
-
-            // 서버가 본문으로 토큰을 내려줄 수도/안 줄 수도 있으므로 안전 처리
-            const data = res?.data || {};
-            if (data.accessToken) localStorage.setItem("accessToken", data.accessToken);
-            if (data.refreshToken) localStorage.setItem("refreshToken", data.refreshToken);
-
-            // const { accessToken, refreshToken } = res.data;
-            // localStorage.setTokens({ accessToken, refreshToken });
-            // 라우팅
-            navigate("/dashboard", {replace:true});
-        }  catch(err: unknown){
-            console.error(err);
-            const status = axios.isAxiosError(err) ? err?.response?.status : undefined; 
-            if (status === 401) setError("이메일 또는 비밀번호를 확인하세요.");
-            else setError("로그인 중 오류가 발생했습니다.");
-        }  finally{
-            setLoading(false);
+          const me = await api.get("/me", {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          storeId = me.data?.storeId ?? me.data?.store?.id;
+        } catch {
+          /* /me 없음 */
         }
-    };
-    return (
+      }
+      if (!storeId && accessToken) {
+        const claims = parseJwt(accessToken);
+        storeId =
+          claims?.storeId ?? claims?.sid ?? claims?.storeID ?? undefined;
+      }
+
+      // 3) FCM 토큰 발급 → 서버 업서트 → 기본 토픽 구독
+      try {
+        const fcmToken = await requestFcmToken(); // 권한 요청 포함
+        if (fcmToken && accessToken) {
+          // 토큰 업서트
+          await api.post(
+            "/fcm/token",
+            {
+              token: fcmToken,
+              platform: "WEB",
+              deviceId: navigator.userAgent.slice(0, 120),
+            },
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          );
+
+          // 기본 토픽: store-{storeId}
+          if (storeId) {
+            await api.post(
+              `/fcm/topic/subscribe?token=${encodeURIComponent(
+                fcmToken
+              )}&topic=store-${storeId}`,
+              {},
+              { headers: { Authorization: `Bearer ${accessToken}` } }
+            );
+          }
+        }
+      } catch (fcme) {
+        console.warn("[FCM] 등록/구독 실패(무시 가능):", fcme);
+      }
+
+      toast.success("로그인 성공");
+      navigate("/dashboard", { replace: true });
+    } catch (err: unknown) {
+      console.error(err);
+      const status = axios.isAxiosError(err) ? err?.response?.status : undefined;
+      if (status === 401) setError("이메일 또는 비밀번호를 확인하세요.");
+      else setError("로그인 중 오류가 발생했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
     <div className="min-h-screen bg-light-gray flex items-center justify-center p-4">
       <Card className="w-full max-w-md p-8 bg-white rounded-xl shadow-lg">
         {/* Logo & Branding */}
@@ -103,10 +173,7 @@ export default function Login(){
           </div>
 
           <div className="space-y-3 pt-4">
-            <Button
-              type="submit"
-              className="w-full h-12 rounded-lg font-medium bg-kpi-red hover:bg-red-600 text-white"
-            >
+            <Button type="submit" className="w-full h-12 rounded-lg font-medium bg-kpi-red hover:bg-red-600 text-white">
               로그인
             </Button>
 
@@ -133,9 +200,7 @@ export default function Login(){
 
         {/* Footer */}
         <div className="mt-8 pt-6 border-t border-gray-200 text-center">
-          <p className="text-xs text-dark-gray">
-            © 2024 FranFriend ERP. All rights reserved.
-          </p>
+          <p className="text-xs text-dark-gray">© 2024 FranFriend ERP. All rights reserved.</p>
           <div className="flex justify-center gap-4 mt-2">
             <a href="#" className="text-xs text-dark-gray hover:text-gray-900">이용약관</a>
             <a href="#" className="text-xs text-dark-gray hover:text-gray-900">개인정보처리방침</a>
