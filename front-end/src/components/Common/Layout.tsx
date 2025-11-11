@@ -91,8 +91,7 @@ const storeMenuItems: MenuItem[] = [
       { id: 'staff-reports', label: '근무리포트', icon: BarChart3 }
     ]
   },
-  { id: 'notice', label: '공지/교육', icon: BookOpen },
-  { 
+        { id: 'notice', label: '공지사항', icon: BookOpen },  { 
     id: 'reports', 
     label: '리포트', 
     icon: BarChart3,
