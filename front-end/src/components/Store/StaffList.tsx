@@ -60,28 +60,56 @@ export function StaffList() {
   }, []);
 
   /* ✅ 필터링 로직 */
-  const filteredStaff = staff.filter(member => {
-    const matchesSearch =
-      member.staffName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.staffDepartment.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.staffEmploymentType.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDepartment =
-      filterDepartment === 'all' || member.staffDepartment === filterDepartment;
-    const matchesAttendance =
-      filterAttendance === 'all' || member.attendanceStatus === filterAttendance;
-    return matchesSearch && matchesDepartment && matchesAttendance;
-  });
+  const filteredStaff = staff.filter(staffMember => {
+  const matchesSearch =
+    staffMember.staffName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    staffMember.staffDepartment.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    staffMember.staffEmploymentType.toLowerCase().includes(searchTerm.toLowerCase());
 
-  /* ✅ 근태 상태 뱃지 표시 */
-  const getAttendanceBadge = (attendanceStatus: string) => {
-    switch (attendanceStatus) {
-      case 'ACTIVE': return <Badge className="bg-green-100 text-green-800">근무중</Badge>;
-      case 'VACATION': return <Badge className="bg-blue-100 text-blue-800">휴가</Badge>;
-      case 'LEAVE': return <Badge className="bg-gray-100 text-gray-800">휴직</Badge>;
-      case 'RESIGNED': return <Badge className="bg-red-100 text-red-800">퇴사</Badge>;
-      default: return <Badge>{attendanceStatus}</Badge>;
-    }
-  };
+  const matchesDepartment =
+    filterDepartment === 'all' || staffMember.staffDepartment === filterDepartment;
+
+  const matchesAttendance =
+    filterAttendance === 'all' || staffMember.attendanceStatus === filterAttendance;
+
+  return matchesSearch && matchesDepartment && matchesAttendance;
+});
+
+
+ /* ✅ 근태 상태 뱃지 표시 */
+const getAttendanceBadge = (attendanceStatus?: string | null) => {
+  if (!attendanceStatus) {
+    return <Badge className="bg-gray-100 text-gray-800">상태 없음</Badge>;
+  }
+
+  // 대소문자 섞여 들어와도 처리되게 통일
+  const status = attendanceStatus.toUpperCase();
+
+  switch (status) {
+    // 근무 중
+    case 'ACTIVE':
+    case 'WORKING':
+      return <Badge className="bg-green-100 text-green-800">근무중</Badge>;
+
+    // 휴가
+    case 'VACATION':
+      return <Badge className="bg-blue-100 text-blue-800">휴가중</Badge>;
+
+    // 휴직 (inactive / leave 둘 다 휴직으로 봄)
+    case 'LEAVE':
+    case 'INACTIVE':
+      return <Badge className="bg-gray-100 text-gray-800">휴직중</Badge>;
+
+    // 퇴사
+    case 'RESIGNED':
+    case 'QUIT':
+      return <Badge className="bg-red-100 text-red-800">퇴사</Badge>;
+
+    // 그 외 예상 못한 값들
+    default:
+      return <Badge>{attendanceStatus}</Badge>;
+  }
+};
 
   /* ---------- 폼 필드: 로컬 타입 사용 ---------- */
   const staffAddFormFields: ModalField[] = [
@@ -146,11 +174,7 @@ export function StaffList() {
     toast.success('직원 정보가 수정되었습니다.');
   };
 
-  
 
-  function getStatusBadge(attendanceStatus: string): React.ReactNode {
-    throw new Error('Function not implemented.');
-  }
 
   return (
     <div className="space-y-6">
@@ -243,7 +267,7 @@ export function StaffList() {
               <SelectItem value="all">전체 상태</SelectItem>
               <SelectItem value="active">근무중</SelectItem>
               <SelectItem value="vacation">휴가중</SelectItem>
-              <SelectItem value="inactive">휴직중</SelectItem>
+              <SelectItem value="inactive">휴일</SelectItem>
               <SelectItem value="resigned">퇴사</SelectItem>
             </SelectContent>
           </Select>
@@ -251,9 +275,13 @@ export function StaffList() {
             <SelectTrigger className="w-full md:w-48"><SelectValue placeholder="부서 필터" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">전체 부서</SelectItem>
-              <SelectItem value="운영팀">운영팀</SelectItem>
-              <SelectItem value="주방팀">주방팀</SelectItem>
-              <SelectItem value="서비스팀">서비스팀</SelectItem>
+              <SelectItem value="본사팀">본사팀</SelectItem>
+              <SelectItem value="판매팀">판매팀</SelectItem>
+              <SelectItem value="가맹관리팀">가맹관리팀</SelectItem>
+              <SelectItem value="운영지원팀">운영지원팀</SelectItem>
+              <SelectItem value="인사팀">인사팀</SelectItem>
+              <SelectItem value="데이터분석팀">데이터분석팀</SelectItem>
+              <SelectItem value="관리팀">관리팀</SelectItem>
             </SelectContent>
           </Select>
         </div>

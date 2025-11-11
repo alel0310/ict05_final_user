@@ -26,6 +26,10 @@ public class StaffProfile {
     @Column(name = "staff_id")
     private Long id;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "store_id_fk", nullable = false)
+    private Store store;
+
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(
             name = "member_id_fk",
@@ -35,11 +39,6 @@ public class StaffProfile {
             unique = true
     )
     private Member member;
-
-    /** 직원 근무지 */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "store_id_fk", nullable = false)
-    private Store store;
 
     /**
      * 직원 이름
