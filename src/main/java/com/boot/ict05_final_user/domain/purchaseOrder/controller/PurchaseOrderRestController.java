@@ -33,9 +33,11 @@ public class PurchaseOrderRestController {
     @GetMapping("/list")
     public ResponseEntity<Page<PurchaseOrderListDTO>> listPurchase(
             @ModelAttribute PurchaseOrderSearchDTO purchaseOrderSearchDTO,
+            @RequestParam(value = "status", required = false) PurchaseOrderStatus status,
             @PageableDefault(page = 0, size = 10, sort = "id", direction = Sort.Direction.DESC)
             Pageable pageable) {
 
+        if (status != null) purchaseOrderSearchDTO.setPurchaseOrderStatus(status);
         Page<PurchaseOrderListDTO> result = purchaseOrderService.selectAllPurchase(purchaseOrderSearchDTO, pageable);
         return ResponseEntity.ok(result);
     }
@@ -95,28 +97,32 @@ public class PurchaseOrderRestController {
             @RequestParam("status") String status
     ) {
         try {
-            // 1️⃣ 가맹점 DB에 상태 반영
             PurchaseOrderStatus newStatus = PurchaseOrderStatus.valueOf(status.toUpperCase());
-            purchaseOrderService.updateStatusById(id, newStatus);
+            purchaseOrderService.updateStatusById(id, newStatus);   // 로컬 DB 반영
+            log.info("[STORE] 로컬 DB 상태 업데이트 완료: id={}, status={}", id, newStatus);
 
-            // 2️⃣ 발주 코드 조회
-            String orderCode = purchaseOrderRepository.findOrderCodeById(id)
-                    .orElseThrow(() -> new IllegalArgumentException("해당 발주를 찾을 수 없습니다. ID=" + id));
-
-            // 3️⃣ 본사로 상태 동기화
-            orderSyncService.syncToHQ(orderCode, newStatus.name());
-
-            log.info("✅ [STORE] 상태 변경 및 본사 동기화 완료: {} → {}", orderCode, newStatus);
+            // 3️⃣ HQ 동기화 (백엔드 → 백엔드)
+            purchaseOrderRepository.findOrderCodeById(id).ifPresent(orderCode -> {
+                try {
+                    orderSyncService.syncToHQ(orderCode, newStatus.name());
+                    log.info("[STORE] HQ 동기화 성공: orderCode={}, status={}", orderCode, newStatus);
+                } catch (Exception e) {
+                    // HQ 서버 미응답, 네트워크 오류, 인증 실패 등
+                    log.warn("[STORE] HQ 동기화 실패: orderCode={}, status={}, err={}", orderCode, newStatus, e.getMessage());
+                }
+            });
             return ResponseEntity.ok("상태 변경 및 본사 동기화 완료");
 
         } catch (IllegalArgumentException e) {
-            log.warn("⚠️ 잘못된 상태 값: {}", status);
-            return ResponseEntity.badRequest().body("잘못된 상태 값입니다: " + status);
+            log.error("[STORE] 잘못된 상태 요청: {}", status);
+            return ResponseEntity.badRequest().body("잘못된 상태 값: " + status);
+
         } catch (Exception e) {
-            log.error("🚨 상태 변경 실패: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError().body("상태 변경 중 오류가 발생했습니다.");
+            log.error("[STORE] 상태 변경 중 예외 발생: {}", e.getMessage(), e);
+            return ResponseEntity.internalServerError().body("상태 변경 중 서버 오류 발생");
         }
     }
+
 
     // 본사와 상태 연동
     @PutMapping("/sync/status")
@@ -127,10 +133,9 @@ public class PurchaseOrderRestController {
         log.info("[STORE] 본사로부터 동기화 요청 수신: orderCode={}, status={}", orderCode, status);
         try {
             PurchaseOrderStatus newStatus = PurchaseOrderStatus.valueOf(status.toUpperCase());
-            purchaseOrderService.updateStatusByOrderCode(orderCode, newStatus);
+            purchaseOrderService.updateStatusByOrderCode(orderCode, newStatus); // 로컬 DB 반영
             return ResponseEntity.ok("가맹점 상태 동기화 완료");
         } catch (IllegalArgumentException e) {
-            log.error("❌ [STORE] 상태 변환 실패: {}", status);
             return ResponseEntity.badRequest().body("잘못된 상태 값: " + status);
         }
     }

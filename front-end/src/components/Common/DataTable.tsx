@@ -39,6 +39,13 @@ export interface DataTableProps {
   totalPageCount?: number;
   onPageChange?: (page: number) => void;
   totalElements?: number;
+  totalDisplayCount?: number; 
+
+  pageSize?: number;          // 표시에만 사용(서버모드), 기본 10
+  pageBlockSize?: number;     // 블록 크기, 기본 10
+
+  serverFilterEnabled?: boolean;
+  onFilterChange?: (value: string) => void;
 }
 
 export function DataTable({
@@ -62,6 +69,13 @@ export function DataTable({
   totalPageCount: externaltotalPageCount = 1,
   onPageChange,
   totalElements = 0,
+  totalDisplayCount,
+
+  pageSize = 10,
+  pageBlockSize = 10,
+
+  serverFilterEnabled = false,
+  onFilterChange,
 }: DataTableProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortColumn, setSortColumn] = useState<string | null>(null);
@@ -72,26 +86,46 @@ export function DataTable({
   const [internalPage, setInternalPage] = useState(1);
   const [itemsPerPage] = useState(10);
 
+  const isServerFilter = serverSidePagination && serverFilterEnabled;
+
   // ✅ 서버모드일 때 외부 페이지, 아니면 내부 페이지
   const currentPage = serverSidePagination ? externalPage : internalPage;
 
-  // 검색 및 필터링
-  const filteredData = useMemo(() => {
-    const safeData = Array.isArray(data) ? data.filter((row) => row && typeof row === 'object') : [];
-    let filtered = safeData;
+  // 헤더 표시용 총개수 선택
+  const headerTotal = totalDisplayCount ?? (serverSidePagination ? totalElements : data.length);
 
+  // 필터링
+  const filteredData = useMemo(() => {
+    const safe = Array.isArray(data)
+      ? data.filter((row) => row && typeof row === "object")
+      : [];
+
+    let out = safe;
+
+    // 로컬 검색(서버가 검색 처리하지 않는 경우만 유지)
     if (!hideSearch && searchTerm) {
-      filtered = filtered.filter((row) =>
-        Object.values(row).some((val) => String(val ?? '').toLowerCase().includes(searchTerm.toLowerCase())),
+      const q = searchTerm.toLowerCase();
+      out = out.filter((row) =>
+        Object.values(row).some((v) =>
+          String(v ?? "").toLowerCase().includes(q)
+        )
       );
     }
 
-    if (activeFilter !== 'all') {
-      filtered = filtered.filter((row) => row.status === activeFilter);
+    // 서버 필터 모드에선 상태 필터를 로컬에서 적용하지 않음
+    if (!isServerFilter && activeFilter !== "all") {
+      out = out.filter((row: any) => row.status === activeFilter);
     }
 
-    return filtered;
-  }, [data, searchTerm, activeFilter, hideSearch]);
+    return out;
+  }, [
+    data,
+    searchTerm,
+    activeFilter,
+    hideSearch,
+    serverSidePagination,
+    serverFilterEnabled,
+  ]);
 
   // 정렬
   const sortedData = useMemo(() => {
@@ -116,6 +150,21 @@ export function DataTable({
     ? externaltotalPageCount
     : Math.ceil(sortedData.length / itemsPerPage);
 
+  const rangeStart = serverSidePagination
+    ? (currentPage - 1) * pageSize + 1
+    : (currentPage - 1) * itemsPerPage + 1;
+
+  const rangeEnd = serverSidePagination
+    ? Math.min(currentPage * pageSize, totalElements)
+    : Math.min(currentPage * itemsPerPage, sortedData.length);
+
+  const totalCountForDisplay = serverSidePagination ? totalElements : sortedData.length;
+
+  const blockStart = Math.floor((currentPage - 1) / pageBlockSize) * pageBlockSize + 1;
+  const blockEnd = Math.min(blockStart + pageBlockSize - 1, totalPageCount);
+  const hasPrevBlock = blockStart > 1;
+  const hasNextBlock = blockEnd < totalPageCount;
+
   const handleSort = (columnKey: string) => {
     if (sortColumn === columnKey) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -137,7 +186,7 @@ export function DataTable({
         <div>
           <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
           <p className="text-sm text-dark-gray">
-            총 {serverSidePagination ? totalElements : filteredData.length}개 항목
+            총 {headerTotal}개 항목
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -170,29 +219,59 @@ export function DataTable({
             </div>
             {filters.length > 0 && (
               <div className="flex flex-wrap gap-2">
+                {/* 전체 버튼 예시(값이 'all'이라고 가정) */}
                 <button
-                  onClick={() => setActiveFilter('all')}
+                  onClick={() => {
+                    setActiveFilter("all");
+                    if (isServerFilter) {
+                      onFilterChange && onFilterChange("all");
+                      onPageChange && onPageChange(1);
+                    } else {
+                      setInternalPage(1);
+                    }
+                  }}
                   className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                    activeFilter === 'all'
-                      ? 'bg-kpi-red text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    activeFilter === 'all' ? 'bg-kpi-red text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
-                  전체 ({data.length})
+                  전체
                 </button>
-                {filters.map((filter) => (
-                  <button
-                    key={filter.value}
-                    onClick={() => setActiveFilter(filter.value)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                      activeFilter === filter.value
-                        ? 'bg-kpi-red text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {filter.label}
-                  </button>
-                ))}
+
+                {(filters ?? []).map((filter) => {
+                  const zero = typeof filter.count === 'number' && filter.count === 0 && filter.value !== 'all';
+                  const isActive = activeFilter === filter.value;
+
+                  const base =
+                    'px-4 py-2 rounded-lg text-sm font-medium transition-colors';
+                  const style = zero
+                    ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                    : isActive
+                      ? 'bg-kpi-red text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200';
+
+                  return (
+                    <button
+                      key={filter.value}
+                      disabled={zero}
+                      onClick={() => {
+                        if (zero) return; // 0건이면 서버 호출 금지
+                        setActiveFilter(filter.value);
+                        if (isServerFilter) {
+                          onFilterChange && onFilterChange(filter.value);
+                          onPageChange && onPageChange(1);
+                        } else {
+                          setInternalPage(1);
+                        }
+                      }}
+                      className={`${base} ${style}`}
+                      aria-disabled={zero}
+                    >
+                      {filter.label}
+                      {filter.value !== 'all' && typeof filter.count === 'number' ? ` (${filter.count})` : ''}
+                    </button>
+                  );
+                })}
+
               </div>
             )}
           </div>
@@ -274,43 +353,58 @@ export function DataTable({
         {totalPageCount > 1 && (
           <div className="px-6 py-4 border-t bg-light-gray flex items-center justify-between">
             <p className="text-sm text-dark-gray">
-              {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, sortedData.length)} / {sortedData.length}개
+              {rangeStart} - {rangeEnd} / {totalCountForDisplay}개
             </p>
-            <div className="flex items-center gap-2">
+
+            <div className="flex items-center gap-1">
+              {/* 첫 페이지, 이전 블록 */}
               <Button
-                variant="outline"
-                size="sm"
+                variant="outline" size="sm"
                 disabled={currentPage === 1}
-                onClick={() => onPageChange && onPageChange(currentPage - 1)}
+                onClick={() => onPageChange && onPageChange(1)}
               >
-                이전
+                «
+              </Button>
+              <Button
+                variant="outline" size="sm"
+                disabled={!hasPrevBlock}
+                onClick={() => onPageChange && onPageChange(blockStart - 1)}
+              >
+                ‹
               </Button>
 
-              <div className="flex items-center gap-1">
-                {Array.from({ length: totalPageCount }, (_, i) => i + 1).map((page) => (
-                  <Button
-                    key={page}
-                    variant={currentPage === page ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => onPageChange && onPageChange(page)}
-                    className={currentPage === page ? "bg-kpi-red text-white" : ""}
-                  >
-                    {page}
-                  </Button>
-                ))}
-              </div>
+              {/* 블록 내 페이지들 */}
+              {Array.from({ length: blockEnd - blockStart + 1 }, (_, i) => blockStart + i).map((page) => (
+                <Button
+                  key={page}
+                  variant={currentPage === page ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => onPageChange && onPageChange(page)}
+                  className={currentPage === page ? "bg-kpi-red text-white" : ""}
+                >
+                  {page}
+                </Button>
+              ))}
 
+              {/* 다음 블록, 마지막 페이지 */}
               <Button
-                variant="outline"
-                size="sm"
-                disabled={currentPage === totalPageCount}
-                onClick={() => onPageChange && onPageChange(currentPage + 1)}
+                variant="outline" size="sm"
+                disabled={!hasNextBlock}
+                onClick={() => onPageChange && onPageChange(blockEnd + 1)}
               >
-                다음
+                ›
+              </Button>
+              <Button
+                variant="outline" size="sm"
+                disabled={currentPage === totalPageCount}
+                onClick={() => onPageChange && onPageChange(totalPageCount)}
+              >
+                »
               </Button>
             </div>
           </div>
         )}
+
       </Card>
     </div>
   );

@@ -65,7 +65,8 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
                 .select(po.count())
                 .from(po)
                 .where(
-                        eqOrderCode(purchaseOrderSearchDTO, po)
+                        eqOrderCode(purchaseOrderSearchDTO, po),
+                        po.details.isNotEmpty()
                 )
                 .fetchOne();
 
@@ -470,19 +471,7 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
         }
     }
 
-    // 발주 상태 변경
-    @Override
-    public void updateStatusById(Long id, PurchaseOrderStatus status) {
-        QPurchaseOrder po = QPurchaseOrder.purchaseOrder;
-
-        queryFactory.update(po)
-                .set(po.status, status)
-                .where(po.id.eq(id))
-                .execute();
-
-        log.info("✅ [STORE] 발주 상태 업데이트 완료: id={} → {}", id, status);
-    }
-
+    // 본사 상태 연동
     @Override
     public Optional<String> findOrderCodeById(Long id) {
         QPurchaseOrder po = QPurchaseOrder.purchaseOrder;
@@ -496,23 +485,6 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
         return Optional.ofNullable(code);
     }
 
-    // 본사와 상태 연동
-    @Override
-    public void updateStatusByOrderCode(String orderCode, PurchaseOrderStatus status) {
-        QPurchaseOrder po = QPurchaseOrder.purchaseOrder;
-
-        long updated = queryFactory
-                .update(po)
-                .set(po.status, status)
-                .where(po.orderCode.eq(orderCode))
-                .execute();
-
-        if (updated == 0) {
-            log.warn("⚠️ [STORE] 해당 발주코드({})를 찾을 수 없음 — 상태({}) 미반영", orderCode, status);
-        } else {
-            log.info("✅ [STORE] 상태 동기화 완료 — {} → {}", orderCode, status);
-        }
-    }
 
 
 }

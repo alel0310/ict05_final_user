@@ -28,11 +28,8 @@ public interface PurchaseOrderRepositoryCustom {
     void deletePurchaseOrder(Long id);
     // 발주 상세 품목 삭제
     void deletePurchaseOrderDetail(Long detailId);
-    // 발주 상태 변경
-    void updateStatusById(Long id, PurchaseOrderStatus status);
+    // 발주 상태 연동
     Optional<String> findOrderCodeById(Long id);
-    // 본사와 상태 연동
-    void updateStatusByOrderCode(String orderCode, PurchaseOrderStatus status);
     // 상단 카드 데이터
 
 
