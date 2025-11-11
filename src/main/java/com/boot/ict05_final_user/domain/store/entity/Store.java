@@ -1,5 +1,6 @@
 package com.boot.ict05_final_user.domain.store.entity;
 
+import com.boot.ict05_final_user.domain.store.entity.Store;
 import com.boot.ict05_final_user.domain.user.entity.Member;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
