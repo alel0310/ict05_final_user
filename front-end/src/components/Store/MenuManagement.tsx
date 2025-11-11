@@ -22,7 +22,9 @@ import { useConfirmDialog } from '../Common/ConfirmDialog';
 // ======================
 
 const api = axios.create({
-  baseURL: 'http://localhost:8082',
+  baseURL: import.meta.env.VITE_BACKEND_API_BASE_URL,
+  withCredentials: true,
+  headers: {"Content-Type": "application/json"},
 });
 
 api.interceptors.request.use((config) => {
@@ -106,7 +108,7 @@ export const StoreMenuManagement: React.FC = () => {
     setLoading(true);
     try {
       const res = await api.get<PageResponse<StoreMenu>>(
-        '/user/API/menu/list',
+        '/API/menu/list',
         {
           params: { page: 0, size: 1000 },
         },
@@ -215,7 +217,7 @@ export const StoreMenuManagement: React.FC = () => {
     menuId: number,
     status: SoldOutStatus,
   ) => {
-    await api.patch(`/user/API/menu/${menuId}/sold-out`, {
+    await api.patch(`/API/menu/${menuId}/sold-out`, {
       soldOutStatus: status,
     });
   };
@@ -298,7 +300,7 @@ export const StoreMenuManagement: React.FC = () => {
   // 상세 모달 열기 (재료 포함)
   const handleMenuDetail = async (menu: StoreMenu) => {
     try {
-      const res = await api.get<StoreMenu>(`/user/API/menu/${menu.menuId}`);
+      const res = await api.get<StoreMenu>(`/API/menu/${menu.menuId}`);
 
       const detail: StoreMenu = {
         ...menu,
@@ -325,10 +327,10 @@ export const StoreMenuManagement: React.FC = () => {
       type: 'select' as const,
       required: true,
       options: [
-        { value: '세트', label: '세트메뉴' },
-        { value: '토스트', label: '토스트' },
-        { value: '사이드', label: '사이드' },
-        { value: '음료', label: '음료' },
+        { value: '1', label: '세트메뉴' },
+        { value: '2', label: '토스트' },
+        { value: '3', label: '사이드' },
+        { value: '4', label: '음료' },
       ],
     },
     {
@@ -383,10 +385,10 @@ export const StoreMenuManagement: React.FC = () => {
   const handleSubmit = async (data: Record<string, any>) => {
     setIsSubmitting(true);
     try {
-      await api.post('/user/API/menu', {
+      await api.post('/API/menu/add', {
         menuName: data.name,
         menuNameEnglish: data.nameEnglish,
-        menuCategoryName: data.category, // 백엔드 DTO 에 맞게 조정
+        menuCategoryId: Number(data.category), // 백엔드 DTO 에 맞게 조정
         menuPrice: Number(data.price),
         menuKcal: Number(data.kcal) || 0,
         menuInformation: data.description,

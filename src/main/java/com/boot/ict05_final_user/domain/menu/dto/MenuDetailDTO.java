@@ -50,10 +50,8 @@ public class MenuDetailDTO {
     /** 설명 */
     private String menuInformation;
 
-//    /** 재료구성 */
-//    private List<RecipeItemDTO> recipeItems;
-
-    /** 재료 목록 ("," 로 이어붙인 문자열) */
+    /** 재료 */
     private String ingredients;
+
 
 }

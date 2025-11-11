@@ -42,7 +42,7 @@ public class Menu {
     /** 품절 상태 */
     @Builder.Default
     @Enumerated(EnumType.STRING)
-    @Column(name = "sold_out_staus")
+    @Column(name = "sold_out_status")
     private SoldOutStatus soldOutStatus = SoldOutStatus.ON_SALE;
 
     /** 판매상태(0:중지, 1:판매중) */
@@ -63,6 +63,10 @@ public class Menu {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name= "menu_category_id_fk")
     private MenuCategory menuCategory;
+
+    /** 재료 */
+    @Column(name = "ingredients", length = 500)
+    private String ingredients;
 
     /** 카테고리 교체 */
     public void changeCategory(MenuCategory category) { this.menuCategory = category; }

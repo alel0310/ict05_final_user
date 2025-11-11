@@ -131,7 +131,9 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
 
     // ====== 아래는 헬퍼 메서드들 (클래스 안에 위치해야 함) ======
 
-    /** 이름 검색 */
+    /**
+     * 이름 검색
+     */
     private BooleanExpression eqNameOrInfo(MenuSearchDTO dto, QMenu menu) {
         String kw = dto.getS();
         if (!StringUtils.hasText(kw)) return null;
@@ -143,19 +145,25 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
         };
     }
 
-    /** 카테고리 필터 */
+    /**
+     * 카테고리 필터
+     */
     private BooleanExpression eqCategory(MenuSearchDTO dto, QMenu menu) {
         if (dto.getMenuCategoryId() == null || dto.getMenuCategoryId() == 0) return null;
         return menu.menuCategory.menuCategoryId.eq(dto.getMenuCategoryId());
     }
 
-    /** 품절상태 필터 */
+    /**
+     * 품절상태 필터
+     */
     private BooleanExpression eqSoldOutStatus(MenuSearchDTO dto, QMenu menu) {
         if (dto.getSoldOutStatus() == null) return null;
         return menu.soldOutStatus.eq(dto.getSoldOutStatus());
     }
 
-    /** 여러 조건 and 결합 */
+    /**
+     * 여러 조건 and 결합
+     */
     private BooleanExpression andAll(BooleanExpression... exps) {
         BooleanExpression result = null;
         for (BooleanExpression exp : exps) {
@@ -173,11 +181,12 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
                             ? com.querydsl.core.types.Order.ASC
                             : com.querydsl.core.types.Order.DESC;
                     return switch (order.getProperty()) {
-                        case "menuId"    -> new com.querydsl.core.types.OrderSpecifier<>(direction, menu.menuId);
-                        case "menuName"  -> new com.querydsl.core.types.OrderSpecifier<>(direction, menu.menuName);
+                        case "menuId" -> new com.querydsl.core.types.OrderSpecifier<>(direction, menu.menuId);
+                        case "menuName" -> new com.querydsl.core.types.OrderSpecifier<>(direction, menu.menuName);
                         case "menuPrice" -> new com.querydsl.core.types.OrderSpecifier<>(direction, menu.menuPrice);
-                        case "menuKcal"  -> new com.querydsl.core.types.OrderSpecifier<>(direction, menu.menuKcal);
-                        default          -> new com.querydsl.core.types.OrderSpecifier<>(com.querydsl.core.types.Order.DESC, menu.menuId);
+                        case "menuKcal" -> new com.querydsl.core.types.OrderSpecifier<>(direction, menu.menuKcal);
+                        default ->
+                                new com.querydsl.core.types.OrderSpecifier<>(com.querydsl.core.types.Order.DESC, menu.menuId);
                     };
                 })
                 .toArray(com.querydsl.core.types.OrderSpecifier[]::new);
@@ -203,7 +212,8 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
                         menu.menuCode,
                         menu.soldOutStatus,
                         menu.menuShow,
-                        material.name
+                        menu.ingredients,   // 🔹 menu 테이블의 문자열 재료
+                        material.name       // 🔹 recipe/material 조인 재료
                 ))
                 .from(menu)
                 .leftJoin(menu.menuCategory, category)
@@ -219,6 +229,7 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
         }
 
         var first = rows.get(0);
+
         MenuDetailDTO dto = new MenuDetailDTO();
         dto.setMenuId(first.get(menu.menuId));
         dto.setMenuName(first.get(menu.menuName));
@@ -232,19 +243,26 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
         dto.setSoldOutStatus(first.get(menu.soldOutStatus));
         dto.setMenuShow(first.get(menu.menuShow));
 
-        // 재료 문자열 만들기
-        java.util.Set<String> ingredientNames = new java.util.LinkedHashSet<>();
+        // 1️⃣ 기본값: menu 테이블에 저장된 문자열 재료
+        dto.setIngredients(first.get(menu.ingredients));
+
+        // 2️⃣ recipe/material 조인 결과가 있으면, 그걸로 덮어쓰기
+        Set<String> ingredientNames = new LinkedHashSet<>();
         for (var t : rows) {
             String name = t.get(material.name);
-            if (name != null) {
+            if (name != null && !name.isBlank()) {
                 ingredientNames.add(name);
             }
         }
-        dto.setIngredients(String.join(", ", ingredientNames));
+        if (!ingredientNames.isEmpty()) {
+            dto.setIngredients(String.join(", ", ingredientNames));
+        }
 
-        return dto;
+        return dto;   // 🔥 잊지 말기
     }
+
 }
+
 
 
 

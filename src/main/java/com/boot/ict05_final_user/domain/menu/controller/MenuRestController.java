@@ -104,7 +104,7 @@ public class MenuRestController {
      * @return 등록 성공 여부 및 생성된 메뉴 ID
      * @throws Exception DB 저장 오류
      */
-    @PostMapping
+    @PostMapping("/menu/add")
     public ResponseEntity<Long> createMenu(@RequestBody MenuWriteFormDTO dto) {
 
         MenuCategory category = menuCategoryRepository.findById(dto.getMenuCategoryId())
@@ -120,6 +120,7 @@ public class MenuRestController {
                 .menuShow(MenuShow.SHOW)
                 .soldOutStatus(SoldOutStatus.ON_SALE)
                 .menuCategory(category)
+                .ingredients(dto.getIngredients())
                 .build();
 
         menuRepository.save(menu);
