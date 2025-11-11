@@ -44,18 +44,18 @@ public class FcmController {
             }
         } catch (Exception ignore) { /* principal 타입 다르면 건너뜀 */ }
 
-        // 2) Authorization: Bearer ... 에서 JWT 클레임으로 보강
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            try {
-                var claims = jwtService.parseClaims(authHeader.substring(7));
-                Number sid = claims.get("sid", Number.class);  // storeId
-                Number mid = claims.get("mid", Number.class);  // memberId
-                if (ids.storeId == null && sid != null) ids.storeId = sid.longValue();
-                if (ids.memberId == null && mid != null) ids.memberId = mid.longValue();
-            } catch (Exception e) {
-                log.warn("[FCM] JWT parse failed: {}", e.getMessage());
-            }
-        }
+//        // 2) Authorization: Bearer ... 에서 JWT 클레임으로 보강
+//        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+//            try {
+//                var claims = jwtService.parseClaims(authHeader.substring(7));
+//                Number sid = claims.get("sid", Number.class);  // storeId
+//                Number mid = claims.get("mid", Number.class);  // memberId
+//                if (ids.storeId == null && sid != null) ids.storeId = sid.longValue();
+//                if (ids.memberId == null && mid != null) ids.memberId = mid.longValue();
+//            } catch (Exception e) {
+//                log.warn("[FCM] JWT parse failed: {}", e.getMessage());
+//            }
+//        }
         return ids;
     }
 
