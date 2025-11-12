@@ -28,6 +28,7 @@ import { OrderProvider } from "./components/Common/OrderContext";
 import { StaffSchedule } from "./components/Store/StaffSchedule"; // ⬅️ 추가
 import api from "./lib/authApi";
 import KpiReport from "./components/Store/reports/KpiReport";
+import NotificationSettings from "./components/Store/NotificationSettings";
  // ✅ 인터셉터/강제로그아웃 핸들러
 
 export default function App() {
@@ -81,6 +82,7 @@ export default function App() {
       case "staff-schedule": return <ErrorBoundary><StaffSchedule /></ErrorBoundary>;
       case "notice": return <ErrorBoundary><NoticeEducation /></ErrorBoundary>;
       case "kpi-report": return <ErrorBoundary><KpiReport /></ErrorBoundary>;
+      case "settings-notifications": return (<ErrorBoundary><NotificationSettings /></ErrorBoundary>);
       default:
         return (
           <div className="flex items-center justify-center h-64 bg-white rounded-xl shadow-sm">
