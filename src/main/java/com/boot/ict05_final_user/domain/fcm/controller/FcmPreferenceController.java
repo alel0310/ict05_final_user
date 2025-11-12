@@ -106,6 +106,14 @@ public class FcmPreferenceController {
 						else                      fcmService.unsubscribe(t.getToken(), topic);
 					}
 				}
+				// ✅ 공지 구독(store-{id})
+				if (req.catNotice() != null) {
+					String topic = StoreTopic.store(ids.storeId);
+					for (FcmDeviceToken t : tokens) {
+						if (req.catNotice()) fcmService.subscribe(t.getToken(), topic);
+						else                  fcmService.unsubscribe(t.getToken(), topic);
+					}
+				}
 			} catch (FirebaseMessagingException e) {
 				log.warn("[FCM] applySubscriptions failed", e);
 			}

@@ -58,15 +58,12 @@ export default function NotificationSettings() {
   const save = async () => {
     if (!pref) return;
     try {
-      await api.put(
-        '/fcm/pref/me',
-        {
-          catNotice: pref.catNotice,
-          catStockLow: pref.catStockLow,
-          catExpireSoon: pref.catExpireSoon,
-        },
-        { params: { applySubscriptions: applySubs } }
-      );
+      await api.put('/fcm/pref/me', {
+        catNotice: pref.catNotice,
+        catStockLow: pref.catStockLow,
+        catExpireSoon: pref.catExpireSoon,
+        applySubscriptions: applySubs,
+      });
       toast.success('저장되었습니다.');
     } catch (e: any) {
       console.error('[FCM] pref save error', e);
