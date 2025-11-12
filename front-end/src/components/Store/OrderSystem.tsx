@@ -23,7 +23,6 @@ import { toast } from 'sonner';
 
 /* ============================
    공통 axios 인스턴스
-   (백엔드 URL은 .env에 맞춰져 있음)
 ============================ */
 const api = axios.create({
   baseURL: import.meta.env.VITE_BACKEND_API_BASE_URL,
@@ -31,21 +30,12 @@ const api = axios.create({
 });
 
 /* ============================
-   타입 정의 (백엔드 DTO 가정)
+   타입 정의
 ============================ */
 
-// 백엔드에서 내려오는 메뉴 한 줄 형태 예시
-// 필요에 따라 필드명 맞춰서 수정하면 됨.
 type SoldOutStatus = 'ON_SALE' | 'SOLD_OUT';
+type MenuShow = 'SHOW' | 'HIDE';
 
-// interface StoreMenuDto {
-//   menuId: number;
-//   menuName: string;
-//   menuPrice: number;
-//   menuCategoryId: number;
-//   menuCategoryName: string;
-//   soldOutStatus: SoldOutStatus;
-// }
 export type StoreMenu = {
   menuId: number;
   menuName: string;
@@ -58,26 +48,26 @@ export type StoreMenu = {
   menuCode: string;
   ingredients: string;
   soldOutStatus: SoldOutStatus;
+  menuShow: MenuShow;          // ✅ 추가: 표시 여부
 };
+
 type PageResponse<T> = {
   content: T[];
   totalElements: number;
   totalPages: number;
-  // 필요하면 나머지도 추가
 };
 
-// 화면에서 쓰는 메뉴
 interface MenuItem {
   id: number;
   name: string;
   price: number;
   image: string;
-  available: boolean;
+  available: boolean; // ✅ ON_SALE면 true, SOLD_OUT이면 false
 }
 
 interface MenuCategoryWithItems {
-  id: string;   // categoryId
-  name: string; // categoryName
+  id: string;
+  name: string;
   items: MenuItem[];
 }
 
@@ -114,12 +104,19 @@ const getEmojiForCategory = (categoryName: string) => {
   return '🍔';
 };
 
+// 탭/페이지 설정
+const ALL_CATEGORY_KEY = 'ALL';
+const PAGE_SIZE = 16;
+const EXCLUDED_CATEGORY_NAMES = ['메뉴']; // ‘메뉴’ 탭 숨김
+
 // TODO: 로그인한 가맹점 ID로 교체
 const STORE_ID = 1;
 
 export function OrderSystem() {
   const [menuCategories, setMenuCategories] = useState<MenuCategoryWithItems[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>(ALL_CATEGORY_KEY);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
   const [cart, setCart] = useState<OrderItem[]>([]);
   const [orderType, setOrderType] = useState<'방문' | '포장' | '배달'>('방문');
   const [customerName, setCustomerName] = useState('');
@@ -128,9 +125,8 @@ export function OrderSystem() {
   const [discount, setDiscount] = useState(0);
   const [discountType, setDiscountType] = useState<'amount' | 'percent'>('amount');
   const [customDiscountValue, setCustomDiscountValue] = useState('');
-  const [orders, setOrders] = useState<Order[]>([]); // 화면에는 안 보이지만 주문번호 생성용
+  const [orders, setOrders] = useState<Order[]>([]);
 
-  // 일일 마감 Context
   const { addOrder } = useOrder();
 
   /* ============================
@@ -143,37 +139,52 @@ export function OrderSystem() {
 
   /* ============================
      메뉴 목록 DB에서 가져오기
+     - 모든 페이지 합치기
+     - menuShow === 'SHOW'만 노출
+     - soldOut은 보이되 클릭 불가
+     - '메뉴' 카테고리 제외
   ============================ */
   useEffect(() => {
     const fetchMenus = async () => {
       try {
-        // ✅ 백엔드 응답은 Page 형태라고 가정
-        const res = await api.get<PageResponse<StoreMenu>>('/API/menu/list');
+        const pageSize = 200;
+        let page = 0;
+        let totalPages = 1;
+        const all: StoreMenu[] = [];
 
-        // 진짜 메뉴 배열은 여기
-        const data = res.data.content;
+        do {
+          const res = await api.get<PageResponse<StoreMenu>>('/API/menu/list', {
+            params: { page, size: pageSize },
+          });
+          const data = res.data?.content ?? [];
+          totalPages = res.data?.totalPages ?? 1;
+          all.push(...data);
+          page += 1;
+        } while (page < totalPages);
 
-        // 혹시 방어적으로 한 번 더
-        if (!Array.isArray(data)) {
-          console.error('메뉴 응답이 배열이 아닙니다:', res.data);
+        if (!Array.isArray(all)) {
+          console.error('메뉴 응답이 배열이 아닙니다:', all);
           toast.error('메뉴 응답 형식이 올바르지 않습니다.');
           return;
         }
 
         const categoryMap = new Map<string, MenuCategoryWithItems>();
 
-        data.forEach((m) => {
+        all.forEach((m) => {
           const catId = String(m.menuCategoryId);
-          const catName = m.menuCategoryName;
+          const catName = m.menuCategoryName?.trim();
+
+          // 1) ‘메뉴’ 카테고리 제외
+          if (EXCLUDED_CATEGORY_NAMES.includes(catName)) return;
+
+          // 2) menuShow가 HIDE면 아예 제외
+          if (m.menuShow !== 'SHOW') return;
+
           const emoji = getEmojiForCategory(catName);
-          const available = m.soldOutStatus === 'ON_SALE';
+          const available = m.soldOutStatus === 'ON_SALE'; // ON_SALE만 선택 가능
 
           if (!categoryMap.has(catId)) {
-            categoryMap.set(catId, {
-              id: catId,
-              name: catName,
-              items: [],
-            });
+            categoryMap.set(catId, { id: catId, name: catName, items: [] });
           }
 
           categoryMap.get(catId)!.items.push({
@@ -185,11 +196,17 @@ export function OrderSystem() {
           });
         });
 
-        const categoryList = Array.from(categoryMap.values());
+        // 보기 좋게 정렬 (선택)
+        const categoryList = Array.from(categoryMap.values())
+          .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+          .map((c) => ({
+            ...c,
+            items: c.items.slice().sort((a, b) => a.name.localeCompare(b.name, 'ko')),
+          }));
+
         setMenuCategories(categoryList);
-        if (categoryList.length > 0) {
-          setSelectedCategory(categoryList[0].id);
-        }
+        setSelectedCategory(ALL_CATEGORY_KEY);
+        setCurrentPage(1);
       } catch (error) {
         console.error('메뉴 조회 실패:', error);
         toast.error('메뉴를 불러오지 못했습니다.');
@@ -199,11 +216,8 @@ export function OrderSystem() {
     fetchMenus();
   }, []);
 
-
-
   /* ============================
-     localStorage 주문 히스토리 로드
-     (주문번호 순서를 맞추기 위해 사용)
+     주문 히스토리 로드
   ============================ */
   useEffect(() => {
     const existingOrders = localStorage.getItem('allOrders');
@@ -221,8 +235,6 @@ export function OrderSystem() {
      카트 관련 로직
   ============================ */
   const addToCart = (item: MenuItem | OrderItem) => {
-    // 메뉴에서 온 객체인지, 이미 카트에 있는지 상관 없이 id/price/name/image만 맞으면 됨
-    // (MenuItem에는 quantity가 없으니 기본 1개로 추가)
     const available = (item as MenuItem).available;
     if (available === false) {
       toast.error('품절된 상품입니다.');
@@ -315,7 +327,6 @@ export function OrderSystem() {
     }
 
     try {
-      // 1) 기존 주문 목록 불러오기 (localStorage)
       const existingOrders: Order[] = JSON.parse(
         localStorage.getItem('allOrders') || '[]',
       );
@@ -335,26 +346,17 @@ export function OrderSystem() {
       const total = calculateTotal();
       const discountAmount = subtotal - total;
 
-      // 2) 백엔드에 주문 저장
       const orderTypeMapping: { [key: string]: 'visit' | 'takeout' | 'delivery' } =
-        {
-          방문: 'visit',
-          포장: 'takeout',
-          배달: 'delivery',
-        };
+        { 방문: 'visit', 포장: 'takeout', 배달: 'delivery' };
 
       const paymentMethodMapping: {
         [key: string]: 'cash' | 'card' | 'voucher' | 'external';
-      } = {
-        현금: 'cash',
-        카드: 'card',
-        상품권: 'voucher',
-      };
+      } = { 현금: 'cash', 카드: 'card', 상품권: 'voucher' };
 
       const payload = {
         storeId: STORE_ID,
-        orderCode: orderId, // CustomerOrder.orderCode
-        orderType: orderTypeMapping[orderType], // 'visit' | ...
+        orderCode: orderId,
+        orderType: orderTypeMapping[orderType],
         paymentType: paymentMethodMapping[method] || 'cash',
         totalPrice: total,
         discount: discountAmount,
@@ -366,10 +368,8 @@ export function OrderSystem() {
         })),
       };
 
-      // TODO: 실제 주문 생성 API URL로 교체
       await api.post('/api/customer-orders', payload);
 
-      // 3) 프론트 로컬/Context 업데이트 (일일 마감용)
       const newOrder: Order = {
         id: orderId,
         items: [...cart],
@@ -389,7 +389,6 @@ export function OrderSystem() {
       const allUpdatedOrders = [newOrder, ...existingOrders];
       localStorage.setItem('allOrders', JSON.stringify(allUpdatedOrders));
 
-      // Context에 주문 추가
       addOrder({
         items: cart.map((item) => ({
           id: String(item.id),
@@ -411,7 +410,6 @@ export function OrderSystem() {
         toast.info('영수증이 출력되었습니다.');
       }, 1000);
 
-      // 4) 폼 초기화
       setCart([]);
       setCustomerName('');
       setDiscount(0);
@@ -420,6 +418,41 @@ export function OrderSystem() {
       toast.error('결제 처리 중 오류가 발생했습니다.');
     }
   };
+
+  /* ============================
+     카테고리/메뉴 필터링 & 페이지네이션
+  ============================ */
+
+  // 전체 개수 (전체 탭에 표시용)
+  const totalMenuCount = menuCategories.reduce(
+    (sum, cat) => sum + cat.items.length,
+    0,
+  );
+
+  // 선택된 탭에 따라 전체 아이템
+  const filteredItems: MenuItem[] =
+    selectedCategory === ALL_CATEGORY_KEY
+      ? menuCategories.flatMap((cat) => cat.items)
+      : menuCategories.find((cat) => cat.id === selectedCategory)?.items ?? [];
+
+  // 페이지 계산
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
+  const startIdx = (currentPage - 1) * PAGE_SIZE;
+  const endIdx = startIdx + PAGE_SIZE;
+  const paginatedItems = filteredItems.slice(startIdx, endIdx);
+
+  const goToPage = (p: number) => {
+    if (p < 1 || p > totalPages) return;
+    setCurrentPage(p);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // 카테고리/데이터 변경 시 페이지 보정
+  useEffect(() => {
+    const tp = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
+    if (currentPage > tp) setCurrentPage(tp);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategory, menuCategories]);
 
   /* ============================
      JSX
@@ -439,55 +472,128 @@ export function OrderSystem() {
       <div className="grid grid-cols-12 gap-6">
         {/* 왼쪽: 메뉴 영역 */}
         <div className="col-span-8">
-          {/* 카테고리 탭 */}
-          <div className="flex gap-2 mb-4">
-            {menuCategories.length === 0 ? (
-              <span className="text-sm text-gray-500">
-                표시할 메뉴가 없습니다. (백엔드 메뉴 API를 확인해주세요)
-              </span>
-            ) : (
-              menuCategories.map((category) => (
-                <Button
-                  key={category.id}
-                  variant={selectedCategory === category.id ? 'default' : 'outline'}
-                  onClick={() => setSelectedCategory(category.id)}
-                  className="flex-1"
-                >
-                  {category.name}
-                </Button>
-              ))
-            )}
+          {/* 상단 카테고리 칩 + sticky */}
+          <div className="sticky top-0 z-10 bg-white pb-3">
+            <div className="flex gap-2 mb-2 overflow-x-auto">
+              {menuCategories.length === 0 ? (
+                <span className="text-sm text-gray-500">
+                  표시할 메뉴가 없습니다. (백엔드 메뉴 API를 확인해주세요)
+                </span>
+              ) : (
+                <>
+                  {/* 전체 탭 */}
+                  <Button
+                    key="all"
+                    variant={
+                      selectedCategory === ALL_CATEGORY_KEY ? 'default' : 'outline'
+                    }
+                    onClick={() => {
+                      setSelectedCategory(ALL_CATEGORY_KEY);
+                      setCurrentPage(1);
+                    }}
+                    className={`rounded-full px-4 py-2 text-sm font-medium whitespace-nowrap ${
+                      selectedCategory === ALL_CATEGORY_KEY
+                        ? 'bg-kpi-red text-white border-kpi-red'
+                        : 'bg-gray-100 text-gray-700 border-none hover:bg-gray-200'
+                    }`}
+                  >
+                    전체 ({totalMenuCount})
+                  </Button>
+
+                  {/* 개별 카테고리 탭 */}
+                  {menuCategories.map((category) => {
+                    const count = category.items.length;
+                    return (
+                      <Button
+                        key={category.id}
+                        variant={
+                          selectedCategory === category.id ? 'default' : 'outline'
+                        }
+                        onClick={() => {
+                          setSelectedCategory(category.id);
+                          setCurrentPage(1);
+                        }}
+                        className={`rounded-full px-4 py-2 text-sm font-medium whitespace-nowrap ${
+                          selectedCategory === category.id
+                            ? 'bg-kpi-red text-white border-kpi-red'
+                            : 'bg-gray-100 text-gray-700 border-none hover:bg-gray-200'
+                        }`}
+                      >
+                        {category.name} ({count})
+                      </Button>
+                    );
+                  })}
+                </>
+              )}
+            </div>
           </div>
 
-          {/* 메뉴 카드 리스트 */}
-          <div className="grid grid-cols-4 gap-4">
-            {menuCategories
-              .find((cat) => cat.id === selectedCategory)
-              ?.items.map((item) => (
-                <Card
-                  key={item.id}
-                  className={`p-4 cursor-pointer transition-all ${
-                    item.available
-                      ? 'hover:shadow-lg hover:scale-105'
-                      : 'opacity-50 cursor-not-allowed'
-                  }`}
-                  onClick={() => addToCart(item)}
-                >
-                  <div className="text-center">
-                    <div className="text-4xl mb-3">{item.image}</div>
-                    <h3 className="font-medium mb-2">{item.name}</h3>
-                    <div className="text-lg font-semibold text-kpi-red">
-                      {item.price.toLocaleString()}원
-                    </div>
-                    {!item.available && (
-                      <Badge variant="destructive" className="mt-2">
-                        품절
-                      </Badge>
-                    )}
+          {/* 메뉴 카드 리스트 (4x4 = 16개) */}
+          <div className="grid grid-cols-4 gap-4 mt-2">
+            {paginatedItems.map((item) => (
+              <Card
+                key={item.id}
+                className={`p-4 cursor-pointer transition-all ${
+                  item.available
+                    ? 'hover:shadow-lg hover:scale-105'
+                    : 'opacity-50 cursor-not-allowed'
+                }`}
+                onClick={() => addToCart(item)}
+              >
+                <div className="text-center">
+                  <div className="text-4xl mb-3">{item.image}</div>
+                  <h3 className="font-medium mb-2">{item.name}</h3>
+                  <div className="text-lg font-semibold text-kpi-red">
+                    {item.price.toLocaleString()}원
                   </div>
-                </Card>
-              ))}
+                  {!item.available && (
+                    <Badge variant="destructive" className="mt-2">
+                      품절
+                    </Badge>
+                  )}
+                </div>
+              </Card>
+            ))}
           </div>
+
+          {/* 숫자 페이지네이션 */}
+          {filteredItems.length > PAGE_SIZE && (
+            <div className="mt-4 flex items-center justify-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => goToPage(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="min-w-16"
+              >
+                이전
+              </Button>
+
+              <div className="flex gap-1 flex-wrap justify-center">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                  <Button
+                    key={p}
+                    variant={p === currentPage ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => goToPage(p)}
+                    className={p === currentPage ? 'bg-kpi-red text-white' : ''}
+                  >
+                    {p}
+                  </Button>
+                ))}
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => goToPage(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="min-w-16"
+              >
+                다음
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* 오른쪽: 주문 내역 */}
