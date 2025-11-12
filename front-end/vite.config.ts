@@ -3,9 +3,8 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import path from 'path'
 
-// command는 'build' 또는 'serve'가 됩니다.
 export default defineConfig(({ command, mode }) => {
-  const baseConfig = {
+  const baseConfig: any = {
     plugins: [react()],
     resolve: {
       extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
@@ -17,22 +16,20 @@ export default defineConfig(({ command, mode }) => {
       strictPort: true,
       open: '/login',
       proxy: {
+        // 프론트는 오직 가맹점 서버로만 프록시
         '/api': {
-          target: 'http://localhost:8082/user',
+          target: 'http://localhost:8082',   // ✅ '/user' 제거
           changeOrigin: true,
-          rewrite: (p) => p.replace(/^\/api/, '/api'),
+          // rewrite 불필요 (경로 보존)
         },
+        // ⚠️ '/admin' 프록시 만들지 마세요 (8081로 새는 원인)
       },
     },
   };
 
-  // 'build' 명령이거나 'android' 모드일 때 base 경로를 추가합니다。
   if (command === 'build' || mode === 'android') {
-    baseConfig.base = '/user/';
+    baseConfig.base = '/user/'; // 빌드 시 자산 경로 기준이면 유지
   }
-  console.log('Vite command:', command);
-  console.log('Vite mode:', mode);
-  console.log('Vite base:', baseConfig.base);
 
   return baseConfig;
-})
+});
