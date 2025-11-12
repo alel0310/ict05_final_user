@@ -1,5 +1,6 @@
 package com.boot.ict05_final_user.domain.menu.entity;
 
+import com.boot.ict05_final_user.domain.inventory.entity.StoreMaterial;
 import com.boot.ict05_final_user.domain.order.entity.CustomerOrder;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -49,13 +50,13 @@ public class MenuUsageMaterialLog {
     private Menu menuFk;
 
     /** 매장 재료 시퀀스 (FK: store_material.store_material_id) */
-//    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-//    @JoinColumn(
-//            name = "store_material_id_fk",
-//            nullable = false,
-//            columnDefinition = "BIGINT UNSIGNED COMMENT '매장 재료 시퀀스 (FK)'"
-//    )
-//    private StoreMaterial storeMaterialFk;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(
+            name = "store_material_id_fk",
+            nullable = false,
+            columnDefinition = "BIGINT UNSIGNED COMMENT '매장 재료 시퀀스 (FK)'"
+    )
+    private StoreMaterial storeMaterialFk;
 
     @Column(name = "menu_usage_material_log_count",
             nullable = false,

@@ -1,22 +1,33 @@
 package com.boot.ict05_final_user.domain.purchaseOrder.repository;
 
-import com.boot.ict05_final_user.domain.purchaseOrder.dto.PurchaseOrderListDTO;
-import com.boot.ict05_final_user.domain.purchaseOrder.dto.PurchaseOrderSearchDTO;
+import com.boot.ict05_final_user.domain.purchaseOrder.dto.*;
+import com.boot.ict05_final_user.domain.purchaseOrder.entity.PurchaseOrder;
+import com.boot.ict05_final_user.domain.purchaseOrder.entity.PurchaseOrderStatus;
 import com.boot.ict05_final_user.domain.purchaseOrder.entity.QPurchaseOrder;
+import com.boot.ict05_final_user.domain.purchaseOrder.entity.QPurchaseOrderDetail;
 import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.stereotype.Repository;
 
 import org.springframework.data.domain.Pageable;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
 @Repository
 @RequiredArgsConstructor
+@Slf4j
 public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCustom{
 
     private final JPAQueryFactory queryFactory;
@@ -50,7 +61,7 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
                 .fetch();
 
         // 전체 카운트 조회
-        long total = queryFactory
+        Long total = queryFactory
                 .select(po.count())
                 .from(po)
                 .where(
@@ -120,5 +131,360 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
         return total;
     }
 
+    // 발주 상세 조회
+    @Override
+    public PurchaseOrderDetailDTO findPurchaseOrderDetail(Long id) {
+        QPurchaseOrder po = QPurchaseOrder.purchaseOrder;
+        QPurchaseOrderDetail pod = QPurchaseOrderDetail.purchaseOrderDetail;
+        // QMaterial material = QMaterial.material;
+
+        // 메인 발주 정보
+        PurchaseOrderDetailDTO header = queryFactory
+                .select(Projections.fields(PurchaseOrderDetailDTO.class,
+                        po.id,
+                        po.orderCode.as("orderCode"),
+                        po.supplier,
+                        po.orderDate.as("orderDate"),
+                        po.actualDeliveryDate.as("actualDeliveryDate"),
+                        po.status,
+                        po.priority,
+                        po.remark.as("notes"),
+                        po.totalPrice.as("totalPrice"),
+                        po.itemCount.as("itemCount")
+                ))
+                .from(po)
+                .where(po.id.eq(id))
+                .fetchOne();
+
+        if (header == null) return null;
+
+        // 발주 상세 품목 리스트
+        List<PurchaseOrderItemDTO> items = queryFactory
+                .select(Projections.fields(PurchaseOrderItemDTO.class,
+                        // material.name,
+                        pod.id,
+                        pod.count.as("count"),
+                        pod.unitPrice.as("unitPrice"),
+                        pod.totalPrice.as("totalPrice")
+                ))
+                .from(pod)
+                // .leftJoin(material).on(material.id.eq(pod.material.id))
+                .where(pod.purchaseOrder.id.eq(id))
+                .fetch();
+
+        System.out.println(
+                queryFactory
+                        .select(pod.count, pod.unitPrice, pod.totalPrice)
+                        .from(pod)
+                        .where(pod.purchaseOrder.id.eq(id))
+                        .fetch()
+        );
+        System.out.println("✅ items: " + items);
+
+        header.setItems(items);
+        return header;
+    }
+
     // 등록
+//    @Override
+//    public long createPurchaseOrder(PurchaseOrderRequestsDTO dto) {
+//
+//        QPurchaseOrder po = QPurchaseOrder.purchaseOrder;
+//        QPurchaseOrderDetail pod = QPurchaseOrderDetail.purchaseOrderDetail;
+//        QMaterial material = QMaterial.material;
+//
+//        // 1️⃣ 발주 코드 생성
+//        String orderCode = generateOrderCode();
+//
+//        // 2️⃣ 첫 번째 품목 Material 정보 조회 (대표 품목 + 공급업체)
+//        Long firstMaterialId = dto.getItems().get(0).getMaterialId();
+//        Material firstMaterialEntity = queryFactory
+//                .selectFrom(material)
+//                .where(material.id.eq(firstMaterialId))
+//                .fetchOne();
+//
+//        if (firstMaterialEntity == null) {
+//            throw new IllegalArgumentException("첫 번째 품목 Material이 존재하지 않습니다. id=" + firstMaterialId);
+//        }
+//
+//        // 3️⃣ 발주 헤더 insert
+//        PurchaseOrder purchaseOrder = PurchaseOrder.builder()
+//                .orderCode(orderCode)
+//                .supplier(firstMaterialEntity.getSupplier())
+//                .mainItemName(firstMaterialEntity.getName())
+//                .priority(dto.getPriority())
+//                .remark(dto.getNotes())
+//                .status(PurchaseOrderStatus.RECEIVED)
+//                .orderDate(LocalDate.now())
+//                .build();
+//
+//        queryFactory.insert(po)
+//                .set(po.orderCode, purchaseOrder.getOrderCode())
+//                .set(po.supplier, purchaseOrder.getSupplier())
+//                .set(po.mainItemName, purchaseOrder.getMainItemName())
+//                .set(po.priority, purchaseOrder.getPriority())
+//                .set(po.remark, purchaseOrder.getRemark())
+//                .set(po.status, purchaseOrder.getStatus())
+//                .set(po.orderDate, purchaseOrder.getOrderDate())
+//                .execute();
+//
+//        // 방금 insert한 발주 ID 조회
+//        Long purchaseOrderId = queryFactory
+//                .select(po.id.max())
+//                .from(po)
+//                .fetchOne();
+//
+//        // 4️⃣ 발주 상세 품목 insert
+//        BigDecimal totalPrice = BigDecimal.ZERO;
+//
+//        for (PurchaseOrderItemDTO itemDTO : dto.getItems()) {
+//            Material m = queryFactory
+//                    .selectFrom(material)
+//                    .where(material.id.eq(itemDTO.getMaterialId()))
+//                    .fetchOne();
+//
+//            if (m == null) throw new IllegalArgumentException("Material 없음 id=" + itemDTO.getMaterialId());
+//
+//            BigDecimal itemTotal = m.getUnitPrice().multiply(BigDecimal.valueOf(itemDTO.getCount()));
+//
+//            queryFactory.insert(pod)
+//                    .set(pod.purchaseOrder.id, purchaseOrderId)
+//                    .set(pod.material.id, m.getId())
+//                    .set(pod.unitPrice, m.getUnitPrice())
+//                    .set(pod.count, itemDTO.getCount())
+//                    .set(pod.totalPrice, itemTotal)
+//                    .execute();
+//
+//            totalPrice = totalPrice.add(itemTotal);
+//        }
+//
+//        // 5️⃣ 총 금액, 품목 수 업데이트
+//        int itemCount = dto.getItems().size();
+//        queryFactory.update(po)
+//                .set(po.totalPrice, totalPrice)
+//                .set(po.itemCount, itemCount)
+//                .where(po.id.eq(purchaseOrderId))
+//                .execute();
+//
+//        return purchaseOrderId;
+//    }
+
+    // 발주 코드 자동 생성
+    private String generateOrderCode() {
+        String prefix = "ORD";
+        String datePart = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        long random = (long) (Math.random() * 9000) + 1000; // 4자리 랜덤
+        return prefix + datePart + random;
+    }
+
+    // 상세 수정
+//    @Override
+//    @Transactional
+//    public void updatePurchaseOrder(Long id, PurchaseOrderRequestsDTO dto) {
+//        QPurchaseOrder po = QPurchaseOrder.purchaseOrder;
+//        QPurchaseOrderDetail pod = QPurchaseOrderDetail.purchaseOrderDetail;
+//        QMaterial material = QMaterial.material;
+//
+//        // 발주 헤더 수정
+//        queryFactory
+//                .update(po)
+//                .set(po.priority, dto.getPriority())
+//                .set(po.remark, dto.getNotes())
+//                .where(po.id.eq(id))
+//                .execute();
+//
+//        // 기존 품목 목록 조회
+//        List<Long> existingIds = queryFactory
+//                .select(pod.material.id) // materialId 기준으로
+//                .from(pod)
+//                .where(pod.purchaseOrder.id.eq(id))
+//                .fetch();
+//
+//        // 요청 DTO의 품목 ID 목록
+//        List<Long> requestIds = dto.getItems().stream()
+//                .map(PurchaseOrderItemDTO::getMaterialId)
+//                .filter(Objects::nonNull)
+//                .toList();
+//
+//        // 삭제 대상 (기존에 있었는데 요청에는 없는 ID)
+//        List<Long> deleteIds = existingIds.stream()
+//                .filter(existingId -> !requestIds.contains(existingId))
+//                .toList();
+//
+//        if (!deleteIds.isEmpty()) {
+//            queryFactory
+//                    .delete(pod)
+//                    .where(pod.material.id.in(deleteIds)
+//                            .and(pod.purchaseOrder.id.eq(id)))
+//                    .execute();
+//        }
+//
+//        // 발주 품목 수정 or 신규 추가
+//        for (PurchaseOrderItemDTO item : dto.getItems()) {
+//
+//            // 재료 단가 가져오기
+//            BigDecimal unitPrice = queryFactory
+//                    .select(material.unitPrice)
+//                    .from(material)
+//                    .where(material.id.eq(item.getMaterialId()))
+//                    .fetchOne();
+//
+//            if (unitPrice == null) {
+//                throw new IllegalArgumentException("존재하지 않는 재료 ID: " + item.getMaterialId());
+//            }
+//
+//            BigDecimal totalPrice = unitPrice.multiply(BigDecimal.valueOf(item.getCount()));
+//
+//            // 기존에 있던 품목이면 수정, 없으면 새로 삽입
+//            Long exists = queryFactory
+//                    .select(pod.id)
+//                    .from(pod)
+//                    .where(pod.purchaseOrder.id.eq(id)
+//                            .and(pod.material.id.eq(item.getMaterialId())))
+//                    .fetchOne();
+//
+//            if (exists != null) {
+//                // 기존 품목 업데이트
+//                queryFactory
+//                        .update(pod)
+//                        .set(pod.count, item.getCount())
+//                        .set(pod.unitPrice, unitPrice)
+//                        .set(pod.totalPrice, totalPrice)
+//                        .where(pod.id.eq(exists))
+//                        .execute();
+//            } else {
+//                // 신규 품목 삽입
+//                queryFactory.insert(pod)
+//                        .columns(pod.purchaseOrder.id, pod.material.id, pod.count, pod.unitPrice, pod.totalPrice)
+//                        .values(id, item.getMaterialId(), item.getCount(), unitPrice, totalPrice)
+//                        .execute();
+//            }
+//        }
+//
+//        // 전체 품목 수 / 총금액 갱신
+//        Long itemCount = queryFactory
+//                .select(pod.count())
+//                .from(pod)
+//                .where(pod.purchaseOrder.id.eq(id))
+//                .fetchOne();
+//
+//        BigDecimal totalAmount = queryFactory
+//                .select(pod.totalPrice.sum())
+//                .from(pod)
+//                .where(pod.purchaseOrder.id.eq(id))
+//                .fetchOne();
+//
+//        queryFactory
+//                .update(po)
+//                .set(po.itemCount, itemCount != null ? itemCount.intValue() : 0)
+//                .set(po.totalPrice, totalAmount != null ? totalAmount : BigDecimal.ZERO)
+//                .where(po.id.eq(id))
+//                .execute();
+//    }
+
+
+    // 발주 전체(헤더+품목) 삭제
+    @Override
+    public void deletePurchaseOrder(Long id) {
+        QPurchaseOrder po = QPurchaseOrder.purchaseOrder;
+        QPurchaseOrderDetail pod = QPurchaseOrderDetail.purchaseOrderDetail;
+
+        // 1️존재 여부 검증
+        Long exists = queryFactory
+                .select(po.id.count())
+                .from(po)
+                .where(po.id.eq(id))
+                .fetchOne();
+
+        if (exists == null || exists == 0) {
+            throw new IllegalArgumentException("존재하지 않는 발주 ID: " + id);
+        }
+
+        // 발주 상세 먼저 삭제 (FK 제약 보호)
+        long deletedDetails = queryFactory.delete(pod)
+                .where(pod.purchaseOrder.id.eq(id))
+                .execute();
+
+        // 발주 헤더 삭제
+        long deletedHeader = queryFactory.delete(po)
+                .where(po.id.eq(id))
+                .execute();
+
+        // 남은 품목 수 다시 계산
+        Long remainingCount = queryFactory
+                .select(pod.count())
+                .from(pod)
+                .where(pod.purchaseOrder.id.eq(id))
+                .fetchOne();
+
+        // 발주 테이블의 품목 수 업데이트
+        queryFactory
+                .update(po)
+                .set(po.itemCount, remainingCount != null ? remainingCount.intValue() : 0)
+                .where(po.id.eq(id))
+                .execute();
+    }
+
+    // 발주 상세 품목 삭제
+    @Override
+    public void deletePurchaseOrderDetail(Long detailId) {
+        QPurchaseOrderDetail pod = QPurchaseOrderDetail.purchaseOrderDetail;
+        QPurchaseOrder po = QPurchaseOrder.purchaseOrder;
+
+        // 삭제할 상세의 발주 ID 조회
+        Long orderId = queryFactory
+                .select(pod.purchaseOrder.id)
+                .from(pod)
+                .where(pod.id.eq(detailId))
+                .fetchOne();
+
+        if (orderId == null) {
+            throw new IllegalArgumentException("해당 발주 상세가 존재하지 않습니다. detailId=" + detailId);
+        }
+
+        // 상세 행 삭제
+        queryFactory
+                .delete(pod)
+                .where(pod.id.eq(detailId))
+                .execute();
+
+        // 남은 상세 수 재계산
+        Long remainingCount = queryFactory
+                .select(pod.count())
+                .from(pod)
+                .where(pod.purchaseOrder.id.eq(orderId))
+                .fetchOne();
+
+        // 남은 상세가 0개면 발주 헤더도 삭제
+        if (remainingCount == null || remainingCount == 0) {
+            queryFactory
+                    .delete(po)
+                    .where(po.id.eq(orderId))
+                    .execute();
+        } else {
+            // 아니면 품목 수만 갱신
+            queryFactory
+                    .update(po)
+                    .set(po.itemCount, remainingCount.intValue())
+                    .where(po.id.eq(orderId))
+                    .execute();
+        }
+    }
+
+    // 본사 상태 연동
+    @Override
+    public Optional<String> findOrderCodeById(Long id) {
+        QPurchaseOrder po = QPurchaseOrder.purchaseOrder;
+
+        String code = queryFactory
+                .select(po.orderCode)
+                .from(po)
+                .where(po.id.eq(id))
+                .fetchOne();
+
+        return Optional.ofNullable(code);
+    }
+
+
+
 }

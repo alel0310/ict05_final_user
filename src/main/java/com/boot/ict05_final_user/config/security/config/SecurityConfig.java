@@ -16,12 +16,11 @@ import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -33,6 +32,7 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity(prePostEnabled = true)
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -45,12 +45,6 @@ public class SecurityConfig {
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
         return configuration.getAuthenticationManager();
-    }
-
-    // 비밀번호 암호화
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
     }
 
     // 권한 계층 (ADMIN > USER)
@@ -66,8 +60,9 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
         // 개발/운영 도메인 추가
-        cfg.setAllowedOrigins(List.of("http://localhost:3000", "http://localhost:5173", "http://localhost"));
-        cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        cfg.setAllowedOrigins(List.of("http://localhost:3000"));
+        cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE","PATCH", "OPTIONS"));
+        cfg.setAllowedHeaders(List.of("Authorization", "Content-Type"));
         cfg.setAllowedHeaders(List.of("*"));
         cfg.setAllowCredentials(true);
         // 쿠키 수신 시 브라우저가 확인 가능한 헤더
@@ -90,28 +85,23 @@ public class SecurityConfig {
 
         // 인가 규칙
         http.authorizeHttpRequests(auth -> auth
-
                 // CORS preflight
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                // SPA UI 및 정적 리소스 (인증 없이 항상 허용)
-                .requestMatchers("/", "/index.html", "/assets/**", "/vite.svg", "/manifest.json", "/robots.txt").permitAll()
-
-
-
-                .requestMatchers("/user/api/auth/**").permitAll()
+                .requestMatchers("/api/auth/**").permitAll()
 
                 // 공개 엔드포인트
                 .requestMatchers("/login").permitAll()
                 .requestMatchers("/jwt/exchange", "/jwt/refresh").permitAll()
-                .requestMatchers(HttpMethod.POST, "/user/exist", "/user","/me", "/user/dashboard/**", "/user/api/**", "/join", "/user/member/exist-email", "/user/member").permitAll()
+                .requestMatchers(HttpMethod.POST, "/exist", "/**","/me","/API/**", "/dashboard/**", "/join", "/member/exist-email", "/member","/API/menu/**").permitAll()
 
+                .requestMatchers(HttpMethod.POST, "/fcm/token", "/fcm/topic/**").authenticated()
 
                 // 인증 필요
+                .requestMatchers(HttpMethod.PATCH, "/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/**").permitAll()
-                .requestMatchers(HttpMethod.PUT, "/user").hasRole(UserRoleType.USER.name())
-                .requestMatchers(HttpMethod.DELETE, "/user").hasRole(UserRoleType.USER.name())
-
+                .requestMatchers(HttpMethod.PUT, "/**").hasRole(UserRoleType.USER.name())
+                .requestMatchers(HttpMethod.DELETE, "/**").hasRole(UserRoleType.USER.name())
 
                 .anyRequest().authenticated()
         );
@@ -126,7 +116,7 @@ public class SecurityConfig {
         http.sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
         // JWT 필터: UsernamePasswordAuthenticationFilter 보다 앞에서 토큰 검증
-		http.addFilterBefore(new JWTFilter(), UsernamePasswordAuthenticationFilter.class);
+        http.addFilterBefore(new JWTFilter(), UsernamePasswordAuthenticationFilter.class);
 
         // 커스텀 로그인 필터: /login 엔드포인트에서 인증 처리 + 성공시 핸들러
         http.addFilterAt(

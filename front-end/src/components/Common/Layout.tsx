@@ -18,7 +18,8 @@ import {
   UserCheck,
   BookOpen,
   Calendar,
-  CircleDollarSign
+  CircleDollarSign,
+  Clock
 } from 'lucide-react';
 import { Button } from '../ui/button';
 
@@ -67,6 +68,7 @@ const storeMenuItems: MenuItem[] = [
     icon: Package,
     children: [
       { id: 'inventory-status', label: '재고 현황', icon: Package },
+      { id: 'inventory-management', label: '재고 관리', icon: Package},
       { id: 'inventory-orders', label: '발주 관리', icon: Truck }
     ]
   },
@@ -89,16 +91,16 @@ const storeMenuItems: MenuItem[] = [
       { id: 'staff-reports', label: '근무리포트', icon: BarChart3 }
     ]
   },
-  { id: 'notice', label: '공지/교육', icon: BookOpen },
-  { 
+        { id: 'notice', label: '공지사항', icon: BookOpen },  { 
     id: 'reports', 
     label: '리포트', 
     icon: BarChart3,
     children: [
-      { id: 'reports-sales', label: '매출 분석', icon: BarChart3 },
-      { id: 'reports-orders', label: '주문 분석', icon: ShoppingCart },
-      { id: 'reports-materials', label: '원재료 분석', icon: Package },
-      { id: 'reports-members', label: '회원 분석', icon: Users }
+      { id: 'kpi-report',      label: 'KPI 분석',     icon: BarChart3 },
+      { id: 'order-report',    label: '주문 분석',     icon: ShoppingCart },
+      { id: 'menu-report',     label: '메뉴 분석',     icon: Package },
+      { id: 'material-report', label: '재료 분석',     icon: Package },
+      { id: 'daytime-report',  label: '시간/요일 분석', icon: Clock }
     ]
   },
 ];

@@ -11,17 +11,13 @@ import { OrderSystem } from "./components/Store/OrderSystem";
 import { OrderList } from "./components/Store/OrderList";
 import { KitchenDisplay } from "./components/Store/KitchenDisplay";
 import { InventoryStatus } from "./components/Store/InventoryStatus";
+import { InventoryManagement } from "./components/Store/InventoryManagement";
 import { InventoryOrders } from "./components/Store/InventoryOrders";
 import { FinanceManagement } from "./components/Store/FinanceManagement";
 import { StaffList } from "./components/Store/StaffList";
 import { StaffPayroll } from "./components/Store/StaffPayroll";
 import { StaffWorkReports } from "./components/Store/StaffWorkReports";
 import { NoticeEducation } from "./components/Store/NoticeEducation";
-import { StoreReports } from "./components/Store/Reports";
-import { ReportsSales } from "./components/Store/ReportsSales";
-import { ReportsOrders } from "./components/Store/ReportsOrders";
-import { ReportsMaterials } from "./components/Store/ReportsMaterials";
-import { ReportsMembers } from "./components/Store/ReportsMembers";
 import { DailyClosingPage } from "./components/Store/DailyClosingPage";
 import { MyPage} from "./components/Common/MyPage";
 import { toast } from "sonner";
@@ -31,6 +27,7 @@ import { OrderProvider } from "./components/Common/OrderContext";
 // src/App.tsx (상단 imports)
 import { StaffSchedule } from "./components/Store/StaffSchedule"; // ⬅️ 추가
 import api from "./lib/authApi";
+import KpiReport from "./components/Store/reports/KpiReport";
  // ✅ 인터셉터/강제로그아웃 핸들러
 
 export default function App() {
@@ -72,6 +69,7 @@ export default function App() {
       case "inventory":
       case "inventory-status": return <ErrorBoundary><InventoryStatus /></ErrorBoundary>;
       case "inventory-orders": return <ErrorBoundary><InventoryOrders /></ErrorBoundary>;
+      case "inventory-management": return <ErrorBoundary><InventoryManagement /></ErrorBoundary>;
       case "finance": return <ErrorBoundary><FinanceManagement /></ErrorBoundary>;
       case "daily-closing": return (<OrderProvider><ErrorBoundary><DailyClosingPage /></ErrorBoundary></OrderProvider>);
       case "mypage": return <ErrorBoundary><MyPage /></ErrorBoundary>
@@ -82,11 +80,7 @@ export default function App() {
       // renderContent() 내부 switch
       case "staff-schedule": return <ErrorBoundary><StaffSchedule /></ErrorBoundary>;
       case "notice": return <ErrorBoundary><NoticeEducation /></ErrorBoundary>;
-      case "reports": return <ErrorBoundary><StoreReports /></ErrorBoundary>;
-      case "reports-sales": return <ErrorBoundary><ReportsSales /></ErrorBoundary>;
-      case "reports-orders": return <ErrorBoundary><ReportsOrders /></ErrorBoundary>;
-      case "reports-materials": return <ErrorBoundary><ReportsMaterials /></ErrorBoundary>;
-      case "reports-members": return <ErrorBoundary><ReportsMembers /></ErrorBoundary>;
+      case "kpi-report": return <ErrorBoundary><KpiReport /></ErrorBoundary>;
       default:
         return (
           <div className="flex items-center justify-center h-64 bg-white rounded-xl shadow-sm">

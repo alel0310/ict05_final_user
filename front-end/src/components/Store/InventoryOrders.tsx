@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import axios from "axios";
-import { Truck, Search, Filter, Eye, CheckCircle, XCircle, Clock, AlertCircle, Package, Download } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import api from "../../lib/authApi";
+import { Truck, Search, Filter, Eye, CheckCircle, XCircle, Clock, AlertCircle, Package, Download, Trash } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -13,49 +13,71 @@ import { toast } from 'sonner';
 export function InventoryOrders() {
   const [orders, setOrders] = useState<any[]>([]);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [originalOrder, setOriginalOrder] = useState<any>(null);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [isEditMode, setIsEditMode] = useState(false);
-
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [totalPages, setTotalPages] = useState(1);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);  // 필터 적용된 총건수
+  const [totalAllElements, setTotalAllElements] = useState(0); // 전체 총건수(필터 미적용)
+  const [statusFilter, setStatusFilter] = useState<'all'|'PENDING'|'RECEIVED'|'SHIPPING'|'DELIVERED'|'CANCELED'>('all');
+  const [activeFilter, setActiveFilter] = useState<string>("ALL");
+  
   useEffect(() => {
-    fetchOrders();
-  }, []);
+    fetchOrders(currentPage, statusFilter);
+  }, [currentPage, statusFilter]);
 
-  const fetchOrders = async () => {
-    try {
-      const res = await axios.get("/api/purchase/list", {
-        params: { page: 0, size: 10 },
-         withCredentials: false, // 세션 안 쓸거면 false. 세션 쓰면 true + CORS 설정 필요
-      });
+  const fetchOrders = async (page = 0, status = statusFilter) => {
+      try {
+    const res = await api.get("/api/purchase/list", {
+      params: {
+        page,
+        size: 10,
+        status: status !== 'all' ? status : undefined, // 서버 필터
+      },
+      withCredentials: false,
+    });
 
       const data = res.data;
-      console.log("✅ API 응답:", data); // <--- 무조건 추가
+      console.log("✅ page:", page, res.data);
+      console.log("🧭 totalPages:", data.totalPages);
+      console.log("📦 totalElements:", data.totalElements);
+      console.log("📄 content.length:", data.content?.length);
+      const list = Array.isArray(data.content) ? data.content : [];
 
-      const list = Array.isArray(data) ? data : data.content || [];
       const fetchedOrders = list.map((po: any) => ({
         id: po.id,
         orderCode: po.orderCode,
         supplier: po.supplier,
         orderDate: po.orderDate,
         actualDate: po.actualDeliveryDate,
-        totalPrice: Number(po.totalPrice ?? 0),
+        totalPrice: (() => {
+          const v = (po.totalPrice ?? 0);
+          return typeof v === 'number' ? v : Number(v);
+        })(),
         status: po.status,
         priority: po.priority,
-        notes: po.remark || '',
-        items: [
-          {
-            mainItemName: po.mainItemName ?? '-',
-            quantity: po.itemCount ?? 0,
-            unitPrice: 0,
-            totalPrice: po.totalPrice ?? 0,
-          },
-        ],
+        notes: po.notes || '',
+        mainItemName: po.mainItemName ?? '-',
+        itemCount: po.itemCount ?? 0,
       }));
 
+      console.log("✅ 전체 건수:", data.totalElements);
       setOrders(fetchedOrders);
+      setTotalPages(data.totalPages || 1);
+      setTotalElements(data.totalElements || 0);
     } catch (error) {
       console.error("🚨 발주 목록 조회 실패:", error);
     }
   };
+
+  // 전체 건수(1회 호출)
+  const fetchTotalAll = async () => {
+    const res = await api.get("/api/purchase/list", { params: { page: 0, size: 1 } }); // status 생략
+    setTotalAllElements(res.data.totalElements ?? 0);
+  };
+  useEffect(() => { fetchTotalAll(); }, []);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -85,25 +107,79 @@ export function InventoryOrders() {
     }
   };
 
-  const filteredOrders = orders;
+  const filteredOrders = useMemo(() => {
+    if (activeFilter === "ALL") return orders;
+    return orders.filter((o) => o.status === activeFilter);
+  }, [orders, activeFilter]);
 
-  const handleOrderDetail = (order: any) => {
-    setSelectedOrder(order);
-    setIsDetailModalOpen(true);
+  const handleOrderDetail = async (order: any) => {
+    console.log("🔍 클릭한 발주 객체:", order);   // 전체 객체 확인
+    console.log("🆔 order.id =", order.id);        // id 값만 확인
+    try {
+      const res = await api.get(`/api/purchase/detail/${order.id}`);
+      console.log("✅ 상세 조회 응답:", res.data);
+      setSelectedOrder(res.data);
+      setIsDetailModalOpen(true);
+    } catch (err) {
+      console.error("❌ 발주 상세 조회 실패:", err);
+      toast.error("상세 정보를 불러올 수 없습니다.");
+    }
+  };
+  
+  const handleSelectOrder = (id: number) => {
+    setSelectedIds(prev =>
+      prev.includes(id)
+        ? prev.filter(i => i !== id)
+        : [...prev, id]
+    );
   };
 
-  const handleStatusChange = (orderId: number, newStatus: string) => {
-    setOrders(prev => prev.map(order => 
-      order.id === orderId 
-        ? { 
-            ...order, 
-            status: newStatus,
-            actualDate: newStatus === 'DELIVERED' ? new Date().toISOString().split('T')[0] : order.actualDate
-          }
-        : order
-    ));
-    toast.success('발주 상태가 업데이트되었습니다.');
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`${selectedIds.length}건의 발주서를 삭제하시겠습니까?`)) return;
+
+    try {
+      await Promise.all(selectedIds.map(id => api.delete(`/api/purchase/${id}`)));
+      toast.success(`${selectedIds.length}건의 발주서가 삭제되었습니다.`);
+      setOrders(prev => prev.filter(order => !selectedIds.includes(order.id)));
+      setSelectedIds([]);
+      fetchOrders(currentPage);
+    } catch (error) {
+      console.error("🚨 발주 삭제 실패:", error);
+      toast.error("삭제 중 오류가 발생했습니다.");
+    }
   };
+
+    const handleStatusChange = async (orderId: number, newStatus: string) => {
+    try {
+      const order = orders.find(o => o.id === orderId);
+      if (!order) return;
+
+      // optimistic UI
+      setOrders(prev => prev.map(o => o.id === orderId
+        ? { ...o, status: newStatus,
+            actualDate: newStatus === "DELIVERED"
+              ? new Date().toISOString().split("T")[0] : o.actualDate }
+        : o));
+
+      // 3️⃣ 가맹점(내 서버) 상태 변경
+      await api.put(`/api/purchase/status/${orderId}`, null, {
+        params: { status: newStatus  },
+      });
+
+      // ✅ 상태 변경 후 서버에서 최신 목록 재조회 (추가된 한 줄)
+     await fetchOrders(currentPage, statusFilter);    
+
+      // 4️⃣ 탭을 자동으로 "검수완료"로 전환
+      setActiveFilter(newStatus );
+
+      toast.success("검수 완료 및 본사 동기화 요청 완료");
+    } catch (error) {
+      console.error("🚨 상태 변경 및 동기화 실패:", error);
+      toast.error("상태 변경에 실패했습니다.");
+    }
+  };
+
 
   // 다운로드 기능
   const handleDownload = async (format: 'excel' | 'pdf') => {
@@ -123,8 +199,8 @@ export function InventoryOrders() {
         실제납기일자: order.actualDate || '-',
         발주상태: getStatusText(order.status),
         우선순위: getPriorityText(order.priority),
-        총금액: `${(order.totalPrice || 0).toLocaleString()}원`,
-        품목수: order.items ? order.items.length : 0,
+        총금액: `${Number(order.totalPrice ?? 0).toLocaleString()}원`,
+        품목수: Number.isFinite(order.itemCount) ? order.itemCount : 0,
         비고: order.notes || '-'
       }));
 
@@ -462,6 +538,18 @@ export function InventoryOrders() {
   };
 
   const orderColumns: Column[] = [
+    {
+      key: "select",
+      label: "",
+      render: (_, row) => (
+        <input
+          type="checkbox"
+          checked={selectedIds.includes(row.id)}
+          onChange={() => handleSelectOrder(row.id)}
+          className="w-4 h-4 accent-kpi-green"
+        />
+      ),
+    },
     { 
       key: 'orderCode', 
       label: '발주번호', 
@@ -483,20 +571,20 @@ export function InventoryOrders() {
       sortable: true,
       render: (value) => <span className="font-medium">{value}</span>
     },
-    { 
-      key: 'items', 
-      label: '발주품목', 
+    {
+      key: 'mainItemName',
+      label: '발주품목',
       sortable: true,
-      render: (items, row) => (
+      render: (value, row) => (
         <div>
-          <div className="font-medium">{items[0]?.mainItemName}</div>
-          {row.items[0]?.quantity > 1 && (
+          <div className="font-medium">{value ?? '-'}</div>
+          {row.itemCount > 1 && (
             <div className="text-xs text-dark-gray">
-              외 {row.items[0].quantity - 1}개
+              외 {row.itemCount - 1}개
             </div>
           )}
         </div>
-      )
+      ),
     },
     { 
       key: 'totalPrice', 
@@ -561,6 +649,16 @@ export function InventoryOrders() {
               접수
             </Button>
           )}
+          {row.status === 'SHIPPING' && (
+            <Button
+              size="sm"
+              className="bg-kpi-purple hover:bg-purple-600 text-white"
+              onClick={() => handleStatusChange(row.id, 'DELIVERED')}
+            >
+              <CheckCircle className="w-3 h-3 mr-1" />
+              검수완료
+            </Button>
+          )}
         </div>
       )
     }
@@ -580,7 +678,7 @@ export function InventoryOrders() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-green-100">총 발주</p>
-              <p className="text-2xl font-bold">{totalOrders}</p>
+              <p className="text-2xl font-bold">{totalAllElements}</p>
             </div>
             <Truck className="w-8 h-8 text-green-200" />
           </div>
@@ -625,6 +723,14 @@ export function InventoryOrders() {
             발주 내역 관리
           </h3>
           <div className="flex items-center gap-3">
+            <Button
+            size="sm"
+            variant="destructive"
+            onClick={handleBulkDelete}
+            disabled={selectedIds.length === 0}
+          >
+            <Trash className="w-3 h-3 mr-1" /> 삭제
+          </Button>
             <DownloadToggle
               onDownload={handleDownload}
               filename={`발주관리_${new Date().toISOString().split('T')[0]}`}
@@ -633,9 +739,9 @@ export function InventoryOrders() {
           </div>
         </div>
 
-        <DataTable
+       <DataTable
           columns={orderColumns}
-          data={filteredOrders}
+          data={orders}             // 서버 데이터 그대로
           title=""
           searchPlaceholder="발주번호, 공급업체, 품목명 검색"
           showActions={false}
@@ -644,14 +750,43 @@ export function InventoryOrders() {
             { label: '접수됨', value: 'RECEIVED' },
             { label: '배송중', value: 'SHIPPING' },
             { label: '검수완료', value: 'DELIVERED' },
-            { label: '취소됨', value: 'CANCELED' }
+            { label: '취소됨', value: 'CANCELED' },
           ]}
+          serverSidePagination
+          serverFilterEnabled        // DataTable이 서버 필터 모드로 동작
+          currentPage={currentPage + 1}   // 1-base
+          totalPageCount={totalPages}
+          totalElements={totalElements}
+          totalDisplayCount={totalAllElements}
+          pageSize={10}
+          pageBlockSize={10}
+          onFilterChange={(value) => {
+            setStatusFilter(value as any); // 상태 저장
+            setCurrentPage(0);             // 1페이지로 리셋
+            fetchOrders(0, value as any);  // 즉시 재조회
+          }}
+          onPageChange={(page) => {
+            setCurrentPage(page - 1);
+            fetchOrders(page - 1, statusFilter);
+          }}
         />
+
       </Card>
 
       {/* 발주 상세 모달 */}
-      <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
-        <DialogContent className="max-w-4xl">
+      <Dialog
+        open={isDetailModalOpen}
+        onOpenChange={(open) => {
+          setIsDetailModalOpen(open);
+          if (!open) {
+            // 모달 닫힐 때 초기화
+            setSelectedOrder(null);
+            setOriginalOrder(null);
+            setIsEditMode(false);
+          }
+        }}>
+        {/* ⬇️ 스크롤 가능 영역: 최대 높이 제한 + 내부 스크롤 */}
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Truck className="w-5 h-5" />
@@ -661,8 +796,8 @@ export function InventoryOrders() {
               선택한 품목들의 발주 정보를 확인하고 수정할 수 있습니다.
             </DialogDescription>
           </DialogHeader>
-          
-          {selectedOrder && (
+
+          {selectedOrder && Array.isArray(selectedOrder.items) && (
             <div className="space-y-6">
               {/* 기본 정보 */}
               <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
@@ -680,7 +815,9 @@ export function InventoryOrders() {
                 </div>
                 <div>
                   <span className="text-sm text-dark-gray">실제납기일</span>
-                  <p className="font-medium">{selectedOrder?.actualDate && selectedOrder.actualDate.trim() !== '' ? selectedOrder.actualDate : '-'}</p>
+                  <p className="font-medium">
+                    {selectedOrder?.actualDate && selectedOrder.actualDate.trim() !== '' ? selectedOrder.actualDate : '-'}
+                  </p>
                 </div>
                 <div>
                   <span className="text-sm text-dark-gray">우선순위</span>
@@ -695,44 +832,44 @@ export function InventoryOrders() {
               {/* 발주 품목 */}
               <div>
                 <h3 className="font-semibold mb-3">발주 품목</h3>
-                <div className="border rounded-lg overflow-hidden">
+
+                {/* ⬇️ 테이블 영역만 별도 스크롤. 헤더 고정 */}
+                <div className="border rounded-lg overflow-hidden max-h-[45vh] overflow-y-auto">
                   <table className="w-full">
-                    <thead className="bg-gray-50">
+                    <thead className="bg-gray-50 sticky top-0 z-10">
                       <tr>
                         <th className="px-4 py-2 text-left">품목명</th>
                         <th className="px-4 py-2 text-center">수량</th>
                         <th className="px-4 py-2 text-right">단가</th>
-                        <th className="px-4 py-2 text-right">금액</th>
+                        {isEditMode && <th className="px-4 py-2 text-right">작업</th>}
                       </tr>
                     </thead>
                     <tbody>
-                      {selectedOrder.items.map((item: any, index: number) => (
+                      {(selectedOrder.items ?? []).map((item: any, index: number) => (
                         <tr key={index} className="border-t">
-                          <td className="px-4 py-3 font-medium">{item.mainItemName}</td>
+                          <td className="px-4 py-3 font-medium">{item.materialName}</td>
 
                           <td className="px-4 py-3 text-center">
                             {isEditMode ? (
                               <Input
                                 type="number"
-                                value={item.itemCount}
+                                value={item.count}
                                 onChange={(e) => {
-                                  const newItemCount = parseInt(e.target.value) || 0;
+                                  const newCount = parseInt(e.target.value) || 0;
                                   setSelectedOrder((prev: any) => ({
                                     ...prev,
                                     items: prev.items.map((it: any, i: number) =>
                                       i === index
                                         ? {
                                             ...it,
-                                            itemCount: newItemCount,
-                                            totalPrice: newItemCount * it.unitPrice,
+                                            count: newCount,
+                                            totalPrice: newCount * it.unitPrice,
                                           }
                                         : it
                                     ),
                                     totalPrice: prev.items.reduce(
                                       (sum: number, it: any, i: number) =>
-                                        i === index
-                                          ? sum + newItemCount * it.unitPrice
-                                          : sum + it.totalPrice,
+                                        i === index ? sum + newCount * it.unitPrice : sum + it.totalPrice,
                                       0
                                     ),
                                   }));
@@ -741,24 +878,50 @@ export function InventoryOrders() {
                                 min="1"
                               />
                             ) : (
-                              <span>
-                                {item.itemCount}
-                                {item.unit}
-                              </span>
+                              <span>{item.count}</span>
                             )}
                           </td>
 
                           <td className="px-4 py-3 text-right">
-                            ₩{item.unitPrice.toLocaleString()}
+                            ₩{(item.unitPrice || 0).toLocaleString()}
                           </td>
                           <td className="px-4 py-3 text-right font-medium">
-                            ₩{item.totalPrice.toLocaleString()}
+                            ₩{(item.totalPrice || 0).toLocaleString()}
                           </td>
+
+                          {isEditMode && (
+                            <td className="px-4 py-3 text-right">
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={async () => {
+                                  if (!window.confirm('이 품목을 삭제하시겠습니까?')) return;
+                                  try {
+                                    await api.delete(`/api/purchase/detail/item/${item.id}`);
+                                    toast.success('품목이 삭제되었습니다.');
+                                    setSelectedOrder((prev: any) => {
+                                      const updatedItems = prev.items.filter((i: any) => i.id !== item.id);
+                                      if (updatedItems.length === 0) {
+                                        setIsDetailModalOpen(false);
+                                        fetchOrders(currentPage);
+                                      }
+                                      return { ...prev, items: updatedItems };
+                                    });
+                                  } catch (error) {
+                                    console.error('🚨 품목 삭제 실패:', error);
+                                    toast.error('품목 삭제에 실패했습니다.');
+                                  }
+                                }}
+                              >
+                                삭제
+                              </Button>
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
 
-                    <tfoot className="bg-gray-50 font-semibold">
+                    <tfoot className="bg-gray-50">
                       <tr>
                         <td colSpan={3} className="px-4 py-3 text-right">
                           총 발주 금액:
@@ -772,7 +935,6 @@ export function InventoryOrders() {
                 </div>
               </div>
 
-
               <div>
                 {/* 우선순위 */}
                 <div>
@@ -780,9 +942,7 @@ export function InventoryOrders() {
                   {isEditMode ? (
                     <select
                       value={selectedOrder.priority}
-                      onChange={(e) =>
-                        setSelectedOrder({ ...selectedOrder, priority: e.target.value })
-                      }
+                      onChange={(e) => setSelectedOrder({ ...selectedOrder, priority: e.target.value })}
                       className="border rounded-md px-2 py-1 text-sm"
                     >
                       <option value="NORMAL">일반</option>
@@ -799,9 +959,7 @@ export function InventoryOrders() {
                   {isEditMode ? (
                     <textarea
                       value={selectedOrder.notes}
-                      onChange={(e) =>
-                        setSelectedOrder({ ...selectedOrder, notes: e.target.value })
-                      }
+                      onChange={(e) => setSelectedOrder({ ...selectedOrder, notes: e.target.value })}
                       className="w-full border rounded-lg p-2 text-sm"
                       rows={3}
                     />
@@ -816,9 +974,32 @@ export function InventoryOrders() {
                 {isEditMode ? (
                   <>
                     <Button
-                      onClick={() => {
-                        toast.success('발주 정보가 수정되었습니다.');
-                        setIsEditMode(false);
+                      onClick={async () => {
+                        try {
+                          const payload = {
+                            priority: selectedOrder.priority,
+                            notes: selectedOrder.notes,
+                            items: selectedOrder.items.map((item: any) => ({
+                              id: item.id,
+                              count: item.count,
+                              unitPrice: item.unitPrice,
+                              totalPrice: item.totalPrice,
+                            })),
+                          };
+
+                          await api.put(`/api/purchase/${selectedOrder.id}`, payload, {
+                            withCredentials: false,
+                            headers: { 'Content-Type': 'application/json' },
+                          });
+
+                          toast.success('발주 정보가 수정되었습니다.');
+                          setIsEditMode(false);
+                          setOriginalOrder(JSON.parse(JSON.stringify(selectedOrder)));
+                          fetchOrders();
+                        } catch (error) {
+                          console.error('🚨 발주 수정 실패:', error);
+                          toast.error('발주 수정에 실패했습니다.');
+                        }
                       }}
                       className="bg-kpi-green text-white hover:bg-green-600"
                     >
@@ -826,16 +1007,16 @@ export function InventoryOrders() {
                     </Button>
                     <Button
                       variant="outline"
-                      onClick={() => setIsEditMode(false)}
+                      onClick={() => {
+                        if (originalOrder) setSelectedOrder(JSON.parse(JSON.stringify(originalOrder)));
+                        setIsEditMode(false);
+                      }}
                     >
                       취소
                     </Button>
                   </>
                 ) : (
-                  <Button
-                    variant="outline"
-                    onClick={() => setIsEditMode(true)}
-                  >
+                  <Button variant="outline" onClick={() => setIsEditMode(true)}>
                     수정
                   </Button>
                 )}
@@ -844,6 +1025,7 @@ export function InventoryOrders() {
           )}
         </DialogContent>
       </Dialog>
+
     </div>
   );
 }

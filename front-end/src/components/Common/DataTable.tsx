@@ -2,29 +2,17 @@ import React, { useState, useMemo } from 'react';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Badge } from '../ui/badge';
-import { 
-  Search, 
-  Filter, 
-  Download, 
-  MoreHorizontal,
-  ChevronUp,
-  ChevronDown,
-  Edit,
-  Trash2,
-  Eye
-} from 'lucide-react';
-import { 
+import { Download, MoreHorizontal, ChevronUp, ChevronDown, Edit, Trash2, Eye, Search } from 'lucide-react';
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
-import { StatusBadge } from './StatusBadge';
 
 export interface Column<Row = any> {
   key: string;
-  label: string | React.ReactNode; // ✅ ReactNode 허용
+  label: string | React.ReactNode;
   sortable?: boolean;
   width?: string;
   render?: (value: any, row: Row) => React.ReactNode;
@@ -44,97 +32,138 @@ export interface DataTableProps {
   filters?: { label: string; value: string; count?: number }[];
   onExport?: () => void;
   hideSearch?: boolean;
+
+  // ✅ 추가된 서버 페이징 관련 props
+  serverSidePagination?: boolean;
+  currentPage?: number; // 외부 제어
+  totalPageCount?: number;
+  onPageChange?: (page: number) => void;
+  totalElements?: number;
+  totalDisplayCount?: number; 
+
+  pageSize?: number;          // 표시에만 사용(서버모드), 기본 10
+  pageBlockSize?: number;     // 블록 크기, 기본 10
+
+  serverFilterEnabled?: boolean;
+  onFilterChange?: (value: string) => void;
 }
 
 export function DataTable({
   data = [],
   columns = [],
-  title = "데이터 테이블",
-  searchPlaceholder = "검색어를 입력하세요",
+  title = '데이터 테이블',
+  searchPlaceholder = '검색어를 입력하세요',
   onAdd,
   onEdit,
   onDelete,
   onView,
-  addButtonText = "등록",
+  addButtonText = '등록',
   showActions = true,
   filters = [],
   onExport,
-  hideSearch = false
+  hideSearch = false,
+
+  // ✅ 추가된 props 기본값
+  serverSidePagination = false,
+  currentPage: externalPage = 1,
+  totalPageCount: externaltotalPageCount = 1,
+  onPageChange,
+  totalElements = 0,
+  totalDisplayCount,
+
+  pageSize = 10,
+  pageBlockSize = 10,
+
+  serverFilterEnabled = false,
+  onFilterChange,
 }: DataTableProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [activeFilter, setActiveFilter] = useState<string>('all');
-  const [currentPage, setCurrentPage] = useState(1);
+
+  // ✅ 내부 페이지 상태 (클라이언트 모드에서만 사용)
+  const [internalPage, setInternalPage] = useState(1);
   const [itemsPerPage] = useState(10);
 
-  // Validate props
-  React.useEffect(() => {
-    if (!Array.isArray(data)) {
-      console.warn('DataTable: data prop is not an array:', data);
-    }
-    if (!Array.isArray(columns)) {
-      console.warn('DataTable: columns prop is not an array:', columns);
-    }
-  }, [data, columns]);
+  const isServerFilter = serverSidePagination && serverFilterEnabled;
 
-  // 검색 및 필터링
+  // ✅ 서버모드일 때 외부 페이지, 아니면 내부 페이지
+  const currentPage = serverSidePagination ? externalPage : internalPage;
+
+  // 헤더 표시용 총개수 선택
+  const headerTotal = totalDisplayCount ?? (serverSidePagination ? totalElements : data.length);
+
+  // 필터링
   const filteredData = useMemo(() => {
-    // 안전한 data 배열 확인
-    const safeData = Array.isArray(data) ? data.filter(row => row && typeof row === 'object') : [];
-    let filtered = safeData;
+    const safe = Array.isArray(data)
+      ? data.filter((row) => row && typeof row === "object")
+      : [];
 
-    // hideSearch가 true이면 검색하지 않음
-    if (!hideSearch && searchTerm && filtered.length > 0) {
-      filtered = filtered.filter(row => {
-        if (!row || typeof row !== 'object') return false;
-        
-        return Object.values(row).some(value => {
-          if (value === null || value === undefined) return false;
-          try {
-            return String(value).toLowerCase().includes(searchTerm.toLowerCase());
-          } catch (error) {
-            console.warn('DataTable search error:', error, value);
-            return false;
-          }
-        });
-      });
+    let out = safe;
+
+    // 로컬 검색(서버가 검색 처리하지 않는 경우만 유지)
+    if (!hideSearch && searchTerm) {
+      const q = searchTerm.toLowerCase();
+      out = out.filter((row) =>
+        Object.values(row).some((v) =>
+          String(v ?? "").toLowerCase().includes(q)
+        )
+      );
     }
 
-    // 필터
-    if (activeFilter !== 'all' && filtered.length > 0) {
-      filtered = filtered.filter(row => {
-        if (!row || typeof row !== 'object') return false;
-        // 상태 필터링 (status 필드 기준)
-        return row.status === activeFilter;
-      });
+    // 서버 필터 모드에선 상태 필터를 로컬에서 적용하지 않음
+    if (!isServerFilter && activeFilter !== "all") {
+      out = out.filter((row: any) => row.status === activeFilter);
     }
 
-    return filtered;
-  }, [data, searchTerm, activeFilter, hideSearch]);
+    return out;
+  }, [
+    data,
+    searchTerm,
+    activeFilter,
+    hideSearch,
+    serverSidePagination,
+    serverFilterEnabled,
+  ]);
 
   // 정렬
   const sortedData = useMemo(() => {
-    if (!sortColumn || !Array.isArray(filteredData)) return filteredData;
-
+    if (!sortColumn) return filteredData;
     return [...filteredData].sort((a, b) => {
       const aValue = a[sortColumn];
       const bValue = b[sortColumn];
-      
       if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
       if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
   }, [filteredData, sortColumn, sortDirection]);
 
-  // 페이지네이션
+  // ✅ 페이지 데이터 계산
   const paginatedData = useMemo(() => {
-    if (!Array.isArray(sortedData)) return [];
+    if (serverSidePagination) return sortedData;
     const startIndex = (currentPage - 1) * itemsPerPage;
     return sortedData.slice(startIndex, startIndex + itemsPerPage);
-  }, [sortedData, currentPage, itemsPerPage]);
+  }, [sortedData, currentPage, itemsPerPage, serverSidePagination]);
 
-  const totalPages = Math.ceil((Array.isArray(sortedData) ? sortedData.length : 0) / itemsPerPage);
+  const totalPageCount = serverSidePagination
+    ? externaltotalPageCount
+    : Math.ceil(sortedData.length / itemsPerPage);
+
+  const rangeStart = serverSidePagination
+    ? (currentPage - 1) * pageSize + 1
+    : (currentPage - 1) * itemsPerPage + 1;
+
+  const rangeEnd = serverSidePagination
+    ? Math.min(currentPage * pageSize, totalElements)
+    : Math.min(currentPage * itemsPerPage, sortedData.length);
+
+  const totalCountForDisplay = serverSidePagination ? totalElements : sortedData.length;
+
+  const blockStart = Math.floor((currentPage - 1) / pageBlockSize) * pageBlockSize + 1;
+  const blockEnd = Math.min(blockStart + pageBlockSize - 1, totalPageCount);
+  const hasPrevBlock = blockStart > 1;
+  const hasNextBlock = blockEnd < totalPageCount;
 
   const handleSort = (columnKey: string) => {
     if (sortColumn === columnKey) {
@@ -147,9 +176,7 @@ export function DataTable({
 
   const renderSortIcon = (columnKey: string) => {
     if (sortColumn !== columnKey) return null;
-    return sortDirection === 'asc' ? 
-      <ChevronUp className="w-4 h-4" /> : 
-      <ChevronDown className="w-4 h-4" />;
+    return sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />;
   };
 
   return (
@@ -159,10 +186,9 @@ export function DataTable({
         <div>
           <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
           <p className="text-sm text-dark-gray">
-            총 {filteredData.length}개 항목
+            총 {headerTotal}개 항목
           </p>
         </div>
-        
         <div className="flex items-center gap-3">
           {onExport && (
             <Button variant="outline" onClick={onExport} className="gap-2">
@@ -171,10 +197,7 @@ export function DataTable({
             </Button>
           )}
           {onAdd && (
-            <Button 
-              onClick={onAdd}
-              className="bg-kpi-red hover:bg-red-600 text-white gap-2"
-            >
+            <Button onClick={onAdd} className="bg-kpi-red hover:bg-red-600 text-white gap-2">
               <span>+ {addButtonText}</span>
             </Button>
           )}
@@ -185,7 +208,6 @@ export function DataTable({
       {!hideSearch && (
         <Card className="p-4 bg-white rounded-xl shadow-sm">
           <div className="flex flex-col lg:flex-row gap-4">
-            {/* Search */}
             <div className="flex-1 relative">
               <Search className="w-5 h-5 text-dark-gray absolute left-3 top-1/2 transform -translate-y-1/2" />
               <Input
@@ -195,33 +217,61 @@ export function DataTable({
                 className="pl-10"
               />
             </div>
-
-            {/* Filter Tabs */}
             {filters.length > 0 && (
               <div className="flex flex-wrap gap-2">
+                {/* 전체 버튼 예시(값이 'all'이라고 가정) */}
                 <button
-                  onClick={() => setActiveFilter('all')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    activeFilter === 'all'
-                      ? 'bg-kpi-red text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  onClick={() => {
+                    setActiveFilter("all");
+                    if (isServerFilter) {
+                      onFilterChange && onFilterChange("all");
+                      onPageChange && onPageChange(1);
+                    } else {
+                      setInternalPage(1);
+                    }
+                  }}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                    activeFilter === 'all' ? 'bg-kpi-red text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
-                  전체 ({data.length})
+                  전체
                 </button>
-                {filters.map((filter) => (
-                  <button
-                    key={filter.value}
-                    onClick={() => setActiveFilter(filter.value)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      activeFilter === filter.value
-                        ? 'bg-kpi-red text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {filter.label} {filter.count && `(${filter.count})`}
-                  </button>
-                ))}
+
+                {(filters ?? []).map((filter) => {
+                  const zero = typeof filter.count === 'number' && filter.count === 0 && filter.value !== 'all';
+                  const isActive = activeFilter === filter.value;
+
+                  const base =
+                    'px-4 py-2 rounded-lg text-sm font-medium transition-colors';
+                  const style = zero
+                    ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                    : isActive
+                      ? 'bg-kpi-red text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200';
+
+                  return (
+                    <button
+                      key={filter.value}
+                      disabled={zero}
+                      onClick={() => {
+                        if (zero) return; // 0건이면 서버 호출 금지
+                        setActiveFilter(filter.value);
+                        if (isServerFilter) {
+                          onFilterChange && onFilterChange(filter.value);
+                          onPageChange && onPageChange(1);
+                        } else {
+                          setInternalPage(1);
+                        }
+                      }}
+                      className={`${base} ${style}`}
+                      aria-disabled={zero}
+                    >
+                      {filter.label}
+                      {filter.value !== 'all' && typeof filter.count === 'number' ? ` (${filter.count})` : ''}
+                    </button>
+                  );
+                })}
+
               </div>
             )}
           </div>
@@ -234,45 +284,33 @@ export function DataTable({
           <table className="w-full">
             <thead className="bg-light-gray border-b">
               <tr>
-                {columns.filter(column => column && column.key).map((column) => (
+                {columns.map((col) => (
                   <th
-                    key={column.key}
+                    key={col.key}
                     className={`px-6 py-4 text-left text-sm font-semibold text-gray-900 ${
-                      column.sortable ? 'cursor-pointer hover:bg-gray-100' : ''
-                    } ${column.width ? column.width : ''}`}
-                    onClick={() => column.sortable && handleSort(column.key)}
+                      col.sortable ? 'cursor-pointer hover:bg-gray-100' : ''
+                    }`}
+                    onClick={() => col.sortable && handleSort(col.key)}
                   >
                     <div className="flex items-center gap-2">
-                      {column.label}
-                      {column.sortable && renderSortIcon(column.key)}
+                      {col.label}
+                      {col.sortable && renderSortIcon(col.key)}
                     </div>
                   </th>
                 ))}
-                {showActions && (
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900 w-24">
-                    액션
-                  </th>
-                )}
+                {showActions && <th className="px-6 py-4 text-sm font-semibold text-gray-900 w-24">액션</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {paginatedData.map((row, index) => (
-                <tr key={index} className="hover:bg-gray-50 transition-colors">
-                  {columns.filter(column => column && column.key).map((column) => (
-                    <td key={column.key} className="px-6 py-4 text-sm text-gray-900">
-                      {(() => {
-                        try {
-                          const value = row?.[column.key];
-                          return column.render ? column.render(value, row) : value || '-';
-                        } catch (error) {
-                          console.warn('DataTable render error:', error);
-                          return '-';
-                        }
-                      })()}
+              {paginatedData.map((row, i) => (
+                <tr key={i} className="hover:bg-gray-50">
+                  {columns.map((col) => (
+                    <td key={col.key} className="px-6 py-4 text-sm text-gray-900">
+                      {col.render ? col.render(row[col.key], row) : row[col.key] ?? '-'}
                     </td>
                   ))}
                   {showActions && (
-                    <td className="px-6 py-4 text-sm">
+                    <td className="px-6 py-4">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="sm">
@@ -282,23 +320,17 @@ export function DataTable({
                         <DropdownMenuContent align="end">
                           {onView && (
                             <DropdownMenuItem onClick={() => onView(row)}>
-                              <Eye className="w-4 h-4 mr-2" />
-                              상세보기
+                              <Eye className="w-4 h-4 mr-2" /> 상세보기
                             </DropdownMenuItem>
                           )}
                           {onEdit && (
                             <DropdownMenuItem onClick={() => onEdit(row)}>
-                              <Edit className="w-4 h-4 mr-2" />
-                              수정
+                              <Edit className="w-4 h-4 mr-2" /> 수정
                             </DropdownMenuItem>
                           )}
                           {onDelete && (
-                            <DropdownMenuItem 
-                              onClick={() => onDelete(row)}
-                              className="text-red-600"
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              삭제
+                            <DropdownMenuItem onClick={() => onDelete(row)} className="text-red-600">
+                              <Trash2 className="w-4 h-4 mr-2" /> 삭제
                             </DropdownMenuItem>
                           )}
                         </DropdownMenuContent>
@@ -311,54 +343,68 @@ export function DataTable({
           </table>
         </div>
 
-        {/* Empty State */}
         {paginatedData.length === 0 && (
           <div className="text-center py-12">
             <p className="text-dark-gray">데이터가 없습니다.</p>
           </div>
         )}
 
-        {/* Pagination */}
-        {totalPages > 1 && (
+        {/* ✅ Pagination */}
+        {totalPageCount > 1 && (
           <div className="px-6 py-4 border-t bg-light-gray flex items-center justify-between">
             <p className="text-sm text-dark-gray">
-              {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, sortedData.length)} / {sortedData.length}개
+              {rangeStart} - {rangeEnd} / {totalCountForDisplay}개
             </p>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage(currentPage - 1)}
-              >
-                이전
-              </Button>
-              
-              <div className="flex items-center gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                  <Button
-                    key={page}
-                    variant={currentPage === page ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setCurrentPage(page)}
-                    className={currentPage === page ? "bg-kpi-red text-white" : ""}
-                  >
-                    {page}
-                  </Button>
-                ))}
-              </div>
 
+            <div className="flex items-center gap-1">
+              {/* 첫 페이지, 이전 블록 */}
               <Button
-                variant="outline"
-                size="sm"
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage(currentPage + 1)}
+                variant="outline" size="sm"
+                disabled={currentPage === 1}
+                onClick={() => onPageChange && onPageChange(1)}
               >
-                다음
+                «
+              </Button>
+              <Button
+                variant="outline" size="sm"
+                disabled={!hasPrevBlock}
+                onClick={() => onPageChange && onPageChange(blockStart - 1)}
+              >
+                ‹
+              </Button>
+
+              {/* 블록 내 페이지들 */}
+              {Array.from({ length: blockEnd - blockStart + 1 }, (_, i) => blockStart + i).map((page) => (
+                <Button
+                  key={page}
+                  variant={currentPage === page ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => onPageChange && onPageChange(page)}
+                  className={currentPage === page ? "bg-kpi-red text-white" : ""}
+                >
+                  {page}
+                </Button>
+              ))}
+
+              {/* 다음 블록, 마지막 페이지 */}
+              <Button
+                variant="outline" size="sm"
+                disabled={!hasNextBlock}
+                onClick={() => onPageChange && onPageChange(blockEnd + 1)}
+              >
+                ›
+              </Button>
+              <Button
+                variant="outline" size="sm"
+                disabled={currentPage === totalPageCount}
+                onClick={() => onPageChange && onPageChange(totalPageCount)}
+              >
+                »
               </Button>
             </div>
           </div>
         )}
+
       </Card>
     </div>
   );

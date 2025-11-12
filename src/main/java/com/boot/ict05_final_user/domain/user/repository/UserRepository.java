@@ -6,7 +6,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
-public interface UserRepository extends JpaRepository<Member, Long> {
+public interface UserRepository extends JpaRepository<Member, Long>, UserRepositoryCustom {
 
     // username 대신 email을 아이디로 사용
     boolean existsByEmail(String email);

@@ -153,6 +153,9 @@ export function InventoryStatus() {
     setIsCartModalOpen(true);
   };
 
+  const [status, setStatus] = useState<string | undefined>(undefined); // 'PENDING' | 'RECEIVED' | ...
+  const [q, setQ] = useState('');       
+
   // 다운로드 기능
   const handleDownload = async (format: 'excel' | 'pdf') => {
     try {
