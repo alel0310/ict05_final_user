@@ -15,13 +15,13 @@ import java.math.BigDecimal;
  * </ul>
  */
 public enum InventoryStatus {
-    /** 충분 */
+    /** 충분 : 정정 재고 이상 */
     SUFFICIENT("충분"),
 
-    /** 부족 */
+    /** 부족 : 적정 재고 미만 */
     LOW("부족"),
 
-    /** 품절 */
+    /** 품절 : 재고 0이하 */
     SHORTAGE("품절");
 
     /** 한글 설명 */
@@ -45,19 +45,24 @@ public enum InventoryStatus {
         return description;
     }
 
-
     /**
-     * 현재 수량과 적정 수량을 기준으로 재고 상태를 계산한다.
+     * 상태 계산. null-safe.
+     *
+     * <ul>
+     *   <li>quantity ≤ 0 → SHORTAGE</li>
+     *   <li>optimal == null → quantity &gt; 0이면 SUFFICIENT</li>
+     *   <li>quantity &lt; optimal → LOW</li>
+     *   <li>그 외 SUFFICIENT</li>
+     * </ul>
      */
-    public static InventoryStatus calculate(BigDecimal quantity, BigDecimal optimalQuantity) {
-        if (quantity == null || quantity.compareTo(BigDecimal.ZERO) == 0) {
-            return SHORTAGE;
-        }
-        if (optimalQuantity == null) {
-            return SUFFICIENT;
-        }
+    public static InventoryStatus from(BigDecimal quantity, BigDecimal optimalQuantity) {
+        if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0) return SHORTAGE;
+        if (optimalQuantity == null) return SUFFICIENT;
+        return quantity.compareTo(optimalQuantity) < 0 ? LOW : SUFFICIENT;
+    }
 
-        BigDecimal threshold = optimalQuantity.multiply(new BigDecimal("0.3"));
-        return quantity.compareTo(threshold) < 0 ? LOW : SUFFICIENT;
+    /** backward-compat alias */
+    public static InventoryStatus calculate(BigDecimal quantity, BigDecimal optimalQuantity) {
+        return from(quantity, optimalQuantity);
     }
 }
