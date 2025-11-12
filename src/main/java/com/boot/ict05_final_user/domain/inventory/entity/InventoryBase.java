@@ -67,7 +67,7 @@ public abstract class InventoryBase {
      * </ul>
      */
     public final void updateStatusNow() {
-        this.status = InventoryStatus.calculate(this.quantity, this.optimalQuantity);
+        this.status = InventoryStatus.from(this.quantity, this.optimalQuantity);
     }
 
     /**
