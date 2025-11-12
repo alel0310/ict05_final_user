@@ -7,6 +7,7 @@ import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Progress } from '../ui/progress';
+import api from '../../lib/authApi';
 import {
   Package,
   AlertTriangle,
@@ -64,6 +65,16 @@ interface Order {
   total: number;
 }
 
+interface PurchaseOrderItemDTO {
+  materialId: number;   // 재고(자재) ID = item.id
+  count: number;        // 발주 수량
+}
+interface PurchaseOrderRequestsDTO {
+  priority: 'NORMAL' | 'URGENT';
+  notes?: string;
+  items: PurchaseOrderItemDTO[];
+}
+
 // 장바구니용 확장 타입
 type CartItem = InventoryItem & { orderQuantity: number; totalPrice: number };
 
@@ -108,7 +119,6 @@ const sampleOrders: Order[] = [
 ======================= */
 
 export function InventoryManagement() {
-  const [currentView, setCurrentView] = useState<'inventory' | 'orders'>('inventory');
   const [inventory, setInventory] = useState<InventoryItem[]>(sampleInventory);
   const [orders, setOrders] = useState<Order[]>(sampleOrders);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -506,34 +516,6 @@ export function InventoryManagement() {
     return daysUntilExpiry <= 7 && daysUntilExpiry > 0;
   }).length;
 
-  if (currentView === 'orders') {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">발주 관리</h2>
-            <p className="text-sm text-dark-gray">발주 현황 및 관리</p>
-          </div>
-          <div className="flex gap-3">
-            <Button onClick={() => setCurrentView('inventory')} variant="outline">재고 관리</Button>
-            <Button onClick={handleOrder} className="bg-kpi-red hover:bg-red-600 text-white">
-              <Plus className="w-4 h-4 mr-2" />새 발주
-            </Button>
-          </div>
-        </div>
-
-        <DataTable
-          data={orders}
-          columns={orderColumns}
-          title="발주 목록"
-          searchPlaceholder="발주번호, 공급업체로 검색"
-          filters={orderFilters}
-          showActions={false}
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       {/* 요약 카드 */}
@@ -590,9 +572,6 @@ export function InventoryManagement() {
           <p className="text-sm text-dark-gray">재고 현황 및 관리</p>
         </div>
         <div className="flex gap-3">
-          <Button onClick={() => setCurrentView('orders')} variant="outline">
-            <Truck className="w-4 h-4 mr-2" />발주 관리
-          </Button>
           <Button onClick={handleRegisterItem} variant="outline" className="border-kpi-green text-kpi-green hover:bg-green-50">
             <Plus className="w-4 h-4 mr-2" />자재 등록
           </Button>
@@ -710,28 +689,53 @@ export function InventoryManagement() {
                 setCartItems(prev => prev.filter(item => item.id !== itemId));
                 setSelectedItems(prev => prev.filter(id => id !== itemId));
               }}
-              onSubmitOrder={orderData => {
-                // orders 스키마에 맞춰 생성
-                const newOrder: Order = {
-                  id: `PO-${String(Date.now()).slice(-6)}`,
-                  items: cartItems.map(ci => ({
-                    name: ci.name,
-                    quantity: ci.orderQuantity,
-                    unit: ci.unit,
-                    unitPrice: ci.unitPrice
-                  })),
-                  supplier: orderData.supplier,
-                  orderDate: new Date().toISOString().split('T')[0],
-                  expectedDate: orderData.expectedDate,
-                  status: 'pending',
-                  total: cartItems.reduce((sum, ci) => sum + ci.totalPrice, 0)
-                };
+              onSubmitOrder={async ({ priority, notes }) => {
+                try {
+                  if (cartItems.length === 0) {
+                    toast.error('발주 품목을 추가해주세요.');
+                    return;
+                  }
+                  if (cartItems.some(ci => ci.orderQuantity <= 0)) {
+                    toast.error('발주 수량을 확인해주세요.');
+                    return;
+                  }
 
-                setOrders(prev => [newOrder, ...prev]);
-                setIsCartModalOpen(false);
-                setSelectedItems([]);
-                setCartItems([]);
-                toast.success(`${newOrder.items.length}개 품목의 발주가 등록되었습니다.`);
+                  // 1) DTO 구성
+                  const dto: PurchaseOrderRequestsDTO = {
+                    priority: (priority as 'NORMAL' | 'URGENT') ?? 'NORMAL',
+                    notes: notes?.trim() || '',
+                    items: cartItems.map(ci => ({
+                      materialId: ci.id,       // ⚠️ InventoryItem.id가 StoreMaterial.id와 같다는 전제
+                      count: ci.orderQuantity,
+                    })),
+                  };
+
+                  // 2) 백엔드 호출
+                  const res = await api.post<number>('/api/purchase/create', dto);
+
+                  // 3) UX 업데이트
+                  toast.success(`발주 등록 완료 #${res.data}`);
+                  setIsCartModalOpen(false);
+                  setSelectedItems([]);
+                  setCartItems([]);
+
+                  // 상단 카드(처리 중 발주) 숫자만 즉시 반영하고 싶으면 임시로 pending 추가
+                  setOrders(prev => [
+                    {
+                      id: String(res.data),
+                      items: cartItems.map(ci => ({ name: ci.name, quantity: ci.orderQuantity, unit: ci.unit, unitPrice: ci.unitPrice })),
+                      supplier: (cartItems[0] as any)?.supplier ?? '미지정',
+                      orderDate: new Date().toISOString().split('T')[0],
+                      expectedDate: '', // 서버에서 관리
+                      status: 'pending',
+                      total: cartItems.reduce((s, ci) => s + ci.totalPrice, 0),
+                    },
+                    ...prev,
+                  ]);
+                } catch (e: any) {
+                  console.error(e);
+                  toast.error(e?.response?.data?.message || '발주 등록 중 오류가 발생했습니다.');
+                }
               }}
             />
           )}
@@ -915,9 +919,17 @@ function OrderCartContent({
   items: CartItem[];
   onUpdateQuantity: (itemId: number, quantity: number) => void;
   onRemoveItem: (itemId: number) => void;
-  onSubmitOrder: (orderData: { supplier: string; expectedDate: string; priority: string; notes: string }) => void;
+  onSubmitOrder: (orderData: {
+    supplier: string;
+    expectedDate: string;
+    priority: string;
+    notes: string;
+  }) => void;
 }) {
-  const [orderForm, setOrderForm] = useState({ supplier: '', expectedDate: '', priority: 'normal', notes: '' });
+  const [orderForm, setOrderForm] = useState<{ priority: string; notes: string }>({
+    priority: 'NORMAL',
+    notes: '',
+  });
 
   const totalAmount = items.reduce((sum, item) => sum + item.totalPrice, 0);
   const totalItems = items.reduce((sum, item) => sum + item.orderQuantity, 0);
@@ -927,80 +939,91 @@ function OrderCartContent({
     if (quantity >= 0) onUpdateQuantity(itemId, quantity);
   };
 
+  // 품목에서 공급업체 추론 (아이템에 supplier 속성이 있다고 가정)
+  const inferSupplier = () => {
+    if (items.length === 0) return '미지정';
+    const first = (items[0] as any).supplier as string | undefined;
+    const allSame =
+      !!first && items.every((it) => (it as any).supplier === first);
+    if (allSame && first) return first;
+    const hasAny = items.some((it) => !!(it as any).supplier);
+    return hasAny ? '여러 공급처' : '미지정';
+  };
+
   const handleSubmit = () => {
-    if (!orderForm.supplier || !orderForm.expectedDate) {
-      toast.error('공급업체와 희망 납기일을 입력해주세요.');
+    if (items.length === 0) {
+      toast.error('발주 품목을 추가해주세요.');
       return;
     }
-    if (items.some(item => item.orderQuantity <= 0)) {
+    if (items.some((item) => item.orderQuantity <= 0)) {
       toast.error('발주 수량을 확인해주세요.');
       return;
     }
-    onSubmitOrder(orderForm);
-  };
+
+    onSubmitOrder({
+      supplier: inferSupplier(),   // 위에 정의한 보조 함수
+      expectedDate: '',            // 입력 제거로 빈값 전달
+      priority: orderForm.priority,
+      notes: orderForm.notes,
+    });
+  }
 
   return (
     <div className="space-y-6">
-      <Card className="p-4">
-        <h3 className="font-semibold text-gray-900 mb-4">발주 정보</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="supplier">공급업체 *</Label>
-            <Input id="supplier" value={orderForm.supplier} onChange={(e) => setOrderForm(prev => ({ ...prev, supplier: e.target.value }))} placeholder="공급업체명을 입력하세요" className="mt-1" />
-          </div>
-          <div>
-            <Label htmlFor="expectedDate">희망 납기일 *</Label>
-            <Input id="expectedDate" type="date" value={orderForm.expectedDate} onChange={(e) => setOrderForm(prev => ({ ...prev, expectedDate: e.target.value }))} className="mt-1" min={new Date().toISOString().split('T')[0]} />
-          </div>
-          <div>
-            <Label htmlFor="priority">우선순위</Label>
-            <select id="priority" value={orderForm.priority} onChange={(e) => setOrderForm(prev => ({ ...prev, priority: e.target.value }))} className="mt-1 w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-kpi-red">
-              <option value="low">낮음</option>
-              <option value="normal">보통</option>
-              <option value="high">높음</option>
-              <option value="urgent">긴급</option>
-            </select>
-          </div>
-          <div>
-            <Label htmlFor="notes">특이사항</Label>
-            <Input id="notes" value={orderForm.notes} onChange={(e) => setOrderForm(prev => ({ ...prev, notes: e.target.value }))} placeholder="특별 요청사항이 있다면 입력하세요" className="mt-1" />
-          </div>
-        </div>
-      </Card>
-
+      {/* 1) 발주 품목 (먼저 노출) */}
       <Card className="p-4">
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-semibold text-gray-900">발주 품목 ({items.length}개)</h3>
-          <div className="text-sm text-gray-600">총 {(totalItems || 0).toLocaleString()}개 · ₩{(totalAmount || 0).toLocaleString()}</div>
         </div>
 
         <div className="space-y-3">
-          {items.map(item => (
+          {items.map((item) => (
             <div key={item.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <h4 className="font-medium text-gray-900">{item.name}</h4>
-                    <p className="text-sm text-gray-600">{item.category} · {item.location}</p>
-                    <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
-                      <span>현재 재고: {item.currentStock}{item.unit}</span>
-                      <span>최소 재고: {item.minStock}{item.unit}</span>
-                      <span>최대 재고: {item.maxStock}{item.unit}</span>
+                    <div className="mt-1 text-sm text-gray-500 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span>현재 재고:</span>
+                        <span>{item.currentStock}{item.unit}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span>적정 재고:</span>
+                        <span>{item.minStock}{item.unit}</span>
+                      </div>
                     </div>
                   </div>
-                  <Button size="sm" variant="ghost" onClick={() => onRemoveItem(item.id)} className="text-red-500 hover:text-red-700">✕</Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => onRemoveItem(item.id)}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    ✕
+                  </Button>
                 </div>
               </div>
 
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2">
                   <Label className="text-sm text-gray-600">수량:</Label>
-                  <Input type="number" value={item.orderQuantity} onChange={(e) => handleQuantityChange(item.id, e.target.value)} className="w-20 h-8 text-center" min="0" />
+                  <Input
+                    type="number"
+                    value={item.orderQuantity}
+                    onChange={(e) => handleQuantityChange(item.id, e.target.value)}
+                    className="w-20 h-8 text-center"
+                    min="0"
+                  />
                   <span className="text-sm text-gray-600">{item.unit}</span>
                 </div>
                 <div className="text-right">
-                  <div className="text-sm text-gray-600">단가: ₩{(item.unitPrice || 0).toLocaleString()}</div>
-                  <div className="font-medium text-gray-900">₩{(item.totalPrice || 0).toLocaleString()}</div>
+                  <div className="text-sm text-gray-600">
+                    단가: ₩{(item.unitPrice || 0).toLocaleString()}
+                  </div>
+                  <div className="font-medium text-gray-900">
+                    ₩{(item.totalPrice || 0).toLocaleString()}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1008,11 +1031,44 @@ function OrderCartContent({
         </div>
       </Card>
 
+      {/* 2) 발주 정보 (공급업체/납기일 입력 제거) */}
+      <Card className="p-4">
+        <h3 className="font-semibold text-gray-900 mb-4">발주 정보</h3>
+        <div className="grid grid-cols-1 gap-4">
+          <div>
+            <Label htmlFor="priority">우선순위</Label>
+            <select
+              id="priority"
+              value={orderForm.priority}
+              onChange={(e) => setOrderForm((prev) => ({ ...prev, priority: e.target.value }))}
+              className="mt-1 w-40 sm:w-48 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-kpi-red"
+            >
+              <option value="NORMAL">일반</option>
+              <option value="URGENT">우선</option>
+            </select>
+          </div>
+
+          <div>
+            <Label htmlFor="notes">특이사항</Label>
+            <Input
+              id="notes"
+              value={orderForm.notes}
+              onChange={(e) => setOrderForm((prev) => ({ ...prev, notes: e.target.value }))}
+              placeholder="특별 요청사항이 있다면 입력하세요"
+              className="mt-1"
+            />
+          </div>
+        </div>
+      </Card>
+
+      {/* 3) 발주 요약 */}
       <Card className="p-4 bg-kpi-red/5 border-kpi-red/20">
         <div className="flex justify-between items-center mb-4">
           <div>
             <h3 className="font-semibold text-gray-900">발주 요약</h3>
-            <p className="text-sm text-gray-600">총 {items.length}개 품목, {(totalItems || 0).toLocaleString()}개</p>
+            <p className="text-sm text-gray-600">
+              총 {items.length}개 품목, {(totalItems || 0).toLocaleString()}개
+            </p>
           </div>
           <div className="text-right">
             <div className="text-2xl font-bold text-gray-900">₩{(totalAmount || 0).toLocaleString()}</div>
@@ -1021,7 +1077,13 @@ function OrderCartContent({
         </div>
 
         <div className="flex gap-3 pt-4 border-t border-kpi-red/20">
-          <Button variant="outline" onClick={() => setOrderForm({ supplier: '', expectedDate: '', priority: 'normal', notes: '' })} className="flex-1">초기화</Button>
+          <Button
+            variant="outline"
+            onClick={() => setOrderForm({ priority: 'NORMAL', notes: '' })}
+            className="flex-1"
+          >
+            초기화
+          </Button>
           <Button onClick={handleSubmit} className="flex-1 bg-kpi-red hover:bg-red-600 text-white">
             <ShoppingCart className="w-4 h-4 mr-2" />
             발주 등록

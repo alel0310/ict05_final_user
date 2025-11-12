@@ -30,16 +30,16 @@ public class PurchaseOrderService {
     }
 
     // 발주 등록
-//    @Transactional
-//    public Long createPurchaseOrder(PurchaseOrderRequestsDTO dto) {
-//        return purchaseOrderRepository.createPurchaseOrder(dto);
-//    }
+    @Transactional
+    public Long createPurchaseOrder(PurchaseOrderRequestsDTO dto) {
+        return purchaseOrderRepository.createPurchaseOrder(dto);
+    }
 
     // 발주 수정
-//    @Transactional
-//    public void updatePurchaseOrder(Long id, PurchaseOrderRequestsDTO dto) {
-//        purchaseOrderRepository.updatePurchaseOrder(id, dto);
-//    }
+    @Transactional
+    public void updatePurchaseOrder(Long id, PurchaseOrderRequestsDTO dto) {
+        purchaseOrderRepository.updatePurchaseOrder(id, dto);
+    }
 
     // 발주 전체(헤더+품목) 삭제
     @Transactional
@@ -64,12 +64,5 @@ public class PurchaseOrderService {
     public void updateStatusByOrderCode(String orderCode, PurchaseOrderStatus status) {
         purchaseOrderRepository.updateStatusByOrderCode(orderCode, status);
     }
-
-    // 발주 상단 요약 데이터 조회
-
-
-    // 발주 목록 엑셀 다운로드
-
-
 
 }

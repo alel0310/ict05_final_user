@@ -39,7 +39,7 @@ public class PurchaseOrderDetailDTO {
 
     /** 발주 실제납기일 */
     @Schema(description = "실제 납기일자")
-    private LocalDate actualDeliveryDate;
+    private LocalDate actualDate;
 
     /** 발주 우선순위 */
     @Schema(description = "우선순위")
