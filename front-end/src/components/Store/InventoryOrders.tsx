@@ -23,6 +23,13 @@ export function InventoryOrders() {
   const [totalAllElements, setTotalAllElements] = useState(0); // 전체 총건수(필터 미적용)
   const [statusFilter, setStatusFilter] = useState<'all'|'PENDING'|'RECEIVED'|'SHIPPING'|'DELIVERED'|'CANCELED'>('all');
   const [activeFilter, setActiveFilter] = useState<string>("ALL");
+  const [statusTotals, setStatusTotals] = useState({
+    PENDING: 0,
+    RECEIVED: 0,
+    SHIPPING: 0,
+    DELIVERED: 0,
+    CANCELED: 0,
+  });
   
   useEffect(() => {
     fetchOrders(currentPage, statusFilter);
@@ -77,7 +84,32 @@ export function InventoryOrders() {
     const res = await api.get("/api/purchase/list", { params: { page: 0, size: 1 } }); // status 생략
     setTotalAllElements(res.data.totalElements ?? 0);
   };
-  useEffect(() => { fetchTotalAll(); }, []);
+
+  const fetchStatusTotals = async () => {
+    try {
+      const [p, r, s, d, c] = await Promise.all([
+        api.get("/api/purchase/list", { params: { page: 0, size: 1, status: "PENDING"  }, withCredentials: false }),
+        api.get("/api/purchase/list", { params: { page: 0, size: 1, status: "RECEIVED" }, withCredentials: false }),
+        api.get("/api/purchase/list", { params: { page: 0, size: 1, status: "SHIPPING" }, withCredentials: false }),
+        api.get("/api/purchase/list", { params: { page: 0, size: 1, status: "DELIVERED"}, withCredentials: false }),
+        api.get("/api/purchase/list", { params: { page: 0, size: 1, status: "CANCELED" }, withCredentials: false }),
+      ]);
+      setStatusTotals({
+        PENDING:   p.data?.totalElements ?? 0,
+        RECEIVED:  r.data?.totalElements ?? 0,
+        SHIPPING:  s.data?.totalElements ?? 0,
+        DELIVERED: d.data?.totalElements ?? 0,
+        CANCELED:  c.data?.totalElements ?? 0,
+      });
+    } catch (e) {
+      console.error("🚨 상태별 총계 조회 실패:", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchTotalAll();
+    fetchStatusTotals();
+  }, []);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -112,13 +144,45 @@ export function InventoryOrders() {
     return orders.filter((o) => o.status === activeFilter);
   }, [orders, activeFilter]);
 
+  const normalizeDetail = (data: any) => {
+    const items = Array.isArray(data.items) ? data.items : [];
+    const normItems = items.map((it: any) => {
+      const unitPrice = Number(
+        it.unitPrice ?? it.price ?? it.sellingPrice ?? it.material?.sellingPrice ?? 0
+      );
+      const count = Number(it.count ?? 0);
+      return {
+        // 표시에 쓰는 필드들(테이블 렌더에 맞춤)
+        materialName:
+          it.materialName ?? it.name ?? it.material?.name ?? it.storeMaterialName ?? '-',
+        unitPrice,
+        totalPrice: Number(it.totalPrice ?? unitPrice * count),
+        count,
+
+        // 저장 시 사용할 키들(버튼 payload에서 사용)
+        materialId: it.materialId ?? it.material?.id ?? it.storeMaterialId ?? it.id ?? null,
+        id: it.id ?? null, // 상세행 id가 오는 경우 대비
+      };
+    });
+
+    // 총액이 없다면 합산해서 만들어둠
+    const computedTotal =
+      normItems.reduce((s: number, x: any) => s + Number(x.totalPrice ?? 0), 0) || 0;
+
+    return {
+      ...data,
+      items: normItems,
+      totalPrice: Number(data.totalPrice ?? computedTotal),
+      priority: data.priority ?? 'NORMAL',
+      notes: data.notes ?? data.remark ?? '',
+    };
+  };
+
   const handleOrderDetail = async (order: any) => {
-    console.log("🔍 클릭한 발주 객체:", order);   // 전체 객체 확인
-    console.log("🆔 order.id =", order.id);        // id 값만 확인
     try {
       const res = await api.get(`/api/purchase/detail/${order.id}`);
-      console.log("✅ 상세 조회 응답:", res.data);
-      setSelectedOrder(res.data);
+      const normalized = normalizeDetail(res.data);
+      setSelectedOrder(normalized);
       setIsDetailModalOpen(true);
     } catch (err) {
       console.error("❌ 발주 상세 조회 실패:", err);
@@ -143,6 +207,9 @@ export function InventoryOrders() {
       toast.success(`${selectedIds.length}건의 발주서가 삭제되었습니다.`);
       setOrders(prev => prev.filter(order => !selectedIds.includes(order.id)));
       setSelectedIds([]);
+      await fetchOrders(currentPage, statusFilter);
+      await fetchTotalAll();
+      await fetchStatusTotals();
       fetchOrders(currentPage);
     } catch (error) {
       console.error("🚨 발주 삭제 실패:", error);
@@ -165,15 +232,17 @@ export function InventoryOrders() {
       // 3️⃣ 가맹점(내 서버) 상태 변경
       await api.put(`/api/purchase/status/${orderId}`, null, {
         params: { status: newStatus  },
-      });
-
-      // ✅ 상태 변경 후 서버에서 최신 목록 재조회 (추가된 한 줄)
-     await fetchOrders(currentPage, statusFilter);    
+      }); 
 
       // 4️⃣ 탭을 자동으로 "검수완료"로 전환
       setActiveFilter(newStatus );
 
       toast.success("검수 완료 및 본사 동기화 요청 완료");
+
+      // ✅ 상태 변경 후 서버에서 최신 목록 재조회 (추가된 한 줄)
+      await fetchOrders(currentPage, statusFilter);  
+      await fetchTotalAll();
+      await fetchStatusTotals(); 
     } catch (error) {
       console.error("🚨 상태 변경 및 동기화 실패:", error);
       toast.error("상태 변경에 실패했습니다.");
@@ -664,12 +733,6 @@ export function InventoryOrders() {
     }
   ];
 
-  // 발주 요약 통계
-  const totalOrders = orders.length;
-  const pendingOrders = orders.filter(order => order.status === 'PENDING').length;
-  const confirmedOrders = orders.filter(order => order.status === 'RECEIVED').length;
-  const completedOrders = orders.filter(order => order.status === 'DELIVERED').length;
-
   return (
     <div className="space-y-6">
       {/* 발주 요약 카드 */}
@@ -688,7 +751,7 @@ export function InventoryOrders() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-orange-100">대기중</p>
-              <p className="text-2xl font-bold">{pendingOrders}</p>
+              <p className="text-2xl font-bold">{statusTotals.PENDING}</p>
             </div>
             <Clock className="w-8 h-8 text-orange-200" />
           </div>
@@ -698,7 +761,7 @@ export function InventoryOrders() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-purple-100">접수됨</p>
-              <p className="text-2xl font-bold">{confirmedOrders}</p>
+              <p className="text-2xl font-bold">{statusTotals.RECEIVED}</p>
             </div>
             <CheckCircle className="w-8 h-8 text-purple-200" />
           </div>
@@ -707,8 +770,8 @@ export function InventoryOrders() {
         <Card className="p-6 bg-kpi-red text-white">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-red-100">검수완료</p>
-              <p className="text-2xl font-bold">{completedOrders}</p>
+              <p className="text-red-100">배송중</p>
+              <p className="text-2xl font-bold">{statusTotals.SHIPPING}</p>
             </div>
             <Package className="w-8 h-8 text-red-200" />
           </div>
@@ -855,24 +918,20 @@ export function InventoryOrders() {
                                 type="number"
                                 value={item.count}
                                 onChange={(e) => {
-                                  const newCount = parseInt(e.target.value) || 0;
-                                  setSelectedOrder((prev: any) => ({
-                                    ...prev,
-                                    items: prev.items.map((it: any, i: number) =>
+                                  const newCount = Number(e.target.value) || 0;
+                                  setSelectedOrder((prev: any) => {
+                                    const nextItems = prev.items.map((it: any, i: number) =>
                                       i === index
                                         ? {
                                             ...it,
                                             count: newCount,
-                                            totalPrice: newCount * it.unitPrice,
+                                            totalPrice: Number(it.unitPrice ?? 0) * newCount,
                                           }
                                         : it
-                                    ),
-                                    totalPrice: prev.items.reduce(
-                                      (sum: number, it: any, i: number) =>
-                                        i === index ? sum + newCount * it.unitPrice : sum + it.totalPrice,
-                                      0
-                                    ),
-                                  }));
+                                    );
+                                    const nextTotal = nextItems.reduce((s: number, x: any) => s + Number(x.totalPrice ?? 0), 0);
+                                    return { ...prev, items: nextItems, totalPrice: nextTotal };
+                                  });
                                 }}
                                 className="w-20 text-center"
                                 min="1"
@@ -976,15 +1035,19 @@ export function InventoryOrders() {
                     <Button
                       onClick={async () => {
                         try {
+                          if (selectedOrder?.status !== 'PENDING') {
+                            toast.error('대기중 상태에서만 수정할 수 있습니다.');
+                            return;
+                          }
                           const payload = {
                             priority: selectedOrder.priority,
-                            notes: selectedOrder.notes,
-                            items: selectedOrder.items.map((item: any) => ({
-                              id: item.id,
-                              count: item.count,
-                              unitPrice: item.unitPrice,
-                              totalPrice: item.totalPrice,
-                            })),
+                            notes: selectedOrder.notes ?? "",
+                            items: (selectedOrder.items ?? [])
+                              .map((it: any) => ({
+                                materialId: it.materialId ?? it.material?.id ?? it.storeMaterialId,
+                                count: Number(it.count ?? 0),
+                              }))
+                              .filter(it => it.materialId && it.count > 0),
                           };
 
                           await api.put(`/api/purchase/${selectedOrder.id}`, payload, {
@@ -994,8 +1057,21 @@ export function InventoryOrders() {
 
                           toast.success('발주 정보가 수정되었습니다.');
                           setIsEditMode(false);
-                          setOriginalOrder(JSON.parse(JSON.stringify(selectedOrder)));
-                          fetchOrders();
+                          // 저장 후 원본 백업은 의미가 없으므로 비움
+                          setOriginalOrder(null);
+
+                          // 목록/상단카드 동기화 + 상세 다시 읽어 최신값 반영
+                          await Promise.all([
+                            fetchOrders(currentPage, statusFilter),
+                            fetchTotalAll(),
+                            fetchStatusTotals(),
+                          ]);
+
+                          // 모달 열어둔 상태라면 상세도 최신으로 갱신
+                          if (selectedOrder?.id) {
+                            const detail = await api.get(`/api/purchase/detail/${selectedOrder.id}`);
+                            setSelectedOrder(detail.data);
+                          }
                         } catch (error) {
                           console.error('🚨 발주 수정 실패:', error);
                           toast.error('발주 수정에 실패했습니다.');
@@ -1016,7 +1092,12 @@ export function InventoryOrders() {
                     </Button>
                   </>
                 ) : (
-                  <Button variant="outline" onClick={() => setIsEditMode(true)}>
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsEditMode(true)}
+                    disabled={selectedOrder?.status !== 'PENDING'}   // 🔒 PENDING만 수정 진입
+                    title={selectedOrder?.status !== 'PENDING' ? '대기중 상태에서만 수정 가능합니다' : undefined}
+                  >
                     수정
                   </Button>
                 )}

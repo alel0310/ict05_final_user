@@ -1,5 +1,6 @@
 package com.boot.ict05_final_user.domain.purchaseOrder.entity;
 
+import com.boot.ict05_final_user.domain.inventory.entity.StoreMaterial;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -29,9 +30,9 @@ public class PurchaseOrderDetail {
     private PurchaseOrder purchaseOrder;
 
     /** 발주 품목 Material */
-//    @ManyToOne(fetch = FetchType.LAZY)
-//    @JoinColumn(name = "material_id_fk", nullable = false)
-//    private Material material;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "material_id_fk", nullable = false)
+    private StoreMaterial material;
 
     /** 단가 : 등록 시 Material.unitPrice 사용 */
     @Column(name = "purchase_order_detail_unit_price", precision = 12, scale = 2, nullable = false)
