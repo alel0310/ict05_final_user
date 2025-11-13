@@ -112,10 +112,11 @@ public class UserService implements UserDetailsService {
         String email = SecurityContextHolder.getContext()
                 .getAuthentication()
                 .getName();
-
         // 2. 해당 이메일 기준으로 DB에 저장된 refresh 토큰 삭제
         jwtService.removeRefreshUser(email);
     }
+
+
 
     /** 회원 탈퇴 (이메일 기준) */
     @Transactional
