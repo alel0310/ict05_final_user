@@ -721,7 +721,7 @@ export function InventoryOrders() {
           {row.status === 'SHIPPING' && (
             <Button
               size="sm"
-              className="bg-kpi-purple hover:bg-purple-600 text-white"
+              className="bg-kpi-green hover:bg-green-600 text-white"
               onClick={() => handleStatusChange(row.id, 'DELIVERED')}
             >
               <CheckCircle className="w-3 h-3 mr-1" />
