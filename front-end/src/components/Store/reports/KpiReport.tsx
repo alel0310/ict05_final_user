@@ -102,7 +102,7 @@ export default function KpiReport() {
           <h1 className="text-2xl font-semibold">KPI 분석</h1>
           <p className="text-sm text-gray-600">타임존: {tz}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline">
@@ -139,13 +139,17 @@ export default function KpiReport() {
 
           <div className="flex rounded-md border overflow-hidden">
             <button
-              className={`px-3 py-2 text-sm ${viewBy === 'DAY' ? 'bg-gray-900 text-white' : 'bg-white'}`}
+              className={`px-3 py-2 text-sm ${
+                viewBy === 'DAY' ? 'bg-gray-900 text-white' : 'bg-white'
+              }`}
               onClick={() => setViewBy('DAY')}
             >
               일별
             </button>
             <button
-              className={`px-3 py-2 text-sm ${viewBy === 'MONTH' ? 'bg-gray-900 text-white' : 'bg-white'}`}
+              className={`px-3 py-2 text-sm ${
+                viewBy === 'MONTH' ? 'bg-gray-900 text-white' : 'bg-white'
+              }`}
               onClick={() => setViewBy('MONTH')}
             >
               월별
@@ -161,66 +165,115 @@ export default function KpiReport() {
 
       {/* 요약 카드 */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <Card>
+        <Card className="bg-white rounded-xl shadow-sm">
           <CardHeader><CardTitle>매출</CardTitle></CardHeader>
           <CardContent className="text-2xl font-semibold">₩{fmtMoneyInt(summary?.sales)}</CardContent>
         </Card>
-        <Card>
+        <Card className="bg-white rounded-xl shadow-sm">
           <CardHeader><CardTitle>주문수</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-semibold">{(summary?.tx ?? 0).toLocaleString()}건</CardContent>
+          <CardContent className="text-2xl font-semibold">
+            {(summary?.tx ?? 0).toLocaleString()}건
+          </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-white rounded-xl shadow-sm">
           <CardHeader><CardTitle>UPT</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-semibold">{fmtUPT(summary?.upt)}</CardContent>
+          <CardContent className="text-2xl font-semibold">
+            {fmtUPT(summary?.upt)}
+          </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-white rounded-xl shadow-sm">
           <CardHeader><CardTitle>ADS</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-semibold">₩{fmtMoneyInt(summary?.ads)}</CardContent>
+          <CardContent className="text-2xl font-semibold">
+            ₩{fmtMoneyInt(summary?.ads)}
+          </CardContent>
         </Card>
-        <Card>
+        <Card className="bg-white rounded-xl shadow-sm">
           <CardHeader><CardTitle>AUR</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-semibold">₩{fmtMoneyInt(summary?.aur)}</CardContent>
+          <CardContent className="text-2xl font-semibold">
+            ₩{fmtMoneyInt(summary?.aur)}
+          </CardContent>
         </Card>
       </div>
 
       {/* 전주/전월 대비(있으면) */}
-      <div className="text-sm text-gray-600">전주 대비: {fmtPercent1(wow)}</div>
+      <div className="text-sm text-gray-600">
+        전주 대비: {fmtPercent1(wow)}
+      </div>
 
-      {/* 테이블 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{viewBy === 'DAY' ? '일별 KPI' : '월별 KPI'}</CardTitle>
+      {/* ===== 테이블 영역 ===== */}
+      <Card className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <CardHeader className="px-6 py-4 border-b bg-light-gray">
+          <CardTitle className="text-base font-semibold text-gray-900">
+            {viewBy === 'DAY' ? '일별 KPI' : '월별 KPI'}
+          </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
+          {/* --- 테이블 디자인 시작 --- */}
           <div className="overflow-x-auto">
-            <table className="min-w-full border">
-              <thead className="bg-gray-50">
+            <table className="w-full">
+              <thead className="bg-light-gray border-b">
                 <tr>
-                  <th className="px-3 py-2 text-left">날짜/월</th>
-                  <th className="px-3 py-2 text-right">매출</th>
-                  <th className="px-3 py-2 text-right">주문수</th>
-                  <th className="px-3 py-2 text-right">UPT</th>
-                  <th className="px-3 py-2 text-right">ADS</th>
-                  <th className="px-3 py-2 text-right">AUR</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                    날짜/월
+                  </th>
+                  <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900">
+                    매출
+                  </th>
+                  <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900">
+                    주문수
+                  </th>
+                  <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900">
+                    UPT
+                  </th>
+                  <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900">
+                    ADS
+                  </th>
+                  <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900">
+                    AUR
+                  </th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-gray-200">
                 {rows.map((r, i) => (
-                  <tr key={i} className="border-t">
-                    <td className="px-3 py-2">{r.label}</td>
-                    <td className="px-3 py-2 text-right">₩{fmtMoneyInt(r.sales)}</td>
-                    <td className="px-3 py-2 text-right">{(r.tx ?? 0).toLocaleString()}</td>
-                    <td className="px-3 py-2 text-right">{fmtUPT(r.upt)}</td>
-                    <td className="px-3 py-2 text-right">₩{fmtMoneyInt(r.ads)}</td>
-                    <td className="px-3 py-2 text-right">₩{fmtMoneyInt(r.aur)}</td>
+                  <tr key={i} className="hover:bg-gray-50">
+                    <td className="px-6 py-3 text-sm text-gray-900">
+                      {r.label}
+                    </td>
+                    <td className="px-6 py-3 text-sm text-gray-900 text-right">
+                      ₩{fmtMoneyInt(r.sales)}
+                    </td>
+                    <td className="px-6 py-3 text-sm text-gray-900 text-right">
+                      {(r.tx ?? 0).toLocaleString()}
+                    </td>
+                    <td className="px-6 py-3 text-sm text-gray-900 text-right">
+                      {fmtUPT(r.upt)}
+                    </td>
+                    <td className="px-6 py-3 text-sm text-gray-900 text-right">
+                      ₩{fmtMoneyInt(r.ads)}
+                    </td>
+                    <td className="px-6 py-3 text-sm text-gray-900 text-right">
+                      ₩{fmtMoneyInt(r.aur)}
+                    </td>
                   </tr>
                 ))}
+
+                {rows.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-6 py-8 text-center text-sm text-dark-gray"
+                    >
+                      데이터가 없습니다.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
+          {/* --- 테이블 디자인 끝 --- */}
 
           {cursor && (
-            <div className="mt-4 text-center">
+            <div className="px-6 py-4 border-t bg-light-gray flex justify-center">
               <Button onClick={loadMore} disabled={loading}>
                 {loading ? '불러오는 중…' : '다음 페이지'}
               </Button>
