@@ -1,7 +1,6 @@
 package com.boot.ict05_final_user.domain.staff.dto;
 
 import com.boot.ict05_final_user.domain.staff.entity.AttendanceStatus;
-import com.boot.ict05_final_user.domain.staff.entity.StaffDepartment;
 import com.boot.ict05_final_user.domain.staff.entity.StaffEmploymentType;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -25,8 +24,9 @@ public class StaffListDTO {
     @Schema(type="string", format="date-time")
     private LocalDateTime staffBirth;
 
-    /** 사원 부서 (관리팀, 판매팀) */
-    private StaffDepartment staffDepartment;
+    /** 사원 전화번호 */
+    @Schema(type = "string", example = "010-1234-5678", description = "사원 연락처 (하이픈 포함)")
+    private String staffPhone;
 
     /** 사원 근무형태 (점주/직원/알바) */
     private StaffEmploymentType staffEmploymentType;

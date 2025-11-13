@@ -7,6 +7,7 @@ import { Input } from "../ui/input";
 import { toast } from "sonner";
 import { User, Mail, Phone, Link2, Edit3 } from "lucide-react";
 import api from "../../lib/authApi";
+import { useNavigate } from "react-router-dom";
 
 interface MyPageDTO  {
   id: number;
@@ -17,6 +18,7 @@ interface MyPageDTO  {
 }
 
 export function MyPage() {
+  const navigate = useNavigate();
   const [user, setUser] = useState<MyPageDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -34,6 +36,7 @@ export function MyPage() {
   const [passwordVerified, setPasswordVerified] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [withdrawing, setWithdrawing] = useState(false);
   const passwordMatch = useMemo(() => {
     if (!newPassword && !confirmPassword) return null;
     return newPassword === confirmPassword ? "일치" : "불일치";
@@ -75,20 +78,63 @@ export function MyPage() {
   };
 
   // 현재 비밀번호 검증
-  // const handleVerifyPassword = async () => {
-  //   if (!currentPassword) {
-  //     toast.error("현재 비밀번호를 입력하세요.");
-  //     return;
-  //   }
-  //   try {
-  //     await api.post("/api/auth/verify-password", { password: currentPassword });
-  //     setPasswordVerified(true);
-  //     toast.success("비밀번호 확인 완료");
-  //   } catch (e: any) {
-  //     setPasswordVerified(false);
-  //     toast.error(e?.response?.data?.message || "현재 비밀번호가 올바르지 않습니다.");
-  //   }
-  // };
+  const handleVerifyPassword = async () => {
+    if (!currentPassword.trim()) {
+      toast.error("현재 비밀번호를 입력하세요.");
+      return;
+    }
+
+    try {
+      // ✅ 맞으면 200 OK
+      await api.post("/api/myPage/check-password", {
+        currentPassword,
+      });
+
+      setPasswordVerified(true);
+      toast.success("비밀번호 확인이 완료되었습니다.");
+    } catch (e: any) {
+      // ✅ 틀리면 400 → 여기로 들어옴
+      setPasswordVerified(false);  // 새 비밀번호 입력란 안 나오게
+      const msg =
+        e?.response?.data?.message || "현재 비밀번호가 올바르지 않습니다.";
+      toast.error(msg);
+    }
+  };
+
+  // 탈퇴 
+  const handleWithdraw = async () => {
+    if (!passwordVerified) {
+      toast.error("먼저 현재 비밀번호를 확인해 주세요.");
+      return;
+    }
+
+    const ok = window.confirm(
+      "정말로 탈퇴하시겠습니까?\n탈퇴 후에는 동일 계정으로 다시 로그인할 수 없습니다."
+    );
+    if (!ok) return;
+
+    try {
+      setWithdrawing(true);
+
+      await api.delete("/api/myPage");
+
+      // 토큰 정리
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+      delete api.defaults.headers.common.Authorization;
+
+      toast.success("회원 탈퇴가 완료되었습니다.");
+      navigate("/login", { replace: true });
+    } catch (err: any) {
+      console.error(err);
+      const msg =
+        err?.response?.data?.message ??
+        "회원 탈퇴 처리 중 오류가 발생했습니다.";
+      toast.error(msg);
+    } finally {
+      setWithdrawing(false);
+    }
+  };
 
   // 저장
   const handleSave = async () => {
@@ -102,7 +148,12 @@ export function MyPage() {
 
     try {
       // 1) 기본 정보 업데이트
-      await api.put("/api/myPage", { name, phone });
+      await api.put("/api/myPage", { 
+        name, 
+        phone,
+        // 이미지 업로드까지 구현하면 이쪽에 최종 경로 세팅
+        // memberImagePath: user.memberImagePath,
+      });
 
       // 2) 아바타 업로드(선택)
       // if (imageFile) {
@@ -113,13 +164,13 @@ export function MyPage() {
       //   });
       // }
 
-      // // 3) 비밀번호 변경(선택)
-      // if (passwordVerified && newPassword) {
-      //   await api.post("/api/auth/change-password", {
-      //     currentPassword,
-      //     newPassword,
-      //   });
-      // }
+      // 3) 비밀번호 변경
+      if (passwordVerified && newPassword) {
+        await api.post("/api/myPage/change-password", {
+          currentPassword,
+          newPassword,
+        });
+      }
 
       // 4) 최신 데이터 재조회
       const res = await api.get<MyPageDTO>("/api/myPage");
@@ -201,7 +252,7 @@ export function MyPage() {
                 />
               </div>
             ) : (
-              <p className="mt-3 text-gray-700 font-medium">{name}</p>
+              <p className="mt-3 text-gray-700 font-medium">{user.name}</p>
             )}
           </div>
 
@@ -234,12 +285,16 @@ export function MyPage() {
                 <Input
                   type="password"
                   value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  onChange={(e) => {
+                    setCurrentPassword(e.target.value);
+                    setPasswordVerified(false);  // 다시 확인해야만 새 비번 입력란 보이게
+                  }}
                 />
                 <Button
-                  // onclick={handleVerifyPassword}
+                  type="button"
+                  onClick={handleVerifyPassword}
                   className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition"
-                  >
+                >
                   확인
                 </Button>
               </div>
@@ -270,15 +325,17 @@ export function MyPage() {
 
           {/* 버튼 그룹 */}
           <div className="flex justify-between mt-6 items-center">
-            {editing && (
-              <button
+            {editing && passwordVerified && (
+              <Button
                 type="button"
-                className="px-3 py-1 bg-gray-200 text-gray-500 border border-gray-300 rounded text-sm"
-                onClick={() => toast.error("회원 탈퇴 기능")}>
-                회원 탈퇴
-              </button>
+                className="px-3 py-1 bg-gray-200 text-gray-600 border border-gray-300 rounded text-xs"
+                onClick={handleWithdraw}
+                disabled={withdrawing}
+              >
+                {withdrawing ? "탈퇴 처리 중..." : "회원 탈퇴"}
+              </Button>
             )}
-
+            
             <div className="flex gap-2 ml-auto">
               {editing ? (
                 <>

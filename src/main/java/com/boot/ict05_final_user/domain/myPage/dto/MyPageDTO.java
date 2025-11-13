@@ -25,6 +25,12 @@ public class MyPageDTO {
     /** 회원 프로필 이미지 경로 */
     private String memberImagePath;
 
+    /** 지점명 */
+    private String storeName;
+
+    /** 근무형태 */
+    private String employmentType;
+
     /**
      * Entity → DTO 변환 메서드
      */
