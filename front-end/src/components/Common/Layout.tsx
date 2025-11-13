@@ -87,7 +87,7 @@ const storeMenuItems: MenuItem[] = [
     children: [
       { id: 'staff-list', label: '직원 목록', icon: Users },
       { id: 'staff-schedule', label: '근무 일정', icon: Calendar },
-      { id: 'staff-payroll', label: '급여 관리', icon: Calculator },
+      
       { id: 'staff-reports', label: '근무리포트', icon: BarChart3 }
     ]
   },

@@ -15,7 +15,6 @@ import { InventoryManagement } from "./components/Store/InventoryManagement";
 import { InventoryOrders } from "./components/Store/InventoryOrders";
 import { FinanceManagement } from "./components/Store/FinanceManagement";
 import { StaffList } from "./components/Store/StaffList";
-import { StaffPayroll } from "./components/Store/StaffPayroll";
 import { StaffWorkReports } from "./components/Store/StaffWorkReports";
 import { NoticeEducation } from "./components/Store/NoticeEducation";
 import { DailyClosingPage } from "./components/Store/DailyClosingPage";
@@ -75,7 +74,7 @@ export default function App() {
       case "mypage": return <ErrorBoundary><MyPage /></ErrorBoundary>
       case "staff":
       case "staff-list": return <ErrorBoundary><StaffList /></ErrorBoundary>;
-      case "staff-payroll": return <ErrorBoundary><StaffPayroll /></ErrorBoundary>;
+    
       case "staff-reports": return <ErrorBoundary><StaffWorkReports /></ErrorBoundary>;
       // renderContent() 내부 switch
       case "staff-schedule": return <ErrorBoundary><StaffSchedule /></ErrorBoundary>;
