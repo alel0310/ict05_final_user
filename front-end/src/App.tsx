@@ -53,13 +53,13 @@ export default function App() {
       navigate("/login", { replace: true });
     });
   }, [navigate]);
-  if (!ready) return null; // <-- ready 전에 Dashboard가 useEffect 실행 못함
-  const handleLogout =() => {
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
-    toast.success("로그아웃되었습니다.");
-    navigate("/login", {replace : true});
-  }
+  // if (!ready) return null; // <-- ready 전에 Dashboard가 useEffect 실행 못함
+  // const handleLogout =() => {
+  //   localStorage.removeItem("accessToken");
+  //   localStorage.removeItem("refreshToken");
+  //   toast.success("로그아웃되었습니다.");
+  //   navigate("/login", {replace : true});
+  // }
 
   const handlePageChange = (page: string) => setCurrentPage(page);
 
@@ -105,7 +105,6 @@ return (
       userType="Store"
       currentPage={currentPage}
       onPageChange={handlePageChange}
-      onLogout={handleLogout}
     >
       {renderPage()}
     </Layout>
