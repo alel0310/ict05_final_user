@@ -1,5 +1,4 @@
 // src/pages/OrderSystem.tsx
-
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Card } from '../ui/card';
@@ -32,7 +31,6 @@ const api = axios.create({
 /* ============================
    타입 정의
 ============================ */
-
 type SoldOutStatus = 'ON_SALE' | 'SOLD_OUT';
 type MenuShow = 'SHOW' | 'HIDE';
 
@@ -48,7 +46,7 @@ export type StoreMenu = {
   menuCode: string;
   ingredients: string;
   soldOutStatus: SoldOutStatus;
-  menuShow: MenuShow;          // ✅ 추가: 표시 여부
+  menuShow: MenuShow;
 };
 
 type PageResponse<T> = {
@@ -62,7 +60,7 @@ interface MenuItem {
   name: string;
   price: number;
   image: string;
-  available: boolean; // ✅ ON_SALE면 true, SOLD_OUT이면 false
+  available: boolean; // ON_SALE면 true, SOLD_OUT이면 false (클릭 불가)
 }
 
 interface MenuCategoryWithItems {
@@ -141,13 +139,13 @@ export function OrderSystem() {
      메뉴 목록 DB에서 가져오기
      - 모든 페이지 합치기
      - menuShow === 'SHOW'만 노출
-     - soldOut은 보이되 클릭 불가
+     - SOLD_OUT은 카드 보이지만 클릭 불가
      - '메뉴' 카테고리 제외
   ============================ */
   useEffect(() => {
     const fetchMenus = async () => {
       try {
-        const pageSize = 200;
+        const pageSize = 200; // 넉넉하게
         let page = 0;
         let totalPages = 1;
         const all: StoreMenu[] = [];
@@ -172,16 +170,16 @@ export function OrderSystem() {
 
         all.forEach((m) => {
           const catId = String(m.menuCategoryId);
-          const catName = m.menuCategoryName?.trim();
+          const catName = (m.menuCategoryName ?? '').trim();
 
           // 1) ‘메뉴’ 카테고리 제외
           if (EXCLUDED_CATEGORY_NAMES.includes(catName)) return;
 
-          // 2) menuShow가 HIDE면 아예 제외
+          // 2) HIDE는 제외
           if (m.menuShow !== 'SHOW') return;
 
           const emoji = getEmojiForCategory(catName);
-          const available = m.soldOutStatus === 'ON_SALE'; // ON_SALE만 선택 가능
+          const available = m.soldOutStatus === 'ON_SALE';
 
           if (!categoryMap.has(catId)) {
             categoryMap.set(catId, { id: catId, name: catName, items: [] });
@@ -192,11 +190,11 @@ export function OrderSystem() {
             name: m.menuName,
             price: m.menuPrice,
             image: emoji,
-            available,
+            available, // 품절일 때 false → 카드 클릭 막힘 + 뱃지
           });
         });
 
-        // 보기 좋게 정렬 (선택)
+        // 정렬(선택)
         const categoryList = Array.from(categoryMap.values())
           .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
           .map((c) => ({
@@ -319,6 +317,9 @@ export function OrderSystem() {
 
   /* ============================
      결제 처리 + DB 저장
+     (백엔드 enum/컨버터 규칙에 맞춤)
+     - orderType: VISIT/TAKEOUT/DELIVERY (대문자)
+     - paymentType: card/cash/voucher/external (소문자)
   ============================ */
   const processPayment = async (method: string) => {
     if (cart.length === 0) {
@@ -346,18 +347,26 @@ export function OrderSystem() {
       const total = calculateTotal();
       const discountAmount = subtotal - total;
 
-      const orderTypeMapping: { [key: string]: 'visit' | 'takeout' | 'delivery' } =
-        { 방문: 'visit', 포장: 'takeout', 배달: 'delivery' };
+      // 프론트 한글 → 백엔드 enum 코드 매핑
+      const orderTypeMapping: { [key: string]: 'VISIT' | 'TAKEOUT' | 'DELIVERY' } = {
+        방문: 'VISIT',
+        포장: 'TAKEOUT',
+        배달: 'DELIVERY',
+      };
 
       const paymentMethodMapping: {
         [key: string]: 'cash' | 'card' | 'voucher' | 'external';
-      } = { 현금: 'cash', 카드: 'card', 상품권: 'voucher' };
+      } = {
+        현금: 'cash',
+        카드: 'card',
+        상품권: 'voucher',
+      };
 
       const payload = {
         storeId: STORE_ID,
         orderCode: orderId,
-        orderType: orderTypeMapping[orderType],
-        paymentType: paymentMethodMapping[method] || 'cash',
+        orderType: orderTypeMapping[orderType],               // 대문자
+        paymentType: paymentMethodMapping[method] || 'cash',  // 소문자
         totalPrice: total,
         discount: discountAmount,
         customerName: customerName || null,
@@ -422,20 +431,16 @@ export function OrderSystem() {
   /* ============================
      카테고리/메뉴 필터링 & 페이지네이션
   ============================ */
-
-  // 전체 개수 (전체 탭에 표시용)
   const totalMenuCount = menuCategories.reduce(
     (sum, cat) => sum + cat.items.length,
     0,
   );
 
-  // 선택된 탭에 따라 전체 아이템
   const filteredItems: MenuItem[] =
     selectedCategory === ALL_CATEGORY_KEY
       ? menuCategories.flatMap((cat) => cat.items)
       : menuCategories.find((cat) => cat.id === selectedCategory)?.items ?? [];
 
-  // 페이지 계산
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
   const startIdx = (currentPage - 1) * PAGE_SIZE;
   const endIdx = startIdx + PAGE_SIZE;
@@ -447,7 +452,6 @@ export function OrderSystem() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // 카테고리/데이터 변경 시 페이지 보정
   useEffect(() => {
     const tp = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
     if (currentPage > tp) setCurrentPage(tp);
