@@ -3,6 +3,8 @@ package com.boot.ict05_final_user.domain.myPage.service;
 import com.boot.ict05_final_user.config.security.jwt.service.JwtService;
 import com.boot.ict05_final_user.domain.myPage.dto.MyPageDTO;
 import com.boot.ict05_final_user.domain.myPage.repository.MyPageRepository;
+import com.boot.ict05_final_user.domain.staff.entity.StaffProfile;
+import com.boot.ict05_final_user.domain.staff.repository.StaffRepository;
 import com.boot.ict05_final_user.domain.user.entity.Member;
 import com.boot.ict05_final_user.domain.user.entity.MemberStatus;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +23,7 @@ public class MyPageService {
     private final MyPageRepository myPageRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final StaffRepository staffRepository;
 
     @Transactional(readOnly = true)
     public MyPageDTO getMyInfo(Long memberId, Long storeIdIgnored){
@@ -98,6 +101,22 @@ public class MyPageService {
 
         // 이메일 기준으로 refresh 토큰 삭제
         jwtService.removeRefreshUser(member.getEmail());
+    }
+
+    // 상단 정보S
+    @Transactional
+    public MyPageDTO getMyPro(Long memberId) {
+        StaffProfile staff = staffRepository
+                .findById(memberId)      // 이미 있는 쿼리라고 가정
+                .orElseThrow(() -> new RuntimeException("프로필 없음"));
+
+        return MyPageDTO.builder()
+                .id(staff.getId())
+                .name(staff.getStaffName())
+                .email(staff.getStaffEmail())
+                .storeName(staff.getStore().getName())
+                .employmentType(String.valueOf(staff.getStaffEmploymentType()))
+                .build();
     }
 
 }

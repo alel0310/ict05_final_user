@@ -88,4 +88,9 @@ public class MyPageRestController {
         return ResponseEntity.noContent().build();   // 204
     }
 
+//    @GetMapping("/myPage")
+//    public ResponseEntity<MyPageDTO> mypro(@AuthenticationPrincipal AppUser user) {
+//        return ResponseEntity.ok(myPageService.getMyPro(user.getMemberId()));
+//    }
+
 }

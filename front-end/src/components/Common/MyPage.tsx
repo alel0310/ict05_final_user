@@ -325,30 +325,17 @@ export function MyPage() {
 
           {/* 버튼 그룹 */}
           <div className="flex justify-between mt-6 items-center">
-            {editing && (
-              <div className="mt-8 border-t pt-4">
-                <h3 className="text-sm font-semibold text-red-600 mb-1">회원 탈퇴</h3>
-                <p className="text-xs text-gray-500 mb-2">
-                  회원 탈퇴 시 계정이 비활성화되며, 동일 계정으로 다시 로그인할 수 없습니다.
-                </p>
-
-                {!passwordVerified && (
-                  <p className="text-xs text-orange-500 mb-2">
-                    위에서 먼저 현재 비밀번호를 확인한 후 탈퇴할 수 있습니다.
-                  </p>
-                )}
-
-                <Button
-                  type="button"
-                  className="bg-red-600 hover:bg-red-700 text-white text-xs"
-                  onClick={handleWithdraw}
-                  disabled={!passwordVerified || withdrawing}
-                >
-                  {withdrawing ? "탈퇴 처리 중..." : "회원 탈퇴"}
-                </Button>
-              </div>
+            {editing && passwordVerified && (
+              <Button
+                type="button"
+                className="px-3 py-1 bg-gray-200 text-gray-600 border border-gray-300 rounded text-xs"
+                onClick={handleWithdraw}
+                disabled={withdrawing}
+              >
+                {withdrawing ? "탈퇴 처리 중..." : "회원 탈퇴"}
+              </Button>
             )}
-
+            
             <div className="flex gap-2 ml-auto">
               {editing ? (
                 <>
