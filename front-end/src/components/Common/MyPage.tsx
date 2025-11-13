@@ -1,91 +1,162 @@
 // src/components/Common/MyPage.tsx
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "../ui/card";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
 import { Input } from "../ui/input";
 import { toast } from "sonner";
 import { User, Mail, Phone, Link2, Edit3 } from "lucide-react";
+import api from "../../lib/authApi";
 
-interface UserType {
+interface MyPageDTO  {
   id: number;
   name: string;
   email: string;
   phone: string;
-  image: string | null;
+  memberImagePath: string | null;
 }
 
 export function MyPage() {
-  const [user, setUser] = useState<UserType>({
-    id: 64,
-    name: "민진",
-    email: "ccc@ccc.com",
-    phone: "010-2222-4444",
-    image: null,
-  });
-
+  const [user, setUser] = useState<MyPageDTO | null>(null);
+  const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
 
   // 수정 폼 상태
-  const [name, setName] = useState(user.name);
-  const [phone, setPhone] = useState(user.phone);
-  const [image, setImage] = useState<string | null>(user.image);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+
+  // 이미지 미리보기/업로드 파일
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
 
   // 비밀번호 변경
   const [currentPassword, setCurrentPassword] = useState("");
   const [passwordVerified, setPasswordVerified] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [passwordMatch, setPasswordMatch] = useState<string | null>(null);
+  const passwordMatch = useMemo(() => {
+    if (!newPassword && !confirmPassword) return null;
+    return newPassword === confirmPassword ? "일치" : "불일치";
+  }, [newPassword, confirmPassword]);
 
-  const profileImage = image || "https://via.placeholder.com/150?text=기본+프로필";
+  const profileImage = previewUrl
+    || (user?.memberImagePath
+        ? user.memberImagePath
+        : "https://via.placeholder.com/150?text=기본+프로필");
 
+  // 초기 로드
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    api.get<MyPageDTO>("/api/myPage")
+      .then(res => {
+        if (!alive) return;
+        setUser(res.data);
+        setName(res.data.name || "");
+        setPhone(res.data.phone || "");
+        setPreviewUrl(null);
+        setImageFile(null);
+      })
+      .catch(err => {
+        const msg = err?.response?.data?.message || "마이페이지 정보를 불러오지 못했습니다.";
+        toast.error(msg);
+      })
+      .finally(() => alive && setLoading(false));
+    return () => { alive = false; };
+  }, []);
+
+  // 이미지 선택
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => setImage(ev.target?.result as string);
-    reader.readAsDataURL(file);
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setImageFile(f);
+    const url = URL.createObjectURL(f);
+    setPreviewUrl(url);
   };
 
-  const handleVerifyPassword = () => {
-    // 여기서 실제 API 호출 대신 임시 검증
-    if (currentPassword === "1234") {
-      toast.success("비밀번호 확인 완료");
-      setPasswordVerified(true);
-    } else {
-      toast.error("현재 비밀번호가 틀렸습니다");
-      setPasswordVerified(false);
-    }
-  };
+  // 현재 비밀번호 검증
+  // const handleVerifyPassword = async () => {
+  //   if (!currentPassword) {
+  //     toast.error("현재 비밀번호를 입력하세요.");
+  //     return;
+  //   }
+  //   try {
+  //     await api.post("/api/auth/verify-password", { password: currentPassword });
+  //     setPasswordVerified(true);
+  //     toast.success("비밀번호 확인 완료");
+  //   } catch (e: any) {
+  //     setPasswordVerified(false);
+  //     toast.error(e?.response?.data?.message || "현재 비밀번호가 올바르지 않습니다.");
+  //   }
+  // };
 
-  const handleSave = () => {
+  // 저장
+  const handleSave = async () => {
+    if (!user) return;
+
+    // 비밀번호 일치 검사
     if (passwordVerified && newPassword && newPassword !== confirmPassword) {
       toast.error("새 비밀번호가 일치하지 않습니다.");
       return;
     }
 
-    setUser({ ...user, name, phone, image });
-    toast.success("정보가 변경되었습니다.");
-    setEditing(false);
-    setPasswordVerified(false);
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-    setPasswordMatch(null);
+    try {
+      // 1) 기본 정보 업데이트
+      await api.put("/api/myPage", { name, phone });
+
+      // 2) 아바타 업로드(선택)
+      // if (imageFile) {
+      //   const fd = new FormData();
+      //   fd.append("file", imageFile);
+      //   await api.put("/api/mypage/mypage/avatar", fd, {
+      //     headers: { "Content-Type": "multipart/form-data" },
+      //   });
+      // }
+
+      // // 3) 비밀번호 변경(선택)
+      // if (passwordVerified && newPassword) {
+      //   await api.post("/api/auth/change-password", {
+      //     currentPassword,
+      //     newPassword,
+      //   });
+      // }
+
+      // 4) 최신 데이터 재조회
+      const res = await api.get<MyPageDTO>("/api/myPage");
+      setUser(res.data);
+      setName(res.data.name || "");
+      setPhone(res.data.phone || "");
+      setPreviewUrl(null);
+      setImageFile(null);
+
+      // 폼 상태 리셋
+      setEditing(false);
+      setPasswordVerified(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+
+      toast.success("정보가 변경되었습니다.");
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || "저장 중 오류가 발생했습니다.");
+    }
   };
 
-  const handleCancel = () => {
+   const handleCancel = () => {
+    if (!user) return;
     setEditing(false);
-    setName(user.name);
-    setPhone(user.phone);
-    setImage(user.image);
+    setName(user.name || "");
+    setPhone(user.phone || "");
+    setPreviewUrl(null);
+    setImageFile(null);
     setCurrentPassword("");
     setPasswordVerified(false);
     setNewPassword("");
     setConfirmPassword("");
-    setPasswordMatch(null);
   };
+  
+  if (loading) return <div>로딩중…</div>;
+  if (!user) return <div>데이터가 없습니다.</div>;
 
   return (
     <div className="flex flex-col gap-10 pb-20">
@@ -119,7 +190,19 @@ export function MyPage() {
                 <input type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
               </label>
             )}
-            <p className="mt-3 text-gray-700 font-medium">{user.name}</p>
+            {editing ? (
+              <div className="mt-3 w-full max-w-xs">
+                <Label className="sr-only">이름</Label>
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="text-center"
+                  placeholder="이름을 입력하세요"
+                />
+              </div>
+            ) : (
+              <p className="mt-3 text-gray-700 font-medium">{name}</p>
+            )}
           </div>
 
           {/* 이메일 / 전화번호 */}
@@ -154,8 +237,9 @@ export function MyPage() {
                   onChange={(e) => setCurrentPassword(e.target.value)}
                 />
                 <Button
+                  // onclick={handleVerifyPassword}
                   className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition"
-                  onClick={handleVerifyPassword}>
+                  >
                   확인
                 </Button>
               </div>
@@ -166,38 +250,16 @@ export function MyPage() {
                   <Input
                     type="password"
                     value={newPassword}
-                    onChange={(e) => {
-                      setNewPassword(e.target.value);
-                      setPasswordMatch(
-                        confirmPassword
-                          ? e.target.value === confirmPassword
-                            ? "일치"
-                            : "불일치"
-                          : null
-                      );
-                    }}
+                    onChange={(e) => setNewPassword(e.target.value)}
                   />
                   <Label>새 비밀번호 확인</Label>
                   <Input
                     type="password"
                     value={confirmPassword}
-                    onChange={(e) => {
-                      setConfirmPassword(e.target.value);
-                      setPasswordMatch(
-                        newPassword
-                          ? newPassword === e.target.value
-                            ? "일치"
-                            : "불일치"
-                          : null
-                      );
-                    }}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
                   />
                   {passwordMatch && (
-                    <p
-                      className={`text-sm ${
-                        passwordMatch === "일치" ? "text-green-600" : "text-red-600"
-                      }`}
-                    >
+                    <p className={`text-sm ${passwordMatch === "일치" ? "text-green-600" : "text-red-600"}`}>
                       {passwordMatch === "일치" ? "비밀번호가 일치합니다." : "비밀번호가 일치하지 않습니다."}
                     </p>
                   )}

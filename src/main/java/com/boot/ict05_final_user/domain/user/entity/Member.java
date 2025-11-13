@@ -28,4 +28,7 @@ public class Member {
     private String phone;
 
     // 필요 시 created_at/updated_at 등 컬럼도 매핑
+
+    @Column(name = "member_image_path")
+    private String memberImagePath;
 }
