@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_URL = '/api/notice'; // Spring Boot 서버의 주소
+const API_BASE_URL = import.meta.env.VITE_BACKEND_API_BASE_URL;
+const API_URL = `${API_BASE_URL}/api/notice`; // Spring Boot 서버의 주소
 
 // 페이지 정보 타입을 정의합니다.
 export interface Page<T> {

@@ -1,4 +1,4 @@
-/* firebase-messaging-sw.js — 백그라운드 알림 표시용 SW (compat 사용) */
+/* firebase-messaging-sw.js — 백그라운드 알림 표시 + 클릭 하드닝 */
 importScripts('https://www.gstatic.com/firebasejs/12.5.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/12.5.0/firebase-messaging-compat.js');
 
@@ -14,21 +14,41 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// 서버에서 data 포함 시 여기서 직접 표시
+function normalizeLink(raw) {
+  const origin = self.location.origin;
+  const base = origin + '/user';
+  if (!raw) return base;
+  if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+  if (raw.startsWith('/')) return origin + raw;
+  return base.replace(/\/+$/,'') + '/' + raw.replace(/^\/+/, '');
+}
+
 messaging.onBackgroundMessage((payload) => {
-  const title = payload?.notification?.title || '알림';
-  const body  = payload?.notification?.body  || '';
-  const link  = (payload?.data && payload.data.link) || '/';
+  const title = payload?.notification?.title || payload?.data?.title || '알림';
+  const body  = payload?.notification?.body  || payload?.data?.body  || '';
+  const link  = normalizeLink(payload?.data?.link);
   self.registration.showNotification(title, {
     body,
-    icon: '/icons/icon-192.png',
-    data: { link }
+    icon: '/user/images/fcm/toastlab.png',
+    badge: '/user/images/fcm/badge-72.png',
+    data: { link },
+    tag: payload?.data?.type ? ('store-fcm-' + payload.data.type) : 'store-fcm'
   });
 });
 
-// 알림 클릭 시 라우팅
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.link) || '/';
-  event.waitUntil(clients.openWindow(url));
+  const link = normalizeLink(event.notification?.data?.link);
+
+  event.waitUntil((async () => {
+    const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    // /user 이미 열려있으면 포커스 후 navigate 시도
+    const existing = clientList.find(c => c.url.includes('/user'));
+    if (existing) {
+      await existing.focus();
+      try { existing.navigate(link); } catch (_) {}
+      return;
+    }
+    await clients.openWindow(link);
+  })());
 });

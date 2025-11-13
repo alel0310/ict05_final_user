@@ -1,53 +1,70 @@
-// src/main/java/com/boot/ict05_final_user/domain/fcm/entity/FcmDeviceToken.java
 package com.boot.ict05_final_user.domain.fcm.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
-
 import java.time.LocalDateTime;
 
-/**
- * FCM 디바이스 토큰 저장.
- * (공유 DB 스키마에서도 HQ/STORE를 appType으로 구분)
- */
 @Entity
 @Table(name = "fcm_device_token",
         indexes = {
-                @Index(name="ix_fdt_app_platform_member_dev", columnList = "appType,platform,memberId,deviceId"),
-                @Index(name="ix_fdt_token", columnList = "token", unique = true),
-                @Index(name="ix_fdt_store", columnList = "storeId")
-        })
+                @Index(name="ix_device_member", columnList = "member_id_fk"),
+                @Index(name="ix_device_store",  columnList = "store_id_fk"),
+                @Index(name="ix_device_staff",  columnList = "staff_id_fk")
+        },
+        uniqueConstraints = @UniqueConstraint(name="uq_fcm_token", columnNames = "token"))
 @Getter
 @Setter
+@Builder
 @NoArgsConstructor
-@AllArgsConstructor @Builder
+@AllArgsConstructor
 public class FcmDeviceToken {
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "fcm_device_token_id")
-    private Long id;
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long fcmDeviceTokenId;
 
     @Enumerated(EnumType.STRING)
-    private AppType appType;          // HQ or STORE
+    @Column(nullable = false, length = 16)
+    private AppType appType; // HQ / STORE
 
     @Enumerated(EnumType.STRING)
-    private PlatformType platform;    // WEB / ANDROID / IOS
+    @Column(nullable = false, length = 16)
+    private PlatformType platform; // ANDROID / IOS / WEB
 
-    private Long storeId;             // 소속 점포
-    private Long memberId;            // 소속 회원(점주/직원)
-
-    @Column(nullable = false, length = 819)
-    private String token;             // FCM Registration Token
+    @Column(nullable = false, length = 512)
+    private String token;
 
     @Column(length = 128)
-    private String deviceId;          // 클라이언트가 생성/전달
+    private String deviceId;
 
-    private boolean revoked;          // 해지 여부
-    private LocalDateTime lastSeenAt; // 마지막 활성 시각
+    @Column(name = "member_id_fk")
+    private Long memberIdFk;
 
-    @CreationTimestamp
-    private LocalDateTime createdAt;
-    @UpdateTimestamp
-    private LocalDateTime updatedAt;
+    @Column(name = "store_id_fk")
+    private Long storeIdFk;
+
+    @Column(name = "staff_id_fk")
+    private Long staffIdFk;
+
+    @Column(nullable = false)
+    private Boolean isActive = true;
+
+    private LocalDateTime lastSeenAt;
+
+    @Column(nullable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    @Column(nullable = false)
+    private LocalDateTime updatedAt = LocalDateTime.now();
+
+    @PreUpdate
+    void onUpdate() { this.updatedAt = LocalDateTime.now(); }
+
+    @PrePersist
+    void onCreate() {
+        LocalDateTime now = LocalDateTime.now();
+        if (createdAt == null) createdAt = now;
+        if (updatedAt == null) updatedAt = now;
+        if (isActive == null) isActive = true;
+    }
 }

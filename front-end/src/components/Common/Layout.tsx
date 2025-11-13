@@ -24,6 +24,8 @@ import {
 import { Button } from '../ui/button';
 import { useNavigate } from "react-router-dom";
 import api from "../../lib/authApi";
+import FcmForegroundListener from '../fcm/FcmForegroundListener';
+
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -156,6 +158,29 @@ export function Layout({ children, userType, currentPage, onPageChange }: Layout
     );
   };
 
+    // 선택: 간단한 path -> 메뉴 매핑
+  const navigateByLink = (path: string) => {
+    // 필요 시 더 추가
+    const map: Record<string, string> = {
+      "/dashboard": "dashboard",
+      "/notice/list": "notice",
+      "/reports/kpi": "kpi-report",
+      "/reports/orders": "order-report",
+      "/settings/notifications": "settings-notifications",
+    };
+    const pageId = map[path];
+    if (pageId) onPageChange(pageId);
+    else {
+      const base = window.location.origin;
+      window.location.href = path.startsWith("/") ? (base + path) : path;
+    }
+  };
+
+  const customTitles: Record<string, string> = {
+    "settings-notifications": "가맹점 알림 설정",
+    "mypage": "마이페이지",
+  };
+
   return (
     <div className="min-h-screen bg-light-gray flex">
       {/* Sidebar */}
@@ -245,9 +270,10 @@ export function Layout({ children, userType, currentPage, onPageChange }: Layout
               <Button 
                 variant="ghost" 
                 className="w-full justify-start text-white/80 hover:text-white hover:bg-white/10"
+                onClick={() => onPageChange('settings-notifications')}
               >
                 <Settings className="w-4 h-4 mr-2" />
-                설정
+                알림 설정
               </Button>
               <Button 
                 variant="ghost" 
@@ -278,18 +304,15 @@ export function Layout({ children, userType, currentPage, onPageChange }: Layout
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">
                   {(() => {
-                    // 먼저 최상위 메뉴에서 찾기
+                    if (currentPage === 'settings-notifications') return '알림 설정'; // ✅ 추가
                     const topLevelMenu = menuItems.find(item => item.id === currentPage);
                     if (topLevelMenu) return topLevelMenu.label;
-                    
-                    // 서브메뉴에서 찾기
                     for (const item of menuItems) {
                       if (item.children) {
                         const subMenu = item.children.find(child => child.id === currentPage);
                         if (subMenu) return subMenu.label;
                       }
                     }
-                    
                     return '대시보드';
                   })()}
                 </h2>
@@ -317,6 +340,8 @@ export function Layout({ children, userType, currentPage, onPageChange }: Layout
         <main className="flex-1 p-6 overflow-auto">
           {children}
         </main>
+        {/* ✅ 포어그라운드 FCM 리스너: 최상위에서 한 번만 등록 */}
+        <FcmForegroundListener onNavigate={navigateByLink} />
       </div>
     </div>
   );

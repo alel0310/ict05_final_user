@@ -31,15 +31,25 @@ export async function requestFcmToken(): Promise<string | null> {
   const messaging = await getMessagingIfSupported();
   if (!messaging) return null;
 
-  // 알림 권한 요청
+  // 1) SW 경로를 base('/user/')에 맞춰 안전 등록
+  const swUrl = (import.meta.env.BASE_URL || '/') + 'firebase-messaging-sw.js';
+  const reg =
+    (await navigator.serviceWorker.getRegistration(swUrl)) ||
+    (await navigator.serviceWorker.register(swUrl, {
+      scope: import.meta.env.BASE_URL || '/',
+    }));
+
+  // 2) 권한
   const perm = await Notification.requestPermission();
   if (perm !== 'granted') return null;
 
-  // VAPID 공개키로 브라우저 토큰 발급
+  // 3) 토큰 발급
   const token = await getToken(messaging, {
     vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY as string,
-    serviceWorkerRegistration: await navigator.serviceWorker.getRegistration(), // SW 등록 후 호출
+    serviceWorkerRegistration: reg,
   });
+
+  if (token) localStorage.setItem('fcm_token', token); // 디버깅/로그아웃용
   return token ?? null;
 }
 
