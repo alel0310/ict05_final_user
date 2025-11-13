@@ -49,7 +49,7 @@ export async function requestFcmToken(): Promise<string | null> {
     serviceWorkerRegistration: reg,
   });
 
-  if (token) localStorage.setItem('fcm_token', token); // ⬅️ 디버깅/로그아웃용
+  if (token) localStorage.setItem('fcm_token', token); // 디버깅/로그아웃용
   return token ?? null;
 }
 

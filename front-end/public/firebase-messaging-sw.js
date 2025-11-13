@@ -29,8 +29,8 @@ messaging.onBackgroundMessage((payload) => {
   const link  = normalizeLink(payload?.data?.link);
   self.registration.showNotification(title, {
     body,
-    icon: '/icons/icon-192.png',
-    badge: '/icons/badge-72.png',
+    icon: '/user/images/fcm/toastlab.png',
+    badge: '/user/images/fcm/badge-72.png',
     data: { link },
     tag: payload?.data?.type ? ('store-fcm-' + payload.data.type) : 'store-fcm'
   });
