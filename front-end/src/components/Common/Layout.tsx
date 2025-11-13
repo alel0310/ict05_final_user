@@ -22,13 +22,16 @@ import {
   Clock
 } from 'lucide-react';
 import { Button } from '../ui/button';
+import { useNavigate } from "react-router-dom";
+import api from "../../lib/authApi";
+import FcmForegroundListener from '../fcm/FcmForegroundListener';
+
 
 interface LayoutProps {
   children: React.ReactNode;
   userType: 'HQ' | 'Store';
   currentPage: string;
   onPageChange: (page: string) => void;
-  onLogout: () => void;
 }
 
 interface MenuItem {
@@ -105,7 +108,7 @@ const storeMenuItems: MenuItem[] = [
   },
 ];
 
-export function Layout({ children, userType, currentPage, onPageChange, onLogout }: LayoutProps) {
+export function Layout({ children, userType, currentPage, onPageChange }: LayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<string[]>(() => {
     // 초기 로드 시 현재 페이지가 서브메뉴에 속하면 해당 메뉴를 자동으로 확장
@@ -120,6 +123,30 @@ export function Layout({ children, userType, currentPage, onPageChange, onLogout
     
     return autoExpand;
   });
+
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    try {
+      const refreshToken = localStorage.getItem("refreshToken")
+      // 1) 서버에 로그아웃 요청 (리프레시 토큰 무효화 용도)
+      //    백엔드에서 @PostMapping("/logout") 으로 만들었다고 가정
+      await api.post("/logout",{refreshToken});
+    } catch (err) {
+      // 실패하더라도 클라이언트 토큰은 지우는 편이 낫다
+      console.error("logout error", err);
+    } finally {
+      // 2) 로컬 토큰 제거완
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+
+      // 3) axios 기본 Authorization 헤더 제거
+      delete api.defaults.headers.common.Authorization;
+
+      // 4) 로그인 페이지로 이동
+      navigate("/login", { replace: true });
+    }
+  };
   
   const menuItems = userType === 'HQ' ? hqMenuItems : storeMenuItems;
 
@@ -129,6 +156,29 @@ export function Layout({ children, userType, currentPage, onPageChange, onLogout
         ? prev.filter(id => id !== menuId)
         : [...prev, menuId]
     );
+  };
+
+    // 선택: 간단한 path -> 메뉴 매핑
+  const navigateByLink = (path: string) => {
+    // 필요 시 더 추가
+    const map: Record<string, string> = {
+      "/dashboard": "dashboard",
+      "/notice/list": "notice",
+      "/reports/kpi": "kpi-report",
+      "/reports/orders": "order-report",
+      "/settings/notifications": "settings-notifications",
+    };
+    const pageId = map[path];
+    if (pageId) onPageChange(pageId);
+    else {
+      const base = window.location.origin;
+      window.location.href = path.startsWith("/") ? (base + path) : path;
+    }
+  };
+
+  const customTitles: Record<string, string> = {
+    "settings-notifications": "가맹점 알림 설정",
+    "mypage": "마이페이지",
   };
 
   return (
@@ -220,13 +270,14 @@ export function Layout({ children, userType, currentPage, onPageChange, onLogout
               <Button 
                 variant="ghost" 
                 className="w-full justify-start text-white/80 hover:text-white hover:bg-white/10"
+                onClick={() => onPageChange('settings-notifications')}
               >
                 <Settings className="w-4 h-4 mr-2" />
-                설정
+                알림 설정
               </Button>
               <Button 
                 variant="ghost" 
-                onClick={onLogout}
+                onClick={handleLogout}
                 className="w-full justify-start text-white/80 hover:text-white hover:bg-white/10"
               >
                 <LogOut className="w-4 h-4 mr-2" />
@@ -253,18 +304,15 @@ export function Layout({ children, userType, currentPage, onPageChange, onLogout
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">
                   {(() => {
-                    // 먼저 최상위 메뉴에서 찾기
+                    if (currentPage === 'settings-notifications') return '알림 설정'; // ✅ 추가
                     const topLevelMenu = menuItems.find(item => item.id === currentPage);
                     if (topLevelMenu) return topLevelMenu.label;
-                    
-                    // 서브메뉴에서 찾기
                     for (const item of menuItems) {
                       if (item.children) {
                         const subMenu = item.children.find(child => child.id === currentPage);
                         if (subMenu) return subMenu.label;
                       }
                     }
-                    
                     return '대시보드';
                   })()}
                 </h2>
@@ -292,6 +340,8 @@ export function Layout({ children, userType, currentPage, onPageChange, onLogout
         <main className="flex-1 p-6 overflow-auto">
           {children}
         </main>
+        {/* ✅ 포어그라운드 FCM 리스너: 최상위에서 한 번만 등록 */}
+        <FcmForegroundListener onNavigate={navigateByLink} />
       </div>
     </div>
   );
