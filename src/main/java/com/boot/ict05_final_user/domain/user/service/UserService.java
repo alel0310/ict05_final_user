@@ -4,6 +4,7 @@ import com.boot.ict05_final_user.config.security.jwt.service.JwtService;
 import com.boot.ict05_final_user.domain.user.dto.UserRequestDTO;
 import com.boot.ict05_final_user.domain.user.dto.UserResponseDTO;
 import com.boot.ict05_final_user.domain.user.entity.Member;
+import com.boot.ict05_final_user.domain.user.entity.MemberStatus;
 import com.boot.ict05_final_user.domain.user.repository.UserRepository; // ← Member를 다루는 Repo
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.User;
@@ -46,24 +47,42 @@ public class UserService implements UserDetailsService {
         if (email == null || email.isBlank()) {
             throw new IllegalArgumentException("email 은 필수입니다.");
         }
-        if (userRepository.existsByEmail(email)) {
+
+        // 1) 이메일 기준 기존 회원 조회
+        Member existing = userRepository.findByEmail(email).orElse(null);
+
+        // 1-1) 이미 ACTIVE 회원이면 가입 불가
+        if (existing != null && existing.getStatus() == MemberStatus.ACTIVE) {
             throw new IllegalArgumentException("이미 유저가 존재합니다.");
         }
 
-        // ✅ nickname fallback 제거: name만 사용
+        // ✅ name 필수 검증 (기존 그대로)
         if (dto.getName() == null || dto.getName().isBlank()) {
             throw new IllegalArgumentException("name 은 필수입니다.");
         }
 
+        // 2) 기존 WITHDRAW 회원이면 재활성화
+        if (existing != null && existing.getStatus() == MemberStatus.WITHDRAW) {
+            existing.setName(dto.getName());
+            existing.setPhone(dto.getPhone());
+            existing.setPassword(passwordEncoder.encode(dto.getPassword()));
+            existing.setStatus(MemberStatus.ACTIVE);  // 탈퇴 → 활성 전환
+
+            return existing.getId();
+        }
+
+        // 3) 그 외에는 신규 회원 생성
         Member member = Member.builder()
                 .email(email)
                 .password(passwordEncoder.encode(dto.getPassword()))
                 .name(dto.getName())
                 .phone(dto.getPhone())
+                .status(MemberStatus.ACTIVE)   // 신규는 항상 ACTIVE
                 .build();
 
         return userRepository.save(member).getId();
     }
+
 
     /** 로그인용(스프링 시큐리티) — 파라미터 username에 email이 들어옵니다 */
     @Transactional(readOnly = true)

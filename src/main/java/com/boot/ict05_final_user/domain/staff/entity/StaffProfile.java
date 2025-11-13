@@ -18,9 +18,7 @@ import java.time.LocalDateTime;
 @Builder
 public class StaffProfile {
 
-    /**
-     * 직원 시퀀스
-     */
+    /** 직원 시퀀스 */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "staff_id")
@@ -40,61 +38,43 @@ public class StaffProfile {
     )
     private Member member;
 
-    /**
-     * 직원 이름
-     */
+    /** 직원 이름 */
     @Column(name = "staff_name", length = 100)
     private String staffName;
 
-    /**
-     * 직원 근무형태 (점주/직원/알바)
-     */
+    /** 직원 근무형태 (점주/직원/알바) */
     @Enumerated(EnumType.STRING)
     @Column(name = "staff_employment_type")
     private StaffEmploymentType staffEmploymentType;
 
-    /**
-     * 직원 부서
-     */
+    /** 직원 부서 */
     @Enumerated(EnumType.STRING)
     @Column(name = "staff_department")
     private StaffDepartment staffDepartment;
 
-    /**
-     * 직원 이메일
-     */
+    /** 직원 이메일 */
     @Column(name = "staff_email")
     private String staffEmail;
 
-    /**
-     * 직원 전화번호
-     */
+    /** 직원 전화번호 */
     @Column(name = "staff_phone", length = 50)
     private String staffPhone;
 
-    /**
-     * 직원 주소
-     */
+    /** 직원 주소 */
     @Column(name = "staff_address")
     private String staffAddress;
 
-    /**
-     * 직원 생년월일
-     */
+    /** 직원 생년월일 */
     @Schema(type = "string", format = "date-time")
     @Column(name = "staff_birth")
     private LocalDateTime staffBirth;
 
-    /**
-     * 직원 입사일자 (혹은 매장 근무 시작일)
-     */
+    /** 직원 입사일자 (혹은 매장 근무 시작일) */
     @Schema(type = "string", format = "date-time")
     @Column(name = "staff_start_date")
     private LocalDateTime staffStartDate;
 
-    /**
-     * 직원 퇴사일자
-     */
+    /** 직원 퇴사일자 */
     @Schema(type = "string", format = "date-time")
     @Column(name = "staff_end_date")
     private LocalDateTime staffEndDate;

@@ -45,7 +45,7 @@ public class Attendance {
 
     /** 근태 상태 */
     @Enumerated(EnumType.STRING)
-    @Column(name = "attendance_status", nullable = false, length = 16)
+    @Column(name = "attendance_status", nullable = false, length = 20)
     private AttendanceStatus status;
 
     /** 실제 근무 시간 */

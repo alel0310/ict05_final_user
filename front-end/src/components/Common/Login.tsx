@@ -1,5 +1,5 @@
 // src/components/Common/Login.tsx
-import react, { useState } from "react";
+import react, { useRef,useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
@@ -21,6 +21,8 @@ function parseJwt(token: string): any | null {
   }
 }
 
+
+
 export default function Login() {
   const navigate = useNavigate();
 
@@ -28,19 +30,30 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState<boolean>(false);
+  const passRef = useRef<HTMLInputElement>(null);
+  const isWeakPassword = (pwd: string) => pwd.length < 6;
 
-  const handleLogin = async (e: any) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loading) return;
     setLoading(true);
     setError("");
 
     if (!email || !password) {
-      setError("이메일과 비밀번호를 입력하세요.");
+      const msg = "이메일과 비밀번호를 입력하세요.";
+      setError(msg);
+      toast.error(msg);
       setLoading(false);
       return;
     }
-
+    if (isWeakPassword(password)) {
+      const msg = "비밀번호는 6자 이상이어야 합니다.";
+      setError(msg);
+      toast.error(msg);
+      passRef.current?.focus();
+      setLoading(false);
+      return;
+    }
     try {
       // 1) 로그인
       const res = await api.post("/login", { email, password });
@@ -114,9 +127,28 @@ export default function Login() {
       navigate("/dashboard", { replace: true });
     } catch (err: unknown) {
       console.error(err);
-      const status = axios.isAxiosError(err) ? err?.response?.status : undefined;
-      if (status === 401) setError("이메일 또는 비밀번호를 확인하세요.");
-      else setError("로그인 중 오류가 발생했습니다.");
+      if (axios.isAxiosError(err)) {
+        const status = err.response?.status;
+        const code = (err.response?.data as any)?.code as string | undefined;
+        const msg = (err.response?.data as any)?.message as string | undefined;
+
+        if (code === "WRONG_PASSWORD") {
+          setError("비밀번호가 틀립니다.");
+          toast.error("비밀번호가 틀립니다.");
+        } else if (code === "USER_NOT_FOUND" || status === 404) {
+          setError("존재하지 않는 이메일입니다.");
+          toast.error("존재하지 않는 이메일입니다.");
+        } else if (status === 401) {
+          setError("이메일 또는 비밀번호를 확인하세요.");
+          toast.error("이메일 또는 비밀번호를 확인하세요.");
+        } else {
+          setError(msg ?? "로그인 중 오류가 발생했습니다.");
+          toast.error(msg ?? "로그인 중 오류가 발생했습니다.");
+        }
+      } else {
+        setError("네트워크 오류가 발생했습니다.");
+        toast.error("네트워크 오류가 발생했습니다.");
+      }
     } finally {
       setLoading(false);
     }
@@ -171,6 +203,12 @@ export default function Login() {
               />
             </div>
           </div>
+          
+          {error && (
+            <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+              {error}
+            </div>
+          )}
 
           <div className="space-y-3 pt-4">
             <Button type="submit" className="w-full h-12 rounded-lg font-medium bg-kpi-red hover:bg-red-600 text-white">
