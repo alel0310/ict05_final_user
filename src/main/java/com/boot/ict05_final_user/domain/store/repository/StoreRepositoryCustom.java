@@ -1,7 +1,6 @@
-package com.boot.ict05_final_admin.domain.store.repository;
+package com.boot.ict05_final_user.domain.store.repository;
 
-import com.boot.ict05_final_admin.domain.staffresources.entity.StaffProfile;
-import com.boot.ict05_final_admin.domain.store.dto.*;
+import com.boot.ict05_final_user.domain.store.dto.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 

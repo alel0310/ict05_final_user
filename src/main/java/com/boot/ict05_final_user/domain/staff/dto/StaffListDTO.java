@@ -1,7 +1,6 @@
 package com.boot.ict05_final_user.domain.staff.dto;
 
 import com.boot.ict05_final_user.domain.staff.entity.AttendanceStatus;
-import com.boot.ict05_final_user.domain.staff.entity.StaffDepartment;
 import com.boot.ict05_final_user.domain.staff.entity.StaffEmploymentType;
 import lombok.AllArgsConstructor;
 import lombok.Data;

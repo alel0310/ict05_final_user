@@ -1,6 +1,6 @@
-package com.boot.ict05_final_admin.domain.store.dto;
+package com.boot.ict05_final_user.domain.store.dto;
 
-import com.boot.ict05_final_admin.domain.store.entity.StoreStatus;
+import com.boot.ict05_final_user.domain.store.entity.StoreStatus;
 import lombok.Data;
 
 /** 매장 목록 검색 조건 DTO.

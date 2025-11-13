@@ -1,12 +1,12 @@
-package com.boot.ict05_final_admin.domain.store.repository;
+package com.boot.ict05_final_user.domain.store.repository;
 
-import com.boot.ict05_final_admin.domain.auth.entity.QMember;
-import com.boot.ict05_final_admin.domain.staffresources.entity.QStaffProfile;
-import com.boot.ict05_final_admin.domain.staffresources.entity.StaffDepartment;
-import com.boot.ict05_final_admin.domain.staffresources.entity.StaffEmploymentType;
-import com.boot.ict05_final_admin.domain.store.dto.*;
-import com.boot.ict05_final_admin.domain.store.entity.QStore;
-import com.boot.ict05_final_admin.domain.store.entity.StoreStatus;
+import com.boot.ict05_final_user.domain.staff.entity.QStaffProfile;
+import com.boot.ict05_final_user.domain.staff.entity.StaffDepartment;
+import com.boot.ict05_final_user.domain.staff.entity.StaffEmploymentType;
+import com.boot.ict05_final_user.domain.store.dto.*;
+import com.boot.ict05_final_user.domain.store.entity.QStore;
+import com.boot.ict05_final_user.domain.store.entity.StoreStatus;
+import com.boot.ict05_final_user.domain.user.entity.QMember;
 import com.querydsl.core.types.ExpressionUtils;
 import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;

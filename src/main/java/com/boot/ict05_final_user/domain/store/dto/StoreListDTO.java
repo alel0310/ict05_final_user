@@ -1,7 +1,6 @@
-package com.boot.ict05_final_admin.domain.store.dto;
+package com.boot.ict05_final_user.domain.store.dto;
 
-import com.boot.ict05_final_admin.domain.staffresources.dto.StaffListDTO;
-import com.boot.ict05_final_admin.domain.store.entity.StoreStatus;
+import com.boot.ict05_final_user.domain.store.entity.StoreStatus;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;

@@ -1,7 +1,7 @@
-package com.boot.ict05_final_admin.domain.staffresources.dto;
+package com.boot.ict05_final_user.domain.staff.dto;
 
-import com.boot.ict05_final_admin.domain.staffresources.entity.StaffDepartment;
-import com.boot.ict05_final_admin.domain.staffresources.entity.StaffEmploymentType;
+import com.boot.ict05_final_user.domain.staff.entity.StaffDepartment;
+import com.boot.ict05_final_user.domain.staff.entity.StaffEmploymentType;
 import jakarta.validation.constraints.*;
 import lombok.Data;
 

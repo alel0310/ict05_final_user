@@ -1,4 +1,4 @@
-package com.boot.ict05_final_admin.domain.store.dto;
+package com.boot.ict05_final_user.domain.store.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

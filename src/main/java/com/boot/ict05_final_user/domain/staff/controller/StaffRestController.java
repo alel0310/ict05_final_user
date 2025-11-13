@@ -1,10 +1,8 @@
 package com.boot.ict05_final_user.domain.staff.controller;
 
 import com.boot.ict05_final_user.config.security.principal.AppUser;
-import com.boot.ict05_final_user.domain.staff.dto.StaffWriteFormDTO;
-import com.boot.ict05_final_user.domain.staff.dto.StaffModifyFormDTO;
 import com.boot.ict05_final_user.domain.staff.dto.StaffListDTO;
-import com.boot.ict05_final_user.domain.staff.entity.Attendance;
+import com.boot.ict05_final_user.domain.staff.dto.StaffWriteFormDTO;
 import com.boot.ict05_final_user.domain.staff.entity.StaffProfile;
 import com.boot.ict05_final_user.domain.staff.repository.AttendanceRepository;
 import com.boot.ict05_final_user.domain.staff.repository.StaffRepository;
@@ -19,12 +17,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 
-import static com.boot.ict05_final_user.domain.store.entity.QStore.store;
 
 /**
  * 직원 관련 REST API 컨트롤러
@@ -36,7 +30,6 @@ import static com.boot.ict05_final_user.domain.store.entity.QStore.store;
  * </ul>
  *
  * <p>
- * {@link StaffWriteFormDTO}, {@link StaffModifyFormDTO} 를 통해
  * 검증 및 데이터 바인딩을 수행합니다.
  *
  * @author 채은

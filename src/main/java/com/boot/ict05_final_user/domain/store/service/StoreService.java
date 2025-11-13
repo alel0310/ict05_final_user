@@ -1,21 +1,21 @@
-package com.boot.ict05_final_admin.domain.store.service;
+package com.boot.ict05_final_user.domain.store.service;
 
-import com.boot.ict05_final_admin.domain.auth.entity.Member;
-import com.boot.ict05_final_admin.domain.member.repository.MemberRepository;
-import com.boot.ict05_final_admin.domain.staffresources.entity.StaffProfile;
-import com.boot.ict05_final_admin.domain.staffresources.repository.StaffRepository;
-import com.boot.ict05_final_admin.domain.store.dto.*;
-import com.boot.ict05_final_admin.domain.store.entity.Store;
-import com.boot.ict05_final_admin.domain.store.repository.StoreRepository;
+import com.boot.ict05_final_user.domain.staff.entity.StaffProfile;
+import com.boot.ict05_final_user.domain.staff.repository.StaffRepository;
+import com.boot.ict05_final_user.domain.store.dto.*;
+import com.boot.ict05_final_user.domain.store.entity.Store;
+import com.boot.ict05_final_user.domain.store.repository.StoreRepository;
+import com.boot.ict05_final_user.domain.user.entity.Member;
+import com.boot.ict05_final_user.domain.user.repository.MemberRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 
+import org.springframework.data.domain.Pageable;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
@@ -128,7 +128,6 @@ public class StoreService {
      * 가맹점의 이름(및 필요 시 식별자 등 최소 필드)을 DTO로 조회한다.
      *
      * @return 가맹점 표시용 DTO 리스트. 데이터가 없으면 일반적으로 빈 리스트를 반환.
-     * @see com.boot.ict05_final_admin.domain.store.repository.StoreRepository#findStoreName()
      */
     public List<FindStoreDTO> findStoreName() {
         return storeRepository.findStoreName();
@@ -155,27 +154,6 @@ public class StoreService {
         return storeRepository.findById(id).orElse(null);
     }
 
-    /**
-     * 기존 가맹점 정보를 수정한다.
-     *
-     * @param dto 수정할 데이터
-     * @return 수정된 가맹점 엔티티
-     */
-    public Store storeModify(StoreModifyFormDTO dto) {
-
-        String address = "";
-        String address1 = dto.getUserAddress1();
-        String address2 = dto.getUserAddress2();
-        address = address1 + "," + address2;
-        dto.setStoreLocation(address);
-
-        Store store = findById(dto.getStoreId());
-        if (store == null) throw new IllegalArgumentException("해당 가맹점이 존재하지 않습니다.");
-
-        store.updateStore(dto);
-
-        return store;
-    }
 
     @Transactional(readOnly = true)
     public Map<String, Object> listHeaderStats() {

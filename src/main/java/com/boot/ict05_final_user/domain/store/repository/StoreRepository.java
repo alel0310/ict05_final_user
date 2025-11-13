@@ -1,6 +1,6 @@
-package com.boot.ict05_final_admin.domain.store.repository;
+package com.boot.ict05_final_user.domain.store.repository;
 
-import com.boot.ict05_final_admin.domain.store.entity.Store;
+import com.boot.ict05_final_user.domain.store.entity.Store;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 /**

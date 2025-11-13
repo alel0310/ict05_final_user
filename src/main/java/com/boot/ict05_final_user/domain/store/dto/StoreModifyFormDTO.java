@@ -1,7 +1,7 @@
-package com.boot.ict05_final_admin.domain.store.dto;
+package com.boot.ict05_final_user.domain.store.dto;
 
-import com.boot.ict05_final_admin.domain.store.entity.StoreStatus;
-import com.boot.ict05_final_admin.domain.store.entity.StoreType;
+import com.boot.ict05_final_user.domain.store.entity.StoreStatus;
+import com.boot.ict05_final_user.domain.store.entity.StoreType;
 import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
