@@ -105,6 +105,19 @@ public class UserService implements UserDetailsService {
         return userRepository.save(m).getId();
     }
 
+
+    @Transactional
+    public void logout() {
+        // 1. SecurityContext 에서 현재 인증된 사용자 이메일 가져오기
+        String email = SecurityContextHolder.getContext()
+                .getAuthentication()
+                .getName();
+        // 2. 해당 이메일 기준으로 DB에 저장된 refresh 토큰 삭제
+        jwtService.removeRefreshUser(email);
+    }
+
+
+
     /** 회원 탈퇴 (이메일 기준) */
     @Transactional
     public void deleteUser(UserRequestDTO dto) throws AccessDeniedException {

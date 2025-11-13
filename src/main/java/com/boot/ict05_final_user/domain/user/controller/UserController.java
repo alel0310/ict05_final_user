@@ -52,5 +52,11 @@ public class UserController {
         userService.deleteUser(dto);
         return ResponseEntity.ok(true);
     }
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logoutApi() throws AccessDeniedException {
+        userService.logout();
+        return ResponseEntity.ok().build();
+    }
+
 }
 

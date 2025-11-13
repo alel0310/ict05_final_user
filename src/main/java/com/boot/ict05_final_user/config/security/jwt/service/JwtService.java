@@ -140,7 +140,7 @@ public class JwtService {
         refreshRepository.save(entity);
     }
 
-    // JWT Refresh 존재 확인 메소드
+    // JWT Refresh 존재 확인 메소드1111
 
     @Transactional(readOnly = true)
     public Boolean existsRefresh(String refreshToken) {
