@@ -9,7 +9,7 @@ import { Store, Lock, Mail } from "lucide-react";
 import { toast } from "sonner";
 import axios from "axios";
 import api from "../../lib/authApi";
-import { requestFcmToken } from "../../lib/firebase"; // ⬅️ 추가
+import { requestFcmToken } from "../../lib/firebase";
 
 // JWT 파싱(스토어ID를 토큰에서 꺼낼 때 사용; 없으면 /me 호출)
 function parseJwt(token: string): any | null {

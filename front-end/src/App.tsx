@@ -30,6 +30,10 @@ import api from "./lib/authApi";
 import KpiReport from "./components/Store/reports/KpiReport";
 import NotificationSettings from "./components/Store/NotificationSettings";
  // ✅ 인터셉터/강제로그아웃 핸들러
+import { getMessagingIfSupported } from "./lib/firebase";
+import { deleteToken } from "firebase/messaging";
+
+
 
 export default function App() {
   const navigate = useNavigate();
