@@ -36,10 +36,6 @@ public class StaffWriteFormDTO {
     @NotNull(message = "근무 형태를 선택해주세요")
     private StaffEmploymentType staffEmploymentType;
 
-    /** 사원 부서 (관리팀, 판매팀) */
-    @NotNull(message = "직원 부서를 선택해주세요")
-    private StaffDepartment staffDepartment;
-
     /** 사원 이메일 */
     @NotNull(message = "이메일을 입력해주세요")
     @Email(message = "이메일 형식이 올바르지 않습니다")
@@ -49,12 +45,6 @@ public class StaffWriteFormDTO {
     @NotNull(message = "연락처를 입력해주세요")
     @Pattern(regexp = "^[0-9\\-]{9,13}$", message = "연락처는 숫자와 하이픈만 입력해주세요")
     private String staffPhone;
-
-    @Size(max = 255, message = "주소는 255자 이내로 입력해주세요")
-    private String userAddress1;
-
-    @Size(max = 255, message = "주소는 255자 이내로 입력해주세요")
-    private String userAddress2;
 
     /** 사원 주소 */
     @Size(max = 255, message = "주소는 255자 이내로 입력해주세요")

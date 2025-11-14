@@ -5,7 +5,6 @@ import com.boot.ict05_final_user.domain.staff.dto.StaffSearchDTO;
 import com.boot.ict05_final_user.domain.staff.entity.QAttendance;
 import com.boot.ict05_final_user.domain.staff.entity.QStaffProfile;
 import com.querydsl.core.BooleanBuilder;
-import com.querydsl.core.types.ExpressionUtils;
 import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQuery;
@@ -15,7 +14,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
-import com.querydsl.core.types.Predicate;
 import java.util.List;
 
 
