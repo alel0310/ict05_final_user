@@ -50,7 +50,7 @@ public class HomeService {
                         .build(),
                 KpiCardDTO.builder()
                         .key("visitors_today")
-                        .value(visitors + "명")
+                        .value(visitors + "건")
                         .change(diffPctStr(visitors, visitorsPrev))
                         .changeType(changeType(visitors, visitorsPrev))
                         .build(),
