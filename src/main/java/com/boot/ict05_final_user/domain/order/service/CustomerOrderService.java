@@ -8,6 +8,7 @@ import com.boot.ict05_final_user.domain.order.entity.*;
 import com.boot.ict05_final_user.domain.order.repository.CustomerOrderDetailRepository;
 import com.boot.ict05_final_user.domain.order.repository.CustomerOrderRepository;
 import com.boot.ict05_final_user.domain.store.entity.Store;
+import com.boot.ict05_final_user.domain.store.repository.StoreRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

@@ -37,7 +37,7 @@ public class Menu {
 
     /** 메뉴 칼로리 */
     @Column(name = "menu_kcal")
-    private int menuKcal;
+    private Integer menuKcal;
 
     /** 품절 상태 */
     @Builder.Default
