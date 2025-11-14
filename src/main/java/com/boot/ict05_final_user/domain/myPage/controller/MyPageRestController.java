@@ -23,9 +23,12 @@ public class MyPageRestController {
     @GetMapping("/myPage")
     @Operation(summary = "마이페이지 상세 조회", description = "회원의 프로필 정보를 조회한다.")
     public ResponseEntity<MyPageDTO> myPage(@AuthenticationPrincipal AppUser user) {
-        return ResponseEntity.ok(
-                myPageService.getMyInfo(user.getMemberId(), user.getStoreId())
-        );
+//        return ResponseEntity.ok(
+//                myPageService.getMyInfo(user.getMemberId(), user.getStoreId())
+//
+//        );
+        MyPageDTO dto = myPageService.getMyPro(user.getMemberId());
+        return ResponseEntity.ok(dto);
     }
 
     // 2) 마이페이지 기본 정보 수정(이름, 전화번호 등)
@@ -87,10 +90,5 @@ public class MyPageRestController {
 
         return ResponseEntity.noContent().build();   // 204
     }
-
-//    @GetMapping("/myPage")
-//    public ResponseEntity<MyPageDTO> mypro(@AuthenticationPrincipal AppUser user) {
-//        return ResponseEntity.ok(myPageService.getMyPro(user.getMemberId()));
-//    }
 
 }

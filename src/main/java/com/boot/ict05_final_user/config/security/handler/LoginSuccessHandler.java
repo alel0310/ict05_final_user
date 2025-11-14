@@ -37,6 +37,8 @@ public class LoginSuccessHandler implements AuthenticationSuccessHandler {
         Long memberId = userReadService.findMemberIdByUsername(username);
         String memberName = userReadService.findMemberNameByUsername(username);
 
+        String storeName = userReadService.findStoreNameByUsername(username);
+
         // JWT(Access/Refresh) 발급
         String accessToken = JWTUtil.createJWT(username, role, storeId, memberId, memberName, true);
         String refreshToken = JWTUtil.createJWT(username, role, storeId, memberId, memberName, false);
@@ -48,7 +50,9 @@ public class LoginSuccessHandler implements AuthenticationSuccessHandler {
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");
 
-        String json = String.format("{\"accessToken\":\"%s\", \"refreshToken\":\"%s\"}", accessToken, refreshToken);
+        String json = String.format("{\"accessToken\":\"%s\", \"refreshToken\":\"%s\"}", accessToken, refreshToken,
+                memberName != null ? memberName : "",
+                storeName != null ? storeName : "");
         response.getWriter().write(json);
         response.getWriter().flush();
     }

@@ -32,6 +32,39 @@ public class MyPageService {
         return MyPageDTO.fromEntity(member);
     }
 
+    @Transactional(readOnly = true)
+    public MyPageDTO getMyPro(Long memberId) {
+
+        Member member = myPageRepository.findById(memberId)
+                .orElseThrow(() -> new AccessDeniedException("회원이 존재하지 않습니다."));
+
+        StaffProfile staff = staffRepository.findByMember_Id(memberId).orElse(null);
+
+        String name = member.getName();
+        String email = member.getEmail();
+        String storeName = null;
+
+        if (staff != null) {
+            if (staff.getStaffName() != null && !staff.getStaffName().isBlank()) {
+                name = staff.getStaffName();
+            }
+            if (staff.getStaffEmail() != null && !staff.getStaffEmail().isBlank()) {
+                email = staff.getStaffEmail();
+            }
+            if (staff.getStore() != null) {
+                storeName = staff.getStore().getName();
+            }
+        }
+
+        return MyPageDTO.builder()
+                .id(member.getId())
+                .name(name)
+                .email(email)
+                .storeName(storeName)
+                .build();
+    }
+
+
     @Transactional
     public MyPageDTO updateMyPage(Long memberId, MyPageDTO dto) {
         Member member = myPageRepository.findById(memberId)
@@ -101,22 +134,6 @@ public class MyPageService {
 
         // 이메일 기준으로 refresh 토큰 삭제
         jwtService.removeRefreshUser(member.getEmail());
-    }
-
-    // 상단 정보S
-    @Transactional
-    public MyPageDTO getMyPro(Long memberId) {
-        StaffProfile staff = staffRepository
-                .findById(memberId)      // 이미 있는 쿼리라고 가정
-                .orElseThrow(() -> new RuntimeException("프로필 없음"));
-
-        return MyPageDTO.builder()
-                .id(staff.getId())
-                .name(staff.getStaffName())
-                .email(staff.getStaffEmail())
-                .storeName(staff.getStore().getName())
-                .employmentType(String.valueOf(staff.getStaffEmploymentType()))
-                .build();
     }
 
 }
