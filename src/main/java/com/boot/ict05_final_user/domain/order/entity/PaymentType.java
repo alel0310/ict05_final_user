@@ -1,25 +1,42 @@
 package com.boot.ict05_final_user.domain.order.entity;
 
-/** 결제 방식 (DB에는 영문 소문자 코드 저장: card/cash/voucher/external) */
+/**
+ * 결제 수단 유형을 표현하는 열거형(Enum)입니다.
+ *
+ * <p>주문 결제 시 사용되는 결제 수단을 카드, 현금, 상품권, 외부 결제 등으로 구분합니다.</p>
+ */
 public enum PaymentType {
-    CARD("card", "카드"),
-    CASH("cash", "현금"),
-    VOUCHER("voucher", "상품권"),
-    EXTERNAL("external", "외부 결제");
 
-    private final String code;   // DB 저장값
-    private final String label;  // 한글 라벨
+	/** 카드 결제 */
+	CARD("카드"),
 
-    PaymentType(String code, String label) {
-        this.code = code; this.label = label;
-    }
-    public String getCode() { return code; }
-    public String getLabel() { return label; }
+	/** 현금 결제 */
+	CASH("현금"),
 
-    public static PaymentType fromCode(String code) {
-        for (PaymentType v : values()) {
-            if (v.code.equals(code)) return v;
-        }
-        throw new IllegalArgumentException("Unknown PaymentType code=" + code);
-    }
+	/** 상품권 결제 */
+	VOUCHER("상품권"),
+
+	/** 외부(타 PG/제휴사 등) 결제 */
+	EXTERNAL("외부 결제");
+
+	/** 화면 및 응답 DTO 등에 노출할 한글 라벨 */
+	private final String label;
+
+	/**
+	 * 결제 수단 열거값에 대응하는 한글 라벨을 설정합니다.
+	 *
+	 * @param label 화면에 표시할 결제 수단 이름(한글)
+	 */
+	PaymentType(String label) {
+		this.label = label;
+	}
+
+	/**
+	 * 화면 및 응답에 사용할 결제 수단 라벨(한글명)을 반환합니다.
+	 *
+	 * @return 결제 수단 라벨(한글명)
+	 */
+	public String getLabel() {
+		return label;
+	}
 }

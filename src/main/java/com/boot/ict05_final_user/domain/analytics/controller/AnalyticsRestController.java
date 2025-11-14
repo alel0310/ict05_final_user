@@ -1,15 +1,14 @@
 package com.boot.ict05_final_user.domain.analytics.controller;
 
-import com.boot.ict05_final_user.domain.analytics.dto.AnalyticsSearchDto;
-import com.boot.ict05_final_user.domain.analytics.dto.CursorPage;
-import com.boot.ict05_final_user.domain.analytics.dto.KpiRowDto;
-import com.boot.ict05_final_user.domain.analytics.dto.KpiSummaryDto;
+import com.boot.ict05_final_user.domain.analytics.dto.*;
 import com.boot.ict05_final_user.domain.analytics.service.AnalyticsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
 
 // import com.boot.ict05_final_user.common.web.StoreScoped; // 실제에선 ArgumentResolver 등 사용
 
@@ -60,5 +59,63 @@ public class AnalyticsRestController {
 		);
 		return ResponseEntity.ok(service.getKpiRows(storeId, cond));
 	}
+
+
+	// ======================
+	// 주문 분석 Summary (상단 카드)
+	// ======================
+	@GetMapping("/api/analytics/orders/summary")
+	public ResponseEntity<OrderSummaryDto> getOrderSummary(
+			// @StoreScoped Long storeId
+			Long storeId // 임시 파라미터(로컬 테스트). 운영 시 @StoreScoped로 교체
+	) {
+		if (storeId == null) storeId = 1L;
+		return ResponseEntity.ok(service.getOrderSummary(storeId));
+	}
+
+	// ======================
+	// 주문 분석 테이블 - 일별(주문 단위)
+	// ======================
+	@GetMapping("/api/analytics/orders/day-rows")
+	public ResponseEntity<CursorPage<OrderDailyRowDto>> getOrderDailyRows(
+			@RequestParam String start,
+			@RequestParam String end,                 // 조회 종료일(포함)
+			@RequestParam(defaultValue = "50") Integer size,
+			@RequestParam(required = false) String cursor,
+			Long storeId // 임시 파라미터(운영시 @StoreScoped 교체)
+	) {
+		if (storeId == null) storeId = 1L;
+		AnalyticsSearchDto cond = new AnalyticsSearchDto(
+				LocalDate.parse(start),
+				LocalDate.parse(end),
+				AnalyticsSearchDto.ViewBy.DAY,
+				size,
+				cursor
+		);
+		return ResponseEntity.ok(service.getOrderDailyRows(storeId, cond));
+	}
+
+	// ======================
+	// 주문 분석 테이블 - 월별(월 단위 집계)
+	// ======================
+	@GetMapping("/api/analytics/orders/month-rows")
+	public ResponseEntity<CursorPage<OrderMonthlyRowDto>> getOrderMonthlyRows(
+			@RequestParam String start,
+			@RequestParam String end,
+			@RequestParam(defaultValue = "50") Integer size,
+			@RequestParam(required = false) String cursor,
+			Long storeId
+	) {
+		if (storeId == null) storeId = 1L;
+		AnalyticsSearchDto cond = new AnalyticsSearchDto(
+				LocalDate.parse(start),
+				LocalDate.parse(end),
+				AnalyticsSearchDto.ViewBy.MONTH,
+				size,
+				cursor
+		);
+		return ResponseEntity.ok(service.getOrderMonthlyRows(storeId, cond));
+	}
+
 
 }

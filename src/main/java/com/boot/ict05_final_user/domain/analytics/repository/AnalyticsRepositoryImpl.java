@@ -1,13 +1,8 @@
 package com.boot.ict05_final_user.domain.analytics.repository;
 
-import com.boot.ict05_final_user.domain.analytics.dto.AnalyticsSearchDto;
+import com.boot.ict05_final_user.domain.analytics.dto.*;
 import com.boot.ict05_final_user.domain.analytics.dto.AnalyticsSearchDto.ViewBy;
-import com.boot.ict05_final_user.domain.analytics.dto.CursorPage;
-import com.boot.ict05_final_user.domain.analytics.dto.KpiRowDto;
-import com.boot.ict05_final_user.domain.analytics.dto.KpiSummaryDto;
-import com.boot.ict05_final_user.domain.order.entity.OrderStatus;
-import com.boot.ict05_final_user.domain.order.entity.QCustomerOrder;
-import com.boot.ict05_final_user.domain.order.entity.QCustomerOrderDetail;
+import com.boot.ict05_final_user.domain.order.entity.*;
 import com.boot.ict05_final_user.domain.store.entity.QStore;
 import com.querydsl.core.Tuple;
 import com.querydsl.core.types.ConstantImpl;
@@ -242,6 +237,263 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 
 		return new CursorPage<>(items, nextCursor);
 	}
+
+	// =========================
+//  주문 분석 Summary (카드 4개)
+// =========================
+	@Override
+	@Transactional(readOnly = true)
+	public OrderSummaryDto fetchOrderSummary(Long storeId, LocalDate today) {
+
+		LocalDateTime todayStart = today.atStartOfDay();
+		LocalDateTime monthStart = today.withDayOfMonth(1).atStartOfDay();
+
+		BooleanExpression base = statusCompleted()
+				.and(eqStore(storeId))
+				.and(betweenClosedOpen(co.orderedAt, monthStart, todayStart)); // 이번달 1일 ~ 어제까지
+
+		NumberExpression<BigDecimal> deliverySalesExpr = new CaseBuilder()
+				.when(co.orderType.eq(OrderType.DELIVERY))
+				.then(co.totalPrice)
+				.otherwise(Expressions.constant(BigDecimal.ZERO))
+				.sum();
+
+		NumberExpression<BigDecimal> takeoutSalesExpr = new CaseBuilder()
+				.when(co.orderType.eq(OrderType.TAKEOUT))
+				.then(co.totalPrice)
+				.otherwise(Expressions.constant(BigDecimal.ZERO))
+				.sum();
+
+		NumberExpression<BigDecimal> visitSalesExpr = new CaseBuilder()
+				.when(co.orderType.eq(OrderType.VISIT))
+				.then(co.totalPrice)
+				.otherwise(Expressions.constant(BigDecimal.ZERO))
+				.sum();
+
+		NumberExpression<Long> orderCountExpr = co.id.countDistinct();
+
+		Tuple t = query
+				.select(deliverySalesExpr, takeoutSalesExpr, visitSalesExpr, orderCountExpr)
+				.from(co)
+				.join(co.store, s)
+				.where(base)
+				.setHint("org.hibernate.readOnly", true)
+				.setHint("org.hibernate.flushMode", "COMMIT")
+				.setHint("javax.persistence.query.timeout", 3000)
+				.fetchOne();
+
+		BigDecimal deliveryBD = nvlBD(t == null ? null : t.get(deliverySalesExpr));
+		BigDecimal takeoutBD  = nvlBD(t == null ? null : t.get(takeoutSalesExpr));
+		BigDecimal visitBD    = nvlBD(t == null ? null : t.get(visitSalesExpr));
+		long orderCount       = nvlLong(t == null ? null : t.get(orderCountExpr));
+
+		return new OrderSummaryDto(
+				deliveryBD.longValue(),
+				takeoutBD.longValue(),
+				visitBD.longValue(),
+				orderCount
+		);
+	}
+
+	// =========================
+//  주문 분석 일별 테이블(주문 단위)
+// =========================
+	@Override
+	@Transactional(readOnly = true)
+	public CursorPage<OrderDailyRowDto> fetchOrderDailyRows(Long storeId, AnalyticsSearchDto cond) {
+		int size = (cond.size() == null ? 50 : cond.size());
+
+		// [start 00:00, end+1 00:00)
+		LocalDateTime start = cond.startDate().atStartOfDay();
+		LocalDateTime endEx = cond.endDate().plusDays(1).atStartOfDay();
+
+		BooleanExpression filter = statusCompleted()
+				.and(eqStore(storeId))
+				.and(betweenClosedOpen(co.orderedAt, start, endEx));
+
+		// 커서: 마지막 주문 ID 기준으로 이어가기 (id desc)
+		if (cond.cursor() != null && !cond.cursor().isBlank()) {
+			Long lastId = Long.valueOf(cond.cursor());
+			filter = filter.and(co.id.lt(lastId));
+		}
+
+		NumberExpression<Integer> menuCountExpr = cod.quantity.sum();
+
+		List<Tuple> rows = query
+				.select(
+						co.orderedAt,
+						co.id,
+						co.orderCode,
+						co.orderType,
+						co.totalPrice,
+						menuCountExpr,
+						co.paymentType,
+						co.memo
+				)
+				.from(co)
+				.join(co.store, s)
+				.where(filter)
+				.groupBy(
+						co.orderedAt,
+						co.id,
+						co.orderCode,
+						co.orderType,
+						co.totalPrice,
+						co.paymentType,
+						co.memo
+				)
+				.orderBy(co.id.desc())
+				.limit(size + 1)
+				.setHint("org.hibernate.readOnly", true)
+				.setHint("org.hibernate.flushMode", "COMMIT")
+				.fetch();
+
+				.setHint("jakarta.persistence.query.timeout", 3000)
+		List<OrderDailyRowDto> items = new ArrayList<>();
+		List<Tuple> pageRows = rows.size() > size ? rows.subList(0, size) : rows;
+
+		for (Tuple t : pageRows) {
+			LocalDateTime orderedAt = t.get(co.orderedAt);
+			Long orderId            = t.get(co.id);
+			String orderCode        = t.get(co.orderCode);
+			OrderType orderType     = t.get(co.orderType);
+			BigDecimal totalPriceBD = nvlBD(t.get(co.totalPrice));
+			Integer menuCountInt    = t.get(menuCountExpr);
+			PaymentType payType     = t.get(co.paymentType);
+			String memo             = t.get(co.memo);
+
+			String orderDate = orderedAt.toLocalDate().toString();
+			long totalPrice  = totalPriceBD.longValue();
+			long menuCount   = menuCountInt == null ? 0L : menuCountInt.longValue();
+
+			items.add(new OrderDailyRowDto(
+					orderDate,
+					orderId,
+					orderCode,
+					orderType != null ? orderType.name() : null,
+					totalPrice,
+					menuCount,
+					payType != null ? payType.name() : null,
+					memo
+			));
+		}
+
+		String nextCursor = null;
+		if (rows.size() > size) {
+			Tuple last = rows.get(size - 1);
+			Long lastId = last.get(co.id);
+			nextCursor = lastId != null ? String.valueOf(lastId) : null;
+		}
+
+		return new CursorPage<>(items, nextCursor);
+	}
+
+	// =========================
+	//  주문 분석 월별 테이블(월 단위 집계)
+	// =========================
+	@Override
+	@Transactional(readOnly = true)
+	public CursorPage<OrderMonthlyRowDto> fetchOrderMonthlyRows(Long storeId, AnalyticsSearchDto cond) {
+		int size = (cond.size() == null ? 50 : cond.size());
+
+		LocalDateTime start = cond.startDate().atStartOfDay();
+		LocalDateTime endEx = cond.endDate().plusDays(1).atStartOfDay();
+
+		BooleanExpression filter = statusCompleted()
+				.and(eqStore(storeId))
+				.and(betweenClosedOpen(co.orderedAt, start, endEx));
+
+		StringExpression monthLabel = Expressions.stringTemplate(
+				"DATE_FORMAT({0}, {1})", co.orderedAt, ConstantImpl.create("%Y-%m"));
+
+		// 커서: 최근 월 기준 (YYYY-MM) 내려가기
+		if (cond.cursor() != null && !cond.cursor().isBlank()) {
+			filter = filter.and(monthLabel.lt(cond.cursor()));
+		}
+
+		NumberExpression<BigDecimal> totalSalesExpr = co.totalPrice.sum();
+		NumberExpression<Long>       orderCountExpr = co.id.countDistinct();
+
+		NumberExpression<BigDecimal> deliverySalesExpr = new CaseBuilder()
+				.when(co.orderType.eq(OrderType.DELIVERY))
+				.then(co.totalPrice)
+				.otherwise(Expressions.constant(BigDecimal.ZERO))
+				.sum();
+
+		NumberExpression<BigDecimal> takeoutSalesExpr = new CaseBuilder()
+				.when(co.orderType.eq(OrderType.TAKEOUT))
+				.then(co.totalPrice)
+				.otherwise(Expressions.constant(BigDecimal.ZERO))
+				.sum();
+
+		NumberExpression<BigDecimal> visitSalesExpr = new CaseBuilder()
+				.when(co.orderType.eq(OrderType.VISIT))
+				.then(co.totalPrice)
+				.otherwise(Expressions.constant(BigDecimal.ZERO))
+				.sum();
+
+		List<Tuple> rows = query
+				.select(
+						monthLabel,
+						totalSalesExpr,
+						orderCountExpr,
+						deliverySalesExpr,
+						takeoutSalesExpr,
+						visitSalesExpr
+				)
+				.from(co)
+				.join(co.store, s)
+				.where(filter)
+				.groupBy(monthLabel)
+				.orderBy(monthLabel.desc())
+				.limit(size + 1)
+				.setHint("org.hibernate.readOnly", true)
+				.setHint("org.hibernate.flushMode", "COMMIT")
+				.setHint("javax.persistence.query.timeout", 3000)
+				.fetch();
+
+		List<OrderMonthlyRowDto> items = new ArrayList<>();
+		List<Tuple> pageRows = rows.size() > size ? rows.subList(0, size) : rows;
+
+		for (Tuple t : pageRows) {
+			String ym = t.get(monthLabel);
+
+			BigDecimal totalSalesBD = nvlBD(t.get(totalSalesExpr));
+			long totalSales         = totalSalesBD.longValue();
+			long orderCount         = nvlLong(t.get(orderCountExpr));
+
+			BigDecimal deliveryBD = nvlBD(t.get(deliverySalesExpr));
+			BigDecimal takeoutBD  = nvlBD(t.get(takeoutSalesExpr));
+			BigDecimal visitBD    = nvlBD(t.get(visitSalesExpr));
+
+			long delivery = deliveryBD.longValue();
+			long takeout  = takeoutBD.longValue();
+			long visit    = visitBD.longValue();
+
+			long avgOrderAmount = Math.round(safeDiv(totalSales, orderCount));
+
+			items.add(new OrderMonthlyRowDto(
+					ym,
+					totalSales,
+					orderCount,
+					avgOrderAmount,
+					delivery,
+					takeout,
+					visit
+			));
+		}
+
+		String nextCursor = null;
+		if (rows.size() > size) {
+			Tuple last = rows.get(size - 1);
+			String lastYm = last.get(monthLabel);
+			nextCursor = lastYm;
+		}
+
+		return new CursorPage<>(items, nextCursor);
+	}
+
+
 
 	// ===== Helpers =====
 	private static BigDecimal nvlBD(BigDecimal v) {
