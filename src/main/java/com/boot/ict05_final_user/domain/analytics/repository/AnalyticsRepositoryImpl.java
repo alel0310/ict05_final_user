@@ -346,9 +346,9 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 				.limit(size + 1)
 				.setHint("org.hibernate.readOnly", true)
 				.setHint("org.hibernate.flushMode", "COMMIT")
+				.setHint("jakarta.persistence.query.timeout", 3000)
 				.fetch();
 
-				.setHint("jakarta.persistence.query.timeout", 3000)
 		List<OrderDailyRowDto> items = new ArrayList<>();
 		List<Tuple> pageRows = rows.size() > size ? rows.subList(0, size) : rows;
 

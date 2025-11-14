@@ -4,17 +4,25 @@ import com.boot.ict05_final_user.domain.menu.entity.Menu;
 import com.boot.ict05_final_user.domain.menu.repository.MenuRepository;
 import com.boot.ict05_final_user.domain.order.dto.CreateOrderRequestDTO;
 import com.boot.ict05_final_user.domain.order.dto.CreateOrderResponseDTO;
-import com.boot.ict05_final_user.domain.order.entity.*;
+import com.boot.ict05_final_user.domain.order.dto.CustomerOrderListDTO;
+import com.boot.ict05_final_user.domain.order.entity.CustomerOrder;
+import com.boot.ict05_final_user.domain.order.entity.CustomerOrderDetail;
+import com.boot.ict05_final_user.domain.order.entity.OrderStatus;
+import com.boot.ict05_final_user.domain.order.entity.OrderType;
+import com.boot.ict05_final_user.domain.order.entity.PaymentType;
 import com.boot.ict05_final_user.domain.order.repository.CustomerOrderDetailRepository;
 import com.boot.ict05_final_user.domain.order.repository.CustomerOrderRepository;
 import com.boot.ict05_final_user.domain.store.entity.Store;
 import com.boot.ict05_final_user.domain.store.repository.StoreRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CustomerOrderService {
@@ -32,13 +40,14 @@ public class CustomerOrderService {
         CustomerOrder order = CustomerOrder.builder()
                 .store(store)
                 .orderCode(req.getOrderCode())
-                .orderType(OrderType.from(req.getOrderType()))            // "VISIT"
-                .paymentType(PaymentType.fromCode(req.getPaymentType())) // "card"
+                .orderType(OrderType.from(req.getOrderType()))                 // "VISIT"
+                .paymentType(resolvePaymentType(req.getPaymentType()))        // "card" / "CARD" / "카드"
                 .totalPrice(req.getTotalPrice())
                 .discount(req.getDiscount())
-                .status(OrderStatus.PREPARING) // 결제 직후 주방에 보여야 하므로 준비중
+                .status(OrderStatus.PREPARING)                                // 결제 직후 주방에 보여야 하므로 준비중
                 .memo(req.getCustomerName())
                 .build();
+
         order = orderRepository.save(order);
 
         for (CreateOrderRequestDTO.OrderItemRequest i : req.getItems()) {
@@ -79,5 +88,49 @@ public class CustomerOrderService {
         return orderRepository.findByStatusInOrderByOrderedAtAsc(
                 List.of(OrderStatus.PREPARING, OrderStatus.READY)
         );
+    }
+
+    // ✅ 주문 리스트 화면용 DTO
+    public List<CustomerOrderListDTO> findForKitchenList() {
+        List<CustomerOrder> orders = findForKitchen();
+        return orders.stream()
+                .map(CustomerOrderListDTO::from)
+                .toList();
+    }
+
+    // ✅ 컨트롤러에서 사용하는 safe 버전
+    public List<CustomerOrderListDTO> findForKitchenListSafe() {
+        try {
+            return findForKitchenList();
+        } catch (Exception e) {
+            log.error("주문 리스트 조회 중 오류 발생", e);
+            // 여기서도 예외 삼키고 빈 리스트
+            return Collections.emptyList();
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // paymentType 문자열 → PaymentType enum 변환
+    // ─────────────────────────────────────────────
+    private PaymentType resolvePaymentType(String value) {
+        if (value == null) {
+            throw new IllegalArgumentException("paymentType is null");
+        }
+        String v = value.trim();
+
+        // 1) enum name / 코드 형식: "CARD", "card"
+        try {
+            return PaymentType.valueOf(v.toUpperCase());
+        } catch (Exception ignore) {
+        }
+
+        // 2) 한글 라벨: "카드", "현금", "상품권", "외부 결제"
+        for (PaymentType type : PaymentType.values()) {
+            if (type.getLabel().equals(v)) {
+                return type;
+            }
+        }
+
+        throw new IllegalArgumentException("Unknown paymentType: " + value);
     }
 }
