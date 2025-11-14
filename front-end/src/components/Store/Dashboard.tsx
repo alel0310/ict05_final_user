@@ -42,7 +42,7 @@ const cardConfig: Record<
 > = {
   sales_today: { title: '오늘 매출', icon: DollarSign, color: 'red' },
   orders_today: { title: '오늘 주문수', icon: ShoppingCart, color: 'orange' },
-  visitors_today: { title: '오늘 방문자', icon: Users, color: 'green' },
+  visitors_today: { title: '오늘 방문건수', icon: Users, color: 'green' },
   top_menu: { title: 'TOP 메뉴', icon: Package, color: 'purple' },
 };
 
