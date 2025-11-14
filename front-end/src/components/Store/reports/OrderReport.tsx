@@ -216,26 +216,39 @@ export default function OrderReport() {
           {/* 일별/월별 토글 */}
           <div className="flex rounded-md border bg-gray-50 overflow-hidden">
             <button
-              className={`px-3 py-2 text-sm font-medium ${
+                className={`px-3 py-2 text-sm font-medium ${
                 viewBy === 'DAY'
-                  ? 'bg-kpi-red text-white'
-                  : 'text-gray-700 hover:bg-white'
-              }`}
-              onClick={() => setViewBy('DAY')}
+                    ? 'bg-kpi-red text-white'
+                    : 'text-gray-700 hover:bg-white'
+                }`}
+                onClick={() => {
+                if (viewBy !== 'DAY') {
+                    setViewBy('DAY');
+                    setRows([]);     // 🔹 rows 초기화
+                    setCursor(null); // 🔹 cursor 초기화
+                }
+                }}
             >
-              일별
+                일별
             </button>
             <button
-              className={`px-3 py-2 text-sm font-medium ${
+                className={`px-3 py-2 text-sm font-medium ${
                 viewBy === 'MONTH'
-                  ? 'bg-kpi-red text-white'
-                  : 'text-gray-700 hover:bg-white'
-              }`}
-              onClick={() => setViewBy('MONTH')}
+                    ? 'bg-kpi-red text-white'
+                    : 'text-gray-700 hover:bg-white'
+                }`}
+                onClick={() => {
+                if (viewBy !== 'MONTH') {
+                    setViewBy('MONTH');
+                    setRows([]);     // 🔹 rows 초기화
+                    setCursor(null); // 🔹 cursor 초기화
+                }
+                }}
             >
-              월별
+                월별
             </button>
           </div>
+
 
           {/* 출력개수 */}
           <div className="flex items-center gap-2">
@@ -333,7 +346,7 @@ export default function OrderReport() {
                           ₩{fmtMoneyInt(r.totalPrice)}
                         </td>
                         <td className="px-6 py-3 text-sm text-gray-900 text-right">
-                          {r.menuCount.toLocaleString()}
+                          {(r.menuCount ?? 0).toLocaleString()}
                         </td>
                         <td className="px-6 py-3 text-sm text-gray-900">
                           {paymentTypeLabel[r.paymentType] ?? r.paymentType}
@@ -374,7 +387,7 @@ export default function OrderReport() {
                           ₩{fmtMoneyInt(r.totalSales)}
                         </td>
                         <td className="px-6 py-3 text-sm text-gray-900 text-right">
-                          {r.orderCount.toLocaleString()}
+                          {(r.orderCount ?? 0).toLocaleString()}
                         </td>
                         <td className="px-6 py-3 text-sm text-gray-900 text-right">
                           ₩{fmtMoneyInt(r.avgOrderAmount)}

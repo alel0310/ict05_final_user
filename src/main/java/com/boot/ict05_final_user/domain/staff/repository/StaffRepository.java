@@ -3,6 +3,8 @@ package com.boot.ict05_final_user.domain.staff.repository;
 import com.boot.ict05_final_user.domain.staff.entity.StaffProfile;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Optional;
+
 /**
  * StaffProfile 엔티티용 Spring Data JPA 리포지토리 인터페이스.
  *
@@ -14,5 +16,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
  */
 
 public interface StaffRepository extends JpaRepository<StaffProfile, Long>, StaffRepositoryCustom {
-
+    // Member PK 로 StaffProfile 찾기
+    Optional<StaffProfile> findByMember_Id(Long memberId);
 }

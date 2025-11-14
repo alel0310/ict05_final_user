@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Building2, 
   Store, 
@@ -28,12 +28,13 @@ import FcmForegroundListener from '../fcm/FcmForegroundListener';
 import { getMessagingIfSupported } from "../../lib/firebase";
 import { deleteToken } from "firebase/messaging";
 
-
 interface LayoutProps {
   children: React.ReactNode;
   userType: 'HQ' | 'Store';
   currentPage: string;
-  onPageChange: (page: string) => void;
+  onPageChange: (page: string) => void; 
+  memberName: string;              
+  storeName?: string | null;
 }
 
 interface MenuItem {
@@ -110,7 +111,8 @@ const storeMenuItems: MenuItem[] = [
   },
 ];
 
-export function Layout({ children, userType, currentPage, onPageChange }: LayoutProps) {
+export function Layout({ children, userType, currentPage, onPageChange, memberName, storeName}: LayoutProps) {
+
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<string[]>(() => {
     // 초기 로드 시 현재 페이지가 서브메뉴에 속하면 해당 메뉴를 자동으로 확장
@@ -390,11 +392,19 @@ export function Layout({ children, userType, currentPage, onPageChange }: Layout
               </div>
             </div>
             
-            <div className="flex items-center gap-4 cursor-pointer hover:opacity-80 transition" onClick={() => onPageChange("mypage")}>
+            <div
+              className="flex items-center gap-4 cursor-pointer hover:opacity-80 transition"
+              onClick={() => onPageChange("mypage")}
+            >
               <div className="text-right">
-                <p className="text-sm font-medium text-gray-900">관리자</p>
+                {/* 첫 줄: 로그인한 사람 이름 */}
+                <p className="text-sm font-medium text-gray-900">
+                  {memberName + "점주" || "점주"}
+                </p>
+
+                {/* 둘째 줄: 가맹점 이름 */}
                 <p className="text-xs text-dark-gray">
-                  {userType === 'HQ' ? '본사' : '강남점'}
+                  {storeName || "가맹점"}
                 </p>
               </div>
               <div className="w-8 h-8 bg-kpi-green rounded-full flex items-center justify-center">
