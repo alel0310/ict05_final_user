@@ -204,22 +204,45 @@ export function Layout({ children, userType, currentPage, onPageChange }: Layout
   };
 
     // 선택: 간단한 path -> 메뉴 매핑
-  const navigateByLink = (path: string) => {
-    // 필요 시 더 추가
+  const navigateByLink = (rawLink: string) => {
+    if (!rawLink) return;
+
+    // 1) 절대/상대 URL 모두 처리
+    const url = new URL(rawLink, window.location.origin);
+    let path = url.pathname; // ex) /user/inventory/low, /user/notice/list
+
+    // 2) 백엔드 context-path(/user) 제거
+    if (path.startsWith("/user")) {
+      path = path.substring("/user".length) || "/";
+    }
+
+    // 3) path -> currentPage 매핑
     const map: Record<string, string> = {
+      "/": "dashboard",
       "/dashboard": "dashboard",
+
+      // 📢 공지사항: NoticeEducation.tsx
       "/notice/list": "notice",
+
+      // 🔔 재고부족 / 유통임박: InventoryManagement.tsx
+      "/inventory/low": "inventory-management",
+      "/inventory/expire": "inventory-management",
+
+      // 기존 리포트/설정 매핑 (이미 쓰던 것 유지)
       "/reports/kpi": "kpi-report",
       "/reports/orders": "order-report",
       "/settings/notifications": "settings-notifications",
     };
+
     const pageId = map[path];
-    if (pageId) onPageChange(pageId);
-    else {
-      const base = window.location.origin;
-      window.location.href = path.startsWith("/") ? (base + path) : path;
+    if (pageId) {
+      onPageChange(pageId);
+    } else {
+      // 매핑 안 된 건 그냥 전체 URL로 이동 (fallback)
+      window.location.href = url.toString();
     }
   };
+
 
   const customTitles: Record<string, string> = {
     "settings-notifications": "가맹점 알림 설정",
