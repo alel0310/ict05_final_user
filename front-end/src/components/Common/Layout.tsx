@@ -25,6 +25,8 @@ import { Button } from '../ui/button';
 import { useNavigate } from "react-router-dom";
 import api from "../../lib/authApi";
 import FcmForegroundListener from '../fcm/FcmForegroundListener';
+import { getMessagingIfSupported } from "../../lib/firebase";
+import { deleteToken } from "firebase/messaging";
 
 
 interface LayoutProps {
@@ -90,7 +92,7 @@ const storeMenuItems: MenuItem[] = [
     children: [
       { id: 'staff-list', label: '직원 목록', icon: Users },
       { id: 'staff-schedule', label: '근무 일정', icon: Calendar },
-      { id: 'staff-payroll', label: '급여 관리', icon: Calculator },
+      
       { id: 'staff-reports', label: '근무리포트', icon: BarChart3 }
     ]
   },
@@ -126,24 +128,67 @@ export function Layout({ children, userType, currentPage, onPageChange }: Layout
 
   const navigate = useNavigate();
 
+  const parseJwt = (t: string): any | null => {
+    try { return JSON.parse(atob((t || "").split(".")[1] || "")); } catch { return null; }
+  };
+
   const handleLogout = async () => {
+    const accessToken = localStorage.getItem("accessToken") || "";
+    const refreshToken = localStorage.getItem("refreshToken") || "";
+    const fcmToken    = localStorage.getItem("fcm_token") || "";
+
+    // 1) storeId 확보(JWT → /fcm/pref/me 순)
+    let storeId: number | undefined;
+    if (accessToken) {
+      const claims = parseJwt(accessToken);
+      storeId = claims?.storeId ?? claims?.sid ?? undefined;
+    }
+    if (!storeId && accessToken) {
+      try {
+        const me = await api.get("/fcm/pref/me", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        storeId = me?.data?.storeId ?? undefined;
+      } catch { /* ignore */ }
+    }
+
     try {
-      const refreshToken = localStorage.getItem("refreshToken")
-      // 1) 서버에 로그아웃 요청 (리프레시 토큰 무효화 용도)
-      //    백엔드에서 @PostMapping("/logout") 으로 만들었다고 가정
-      await api.post("/logout",{refreshToken});
-    } catch (err) {
-      // 실패하더라도 클라이언트 토큰은 지우는 편이 낫다
-      console.error("logout error", err);
+      // 2) 토픽 구독 해제
+      if (fcmToken && accessToken && storeId) {
+        const hdr = { headers: { Authorization: `Bearer ${accessToken}` } };
+        const t = encodeURIComponent(fcmToken);
+        await Promise.allSettled([
+          api.post(`/fcm/topic/unsubscribe?token=${t}&topic=store-${storeId}`, {}, hdr),
+          api.post(`/fcm/topic/unsubscribe?token=${t}&topic=inv-low-${storeId}`, {}, hdr),
+          api.post(`/fcm/topic/unsubscribe?token=${t}&topic=expire-soon-${storeId}`, {}, hdr),
+        ]);
+      }
+
+      // 3) 서버 토큰 비활성(엔드포인트 있을 때)
+      if (fcmToken && accessToken) {
+        await api.post(
+          "/fcm/token/revoke",
+          { token: fcmToken, platform: "WEB", deviceId: navigator.userAgent.slice(0,120) },
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        ).catch(() => {});
+      }
+
+      // 4) 브라우저 FCM 토큰 삭제
+      try {
+        const messaging = await getMessagingIfSupported();
+        if (messaging) await deleteToken(messaging);
+      } catch { /* ignore */ }
+
+      // 5) 서버 로그아웃(리프레시 무효화)
+      if (refreshToken) {
+        await api.post("/logout", { refreshToken }).catch(() => {});
+      }
     } finally {
-      // 2) 로컬 토큰 제거완
+      // 6) 클라이언트 정리 & 이동
+      delete (api as any).defaults?.headers?.common?.Authorization;
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
-
-      // 3) axios 기본 Authorization 헤더 제거
-      delete api.defaults.headers.common.Authorization;
-
-      // 4) 로그인 페이지로 이동
+      localStorage.removeItem("fcm_token");
       navigate("/login", { replace: true });
     }
   };

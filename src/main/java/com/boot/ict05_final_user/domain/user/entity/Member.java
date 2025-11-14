@@ -31,4 +31,8 @@ public class Member {
 
     @Column(name = "member_image_path")
     private String memberImagePath;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false)
+    private MemberStatus status = MemberStatus.ACTIVE;
 }

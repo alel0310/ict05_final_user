@@ -4,6 +4,7 @@ import com.boot.ict05_final_user.domain.staff.dto.StaffListDTO;
 import com.boot.ict05_final_user.domain.staff.dto.StaffSearchDTO;
 import com.boot.ict05_final_user.domain.staff.entity.QAttendance;
 import com.boot.ict05_final_user.domain.staff.entity.QStaffProfile;
+import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.types.ExpressionUtils;
 import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
@@ -25,70 +26,81 @@ public class StaffRepositoryImpl implements StaffRepositoryCustom {
     private final JPAQueryFactory queryFactory;
 
     @Override
-    public Page<StaffListDTO> listStaff(StaffSearchDTO staffSearchDTO, Pageable pageable) {
+    public Page<StaffListDTO> listStaff(StaffSearchDTO dto, Pageable pageable) {
 
-        QStaffProfile staffProfile = QStaffProfile.staffProfile;
+        QStaffProfile staff = QStaffProfile.staffProfile;
         QAttendance attendance = QAttendance.attendance;
+        QAttendance a2 = new QAttendance("a2"); // 서브쿼리용 alias
 
-        // ✅ 가맹점 + 검색어 조건 합치기
-        Predicate predicate = ExpressionUtils.allOf(
-                eqStore(staffSearchDTO, staffProfile),        // 가맹점 필터
-                eqTitleOrBody(staffSearchDTO, staffProfile)   // 검색어 필터
-        );
+        BooleanBuilder condition = new BooleanBuilder();
 
-        // 1️⃣ 기본 쿼리 정의
-        JPAQuery<StaffListDTO> baseQuery = queryFactory
-                .select(Projections.fields(StaffListDTO.class,
-                        staffProfile.id,
-                        staffProfile.staffName,
-                        staffProfile.staffBirth,
-                        staffProfile.staffDepartment,
-                        staffProfile.staffEmploymentType,
-                        staffProfile.staffStartDate,
-                        attendance.status.as("attendanceStatus")
+        condition.and(eqStore(dto, staff));
+        condition.and(eqTitleOrBody(dto, staff));
+
+        // 1) 내용 조회 쿼리
+        JPAQuery<StaffListDTO> contentQuery = queryFactory
+                .select(Projections.fields(
+                        StaffListDTO.class,
+                        staff.id,
+                        staff.staffName,
+                        staff.staffBirth,
+                        staff.staffPhone,
+                        staff.staffEmploymentType,
+                        staff.staffStartDate,
+                        attendance.status.as("attendanceStatus")   // DTO 필드명과 동일
                 ))
-                .from(staffProfile)
-                .leftJoin(attendance).on(attendance.staffProfile.eq(staffProfile))
-                .where(predicate)
-                .orderBy(staffProfile.id.desc());
+                .from(staff)
+                // 🔥 직원별 “가장 최근 attendance 한 줄”만 LEFT JOIN
+                .leftJoin(attendance).on(
+                        attendance.staffProfile.eq(staff)
+                                .and(attendance.id.eq(
+                                        com.querydsl.jpa.JPAExpressions
+                                                .select(a2.id.max())
+                                                .from(a2)
+                                                .where(a2.staffProfile.eq(staff))
+                                ))
+                )
+                .where(condition)
+                .orderBy(staff.id.desc())
+                .distinct();
 
-        // 2️⃣ 페이징이 걸려 있을 때만 offset/limit 적용
+        // 페이징
         if (pageable.isPaged()) {
-            baseQuery.offset(pageable.getOffset())
+            contentQuery
+                    .offset(pageable.getOffset())
                     .limit(pageable.getPageSize());
         }
 
-        // 3️⃣ 결과 조회
-        List<StaffListDTO> content = baseQuery.fetch();
+        List<StaffListDTO> content = contentQuery.fetch();
 
-        // 4️⃣ 전체 카운트
-        long total = queryFactory
-                .select(staffProfile.count())
-                .from(staffProfile)
-                .where(predicate)
+        // 2) 총 카운트
+        Long total = queryFactory
+                .select(staff.count())
+                .from(staff)
+                .where(condition)
                 .fetchOne();
 
-        return new PageImpl<>(content, pageable, total);
+        return new PageImpl<>(content, pageable, total == null ? 0 : total);
     }
 
-    // 🔍 가맹점 조건 (storeId 없으면 조건 X)
-    private BooleanExpression eqStore(StaffSearchDTO dto, QStaffProfile staffProfile) {
-        if (dto.getStoreId() == null) {
-            return null;
-        }
-        // StaffProfile 엔티티에 private Store store; 가 있어야 함
-        return staffProfile.store.id.eq(dto.getStoreId());
+    // 🔍 가맹점 조건
+    private BooleanExpression eqStore(StaffSearchDTO dto, QStaffProfile staff) {
+        if (dto.getStoreId() == null) return null;
+        // StaffProfile에 private Store store; 있으면 이렇게
+        return staff.store.id.eq(dto.getStoreId());
+        // 만약 Long storeIdFk; 로 들고 있으면:
+        // return staff.storeIdFk.eq(dto.getStoreId());
     }
 
     // 🔍 검색어 조건
-    private BooleanExpression eqTitleOrBody(StaffSearchDTO dto, QStaffProfile staffProfile) {
+    private BooleanExpression eqTitleOrBody(StaffSearchDTO dto, QStaffProfile staff) {
         if (dto.getKeyword() == null || dto.getKeyword().isBlank()) {
             return null;
         }
         String keyword = dto.getKeyword();
 
-        return staffProfile.id.stringValue().containsIgnoreCase(keyword)
-                .or(staffProfile.staffName.containsIgnoreCase(keyword))
-                .or(staffProfile.staffDepartment.stringValue().containsIgnoreCase(keyword));
+        return staff.id.stringValue().containsIgnoreCase(keyword)
+                .or(staff.staffName.containsIgnoreCase(keyword))
+                .or(staff.staffDepartment.stringValue().containsIgnoreCase(keyword));
     }
 }
