@@ -28,6 +28,10 @@ public class StaffListDTO {
     @Schema(type = "string", example = "010-1234-5678", description = "사원 연락처 (하이픈 포함)")
     private String staffPhone;
 
+    /** 사원 이메일 */
+    @Schema(description = "사원 이메일", example = "staff@example.com")
+    private String staffEmail;
+
     /** 사원 근무형태 (점주/직원/알바) */
     private StaffEmploymentType staffEmploymentType;
 

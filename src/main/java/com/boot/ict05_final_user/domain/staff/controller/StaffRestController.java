@@ -2,6 +2,7 @@ package com.boot.ict05_final_user.domain.staff.controller;
 
 import com.boot.ict05_final_user.config.security.principal.AppUser;
 import com.boot.ict05_final_user.domain.staff.dto.StaffListDTO;
+import com.boot.ict05_final_user.domain.staff.dto.StaffModifyFormDTO;
 import com.boot.ict05_final_user.domain.staff.dto.StaffWriteFormDTO;
 import com.boot.ict05_final_user.domain.staff.entity.StaffProfile;
 import com.boot.ict05_final_user.domain.staff.repository.AttendanceRepository;
@@ -13,6 +14,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -52,17 +56,19 @@ public class StaffRestController {
      * 직원 목록 API
      */
     @GetMapping("/list")
-    public List<StaffListDTO> getStaffList(@AuthenticationPrincipal AppUser user) {
+    public Page<StaffListDTO> getStaffList(
+            @AuthenticationPrincipal AppUser user,
+            @RequestParam(defaultValue = "0") int page,   // 0부터 시작
+            @RequestParam(defaultValue = "8") int size   // 한 페이지 8명
+    ) {
+        log.info("GET /api/staff/list page={}, size={}, storeId={}", page, size, user.getStoreId());
 
-        log.info("GET /api/staff/list by user storeId={}", user.getStoreId());
-
-        // 로그인한 가맹점주의 storeId 가져오기
         Long storeId = user.getStoreId();
 
-        // 해당 storeId에 속한 직원만 조회
-        return staffService.selectAllStaff(storeId);
-    }
+        Pageable pageable = PageRequest.of(page, size); // 필요하면 sort도 추가 가능
 
+        return staffService.selectAllStaff(storeId, pageable);
+    }
 
     /**
      * 직원 등록 API
@@ -94,6 +100,68 @@ public class StaffRestController {
         return ResponseEntity.ok(staff.getId());
     }
 
+
+    /**
+     * 직원 수정 API
+     * 직원 데이터를 수정하고 수정된 직원 ID를 반환한다.
+     */
+    @PutMapping("/modify/{id}")
+    public ResponseEntity<Void> modifyStaff(
+            @PathVariable Long id,
+            @Valid @RequestBody StaffModifyFormDTO dto,
+            @AuthenticationPrincipal AppUser user
+    ) {
+        log.info("PUT /api/staff/modify/{} dto={}, storeId={}", id, dto, user.getStoreId());
+
+        // 1) 수정할 직원 찾기
+        StaffProfile staff = staffRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("직원이 존재하지 않습니다."));
+
+        // 2) 로그인한 사용자의 매장 직원인지 확인
+        if (!staff.getStore().getId().equals(user.getStoreId())) {
+            return ResponseEntity.status(403).build();
+        }
+
+        // 3) setter로 값 업데이트
+        staff.setStaffName(dto.getStaffName());
+        staff.setStaffEmploymentType(dto.getStaffEmploymentType());
+        staff.setStaffEmail(dto.getStaffEmail());
+        staff.setStaffPhone(dto.getStaffPhone());
+        staff.setStaffBirth(dto.getStaffBirth());
+        staff.setStaffStartDate(dto.getStaffStartDate());
+        staff.setStaffEndDate(dto.getStaffEndDate());
+
+        // 4) 저장
+        staffRepository.save(staff);
+
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * 직원 삭제 API
+     * 직원 데이터를 삭제한다.
+     */
+    @DeleteMapping("/delete/{id}")
+    public ResponseEntity<Void> deleteStaff(
+            @PathVariable Long id,
+            @AuthenticationPrincipal AppUser user
+    ) {
+        log.info("DELETE /api/staff/delete/{} storeId={}", id, user.getStoreId());
+
+        // 1) 직원 조회
+        StaffProfile staff = staffRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("직원이 존재하지 않습니다."));
+
+        // 2) 로그인한 매장의 직원인지 확인
+        if (!staff.getStore().getId().equals(user.getStoreId())) {
+            return ResponseEntity.status(403).build();
+        }
+
+        // 3) 삭제
+        staffRepository.delete(staff);
+
+        return ResponseEntity.noContent().build();
+    }
 
 
 }
