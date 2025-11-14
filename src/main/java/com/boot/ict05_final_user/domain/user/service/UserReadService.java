@@ -31,13 +31,10 @@ public class UserReadService {
         return userRepository.findMemberName(username);
     }
 
+    @Transactional(readOnly = true)
     public String findStoreNameByUsername(String username) {
-        // username(email) → member → staffProfile → store → name
-        Member member = memberRepository.findByEmail(username)
-                .orElseThrow(() -> new UsernameNotFoundException(username));
-
-        return staffRepository.findByMember_Id(member.getId())
-                .map(staff -> staff.getStore() != null ? staff.getStore().getName() : null)
+        // username 이 이메일이면 그대로 사용
+        return staffRepository.findStoreNameByMemberEmail(username)
                 .orElse(null);
     }
 }

@@ -399,7 +399,7 @@ export function Layout({ children, userType, currentPage, onPageChange, memberNa
               <div className="text-right">
                 {/* 첫 줄: 로그인한 사람 이름 */}
                 <p className="text-sm font-medium text-gray-900">
-                  {memberName + "점주" || "점주"}
+                  {memberName + " 점주" || "점주"}
                 </p>
 
                 {/* 둘째 줄: 가맹점 이름 */}

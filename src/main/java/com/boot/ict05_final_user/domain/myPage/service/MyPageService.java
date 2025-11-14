@@ -9,11 +9,19 @@ import com.boot.ict05_final_user.domain.user.entity.Member;
 import com.boot.ict05_final_user.domain.user.entity.MemberStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.UUID;
 
 @RequiredArgsConstructor
 @Service
@@ -25,12 +33,12 @@ public class MyPageService {
     private final JwtService jwtService;
     private final StaffRepository staffRepository;
 
-    @Transactional(readOnly = true)
-    public MyPageDTO getMyInfo(Long memberId, Long storeIdIgnored){
-        Member member = myPageRepository.findById(memberId)
-                .orElseThrow(() -> new AccessDeniedException("권한이 없습니다"));
-        return MyPageDTO.fromEntity(member);
-    }
+    @Value("${app.profile-image-dir}")
+    private String profileImageDir;
+
+    @Value("${app.profile-image-url-prefix}")
+    private String profileImageUrlPrefix;
+
 
     @Transactional(readOnly = true)
     public MyPageDTO getMyPro(Long memberId) {
@@ -42,7 +50,10 @@ public class MyPageService {
 
         String name = member.getName();
         String email = member.getEmail();
+        String phone = member.getPhone();
         String storeName = null;
+
+        String memberImagePath = member.getMemberImagePath();
 
         if (staff != null) {
             if (staff.getStaffName() != null && !staff.getStaffName().isBlank()) {
@@ -60,11 +71,64 @@ public class MyPageService {
                 .id(member.getId())
                 .name(name)
                 .email(email)
+                .phone(phone)
+                .memberImagePath(memberImagePath)
                 .storeName(storeName)
                 .build();
     }
 
+    // 프로필 이미지
+    @Transactional
+    public MyPageDTO updateProfileImage(Long memberId, MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("업로드할 파일이 없습니다.");
+        }
 
+        Member member = myPageRepository.findById(memberId)
+                .orElseThrow(() -> new IllegalArgumentException("회원이 존재하지 않습니다."));
+
+        try {
+            // 실제 저장 폴더
+            Path uploadDir = Paths.get(profileImageDir).toAbsolutePath().normalize();
+            if (!Files.exists(uploadDir)) {
+                Files.createDirectories(uploadDir);
+            }
+
+            // 확장자 추출
+            String originalName = file.getOriginalFilename();
+            String ext = "";
+            if (originalName != null && originalName.lastIndexOf(".") != -1) {
+                ext = originalName.substring(originalName.lastIndexOf("."));
+            }
+
+            // 파일명 예시: member_3_랜덤값.jpg
+            String filename = "member_" + memberId + "_" + UUID.randomUUID() + ext;
+            Path targetPath = uploadDir.resolve(filename);
+
+            // 파일 저장
+            file.transferTo(targetPath.toFile());
+
+            // 브라우저에서 사용할 경로
+            String urlPath = profileImageUrlPrefix + "/" + filename;
+            member.setMemberImagePath(urlPath);
+
+            return MyPageDTO.fromEntity(member);
+        } catch (IOException e) {
+            throw new RuntimeException("프로필 이미지 저장 중 오류가 발생했습니다.", e);
+        }
+    }
+
+    // 프로필 이미지 기본값으로 초기화
+    @Transactional
+    public void resetProfileImage(Long memberId) {
+        Member member = myPageRepository.findById(memberId)
+                .orElseThrow(() -> new IllegalArgumentException("회원이 존재하지 않습니다."));
+
+        // DB 에서 이미지 경로 제거 → 프론트에서 기본 이미지로 보이게 됨
+        member.setMemberImagePath(null);
+    }
+
+    // 마이페이지 수정
     @Transactional
     public MyPageDTO updateMyPage(Long memberId, MyPageDTO dto) {
         Member member = myPageRepository.findById(memberId)
