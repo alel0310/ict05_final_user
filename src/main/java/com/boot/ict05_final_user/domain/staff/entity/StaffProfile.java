@@ -49,8 +49,8 @@ public class StaffProfile {
 
     /** 직원 부서 */
     @Enumerated(EnumType.STRING)
-    @Column(name = "staff_department")
-    private StaffDepartment staffDepartment;
+    @Column(nullable = false)
+    private StaffDepartment staffDepartment = StaffDepartment.STORE; // 기본값 지정
 
     /** 직원 이메일 */
     @Column(name = "staff_email")
