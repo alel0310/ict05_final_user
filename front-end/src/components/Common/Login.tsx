@@ -1,5 +1,5 @@
 // src/components/Common/Login.tsx
-import react, { useRef,useState } from "react";
+import react, { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
@@ -20,8 +20,6 @@ function parseJwt(token: string): any | null {
     return null;
   }
 }
-
-
 
 export default function Login() {
   const navigate = useNavigate();
@@ -54,6 +52,7 @@ export default function Login() {
       setLoading(false);
       return;
     }
+
     try {
       // 1) 로그인
       const res = await api.post("/login", { email, password });
@@ -61,28 +60,28 @@ export default function Login() {
 
       // 토큰 저장(응답 형태에 맞춰 보강)
       const accessToken =
-        data.accessToken ??
-        res.headers?.authorization?.replace("Bearer ", "");
+        data.accessToken ?? res.headers?.authorization?.replace("Bearer ", "");
       const refreshToken = data.refreshToken;
 
       if (accessToken) {
         localStorage.setItem("accessToken", accessToken);
         api.defaults.headers.common["Authorization"] = `Bearer ${accessToken}`;
       }
-      
-      if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
+      if (refreshToken) {
+        localStorage.setItem("refreshToken", refreshToken);
+      }
 
       // 2) storeId 확보 (우선순위: 응답 -> /me -> JWT claims)
       let storeId: number | undefined =
         data.storeId ?? data.user?.storeId ?? data.store?.id;
 
-      if (!storeId) {
+      if (!storeId && accessToken) {
         // (추천) 백엔드에 me 프로필이 있으면 여기서 가져오기
         try {
           const me = await api.get("/me", {
             headers: { Authorization: `Bearer ${accessToken}` },
           });
-          storeId = me.data?.storeId ?? me.data?.store?.id;
+          storeId = me.data?.storeId ?? me.data?.store?.id ?? storeId;
         } catch {
           /* /me 없음 */
         }
@@ -90,14 +89,23 @@ export default function Login() {
       if (!storeId && accessToken) {
         const claims = parseJwt(accessToken);
         storeId =
-          claims?.storeId ?? claims?.sid ?? claims?.storeID ?? undefined;
+          claims?.storeId ??
+          claims?.sid ??
+          claims?.storeID ??
+          storeId ??
+          undefined;
       }
 
-      // 3) FCM 토큰 발급 → 서버 업서트 → 기본 토픽 구독
+      // 3) FCM 토큰 발급 → 서버 업서트 → 토픽 구독(공지/재고부족/유통임박)
       try {
         const fcmToken = await requestFcmToken(); // 권한 요청 포함
         if (fcmToken && accessToken) {
-          // 토큰 업서트
+          const authHeader = {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          };
+          const encToken = encodeURIComponent(fcmToken);
+
+          // 3-1) 토큰 업서트
           await api.post(
             "/fcm/token",
             {
@@ -105,17 +113,62 @@ export default function Login() {
               platform: "WEB",
               deviceId: navigator.userAgent.slice(0, 120),
             },
-            { headers: { Authorization: `Bearer ${accessToken}` } }
+            authHeader
           );
 
-          // 기본 토픽: store-{storeId}
+          // 3-2) 선호도(/fcm/pref/me) 조회해서 카테고리별 on/off 확인
+          let catNotice = true;
+          let catStockLow = true;
+          let catExpireSoon = true;
+
+          try {
+            const prefRes = await api.get("/fcm/pref/me", authHeader);
+            catNotice = prefRes.data?.catNotice ?? true;
+            catStockLow = prefRes.data?.catStockLow ?? true;
+            catExpireSoon = prefRes.data?.catExpireSoon ?? true;
+
+            // storeId를 아직 못 구한 경우 pref에서 보완
+            if (!storeId) {
+              storeId = prefRes.data?.storeId ?? storeId;
+            }
+          } catch (e) {
+            console.warn("[FCM] /fcm/pref/me 조회 실패, 기본값(true) 사용", e);
+          }
+
+          // 3-3) 실제 토픽 구독
           if (storeId) {
-            await api.post(
-              `/fcm/topic/subscribe?token=${encodeURIComponent(
-                fcmToken
-              )}&topic=store-${storeId}`,
-              {},
-              { headers: { Authorization: `Bearer ${accessToken}` } }
+            const baseUrl = "/fcm/topic/subscribe";
+            const opts = authHeader;
+
+            // 공지(store-{storeId})
+            if (catNotice) {
+              await api.post(
+                `${baseUrl}?token=${encToken}&topic=store-${storeId}`,
+                {},
+                opts
+              );
+            }
+
+            // 재고부족(inv-low-{storeId})
+            if (catStockLow) {
+              await api.post(
+                `${baseUrl}?token=${encToken}&topic=inv-low-${storeId}`,
+                {},
+                opts
+              );
+            }
+
+            // 유통임박(expire-soon-{storeId})
+            if (catExpireSoon) {
+              await api.post(
+                `${baseUrl}?token=${encToken}&topic=expire-soon-${storeId}`,
+                {},
+                opts
+              );
+            }
+          } else {
+            console.warn(
+              "[FCM] storeId를 찾지 못해 토픽 구독을 생략했습니다. (/me 또는 JWT 클레임 확인 필요)"
             );
           }
         }
@@ -162,14 +215,19 @@ export default function Login() {
           <div className="w-16 h-16 bg-kpi-orange rounded-xl flex items-center justify-center mx-auto mb-4">
             <Store className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">FranFriend ERP</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            FranFriend ERP
+          </h1>
           <p className="text-dark-gray">프랜차이즈 통합 관리 시스템</p>
         </div>
 
         {/* Login Form */}
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <Label htmlFor="email" className="text-sm font-medium text-gray-700 mb-2 block">
+            <Label
+              htmlFor="email"
+              className="text-sm font-medium text-gray-700 mb-2 block"
+            >
               이메일
             </Label>
             <div className="relative">
@@ -187,7 +245,10 @@ export default function Login() {
           </div>
 
           <div>
-            <Label htmlFor="password" className="text-sm font-medium text-gray-700 mb-2 block">
+            <Label
+              htmlFor="password"
+              className="text-sm font-medium text-gray-700 mb-2 block"
+            >
               비밀번호
             </Label>
             <div className="relative">
@@ -203,7 +264,7 @@ export default function Login() {
               />
             </div>
           </div>
-          
+
           {error && (
             <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
               {error}
@@ -211,7 +272,10 @@ export default function Login() {
           )}
 
           <div className="space-y-3 pt-4">
-            <Button type="submit" className="w-full h-12 rounded-lg font-medium bg-kpi-red hover:bg-red-600 text-white">
+            <Button
+              type="submit"
+              className="w-full h-12 rounded-lg font-medium bg-kpi-red hover:bg-red-600 text-white"
+            >
               로그인
             </Button>
 
@@ -238,11 +302,28 @@ export default function Login() {
 
         {/* Footer */}
         <div className="mt-8 pt-6 border-t border-gray-200 text-center">
-          <p className="text-xs text-dark-gray">© 2024 FranFriend ERP. All rights reserved.</p>
+          <p className="text-xs text-dark-gray">
+            © 2024 FranFriend ERP. All rights reserved.
+          </p>
           <div className="flex justify-center gap-4 mt-2">
-            <a href="#" className="text-xs text-dark-gray hover:text-gray-900">이용약관</a>
-            <a href="#" className="text-xs text-dark-gray hover:text-gray-900">개인정보처리방침</a>
-            <a href="#" className="text-xs text-dark-gray hover:text-gray-900">고객지원</a>
+            <a
+              href="#"
+              className="text-xs text-dark-gray hover:text-gray-900"
+            >
+              이용약관
+            </a>
+            <a
+              href="#"
+              className="text-xs text-dark-gray hover:text-gray-900"
+            >
+              개인정보처리방침
+            </a>
+            <a
+              href="#"
+              className="text-xs text-dark-gray hover:text-gray-900"
+            >
+              고객지원
+            </a>
           </div>
         </div>
       </Card>

@@ -4,14 +4,12 @@ import com.boot.ict05_final_user.domain.store.entity.Store;
 import com.boot.ict05_final_user.domain.user.entity.Member;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import java.time.LocalDateTime;
 
 @Entity
+@Setter
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor

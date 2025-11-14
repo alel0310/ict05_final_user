@@ -45,7 +45,13 @@ public class InventoryAlertService {
         int count = 0;
         for (Long sid : stores) {
             try {
-                fcmService.sendExpireSoon(sid, "[유통임박] 확인 필요", "일부 재료의 유통기한이 임박했습니다.", "/user/inventory/expire");
+                fcmService.sendExpireSoon(
+                        sid,
+                        today, // ✅ baseDate 로 기록
+                        "[유통임박] 확인 필요",
+                        "일부 재료의 유통기한이 임박했습니다.",
+                        "/user/inventory/expire"
+                );
                 count++;
             } catch (FirebaseMessagingException e) {
                 log.warn("[FCM] EXP_SOON send fail storeId={}", sid, e);

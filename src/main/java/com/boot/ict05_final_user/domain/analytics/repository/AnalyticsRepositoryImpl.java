@@ -336,7 +336,6 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 				)
 				.from(co)
 				.join(co.store, s)
-				.leftJoin(cod).on(cod.order.id.eq(co.id))
 				.where(filter)
 				.groupBy(
 						co.orderedAt,

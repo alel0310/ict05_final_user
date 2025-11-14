@@ -46,10 +46,6 @@ public class StaffWriteFormDTO {
     @Pattern(regexp = "^[0-9\\-]{9,13}$", message = "연락처는 숫자와 하이픈만 입력해주세요")
     private String staffPhone;
 
-    /** 사원 주소 */
-    @Size(max = 255, message = "주소는 255자 이내로 입력해주세요")
-    private String staffAddress;
-
     /** 생년월일 (과거) */
     @NotNull(message = "생년월일을 입력해주세요")
     @Past(message = "생년월일은 과거여야 합니다")
