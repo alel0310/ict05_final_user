@@ -25,6 +25,8 @@ import { Button } from '../ui/button';
 import { useNavigate } from "react-router-dom";
 import api from "../../lib/authApi";
 import FcmForegroundListener from '../fcm/FcmForegroundListener';
+import { getMessagingIfSupported } from "../../lib/firebase";
+import { deleteToken } from "firebase/messaging";
 
 
 interface LayoutProps {
@@ -126,24 +128,67 @@ export function Layout({ children, userType, currentPage, onPageChange }: Layout
 
   const navigate = useNavigate();
 
+  const parseJwt = (t: string): any | null => {
+    try { return JSON.parse(atob((t || "").split(".")[1] || "")); } catch { return null; }
+  };
+
   const handleLogout = async () => {
+    const accessToken = localStorage.getItem("accessToken") || "";
+    const refreshToken = localStorage.getItem("refreshToken") || "";
+    const fcmToken    = localStorage.getItem("fcm_token") || "";
+
+    // 1) storeId 확보(JWT → /fcm/pref/me 순)
+    let storeId: number | undefined;
+    if (accessToken) {
+      const claims = parseJwt(accessToken);
+      storeId = claims?.storeId ?? claims?.sid ?? undefined;
+    }
+    if (!storeId && accessToken) {
+      try {
+        const me = await api.get("/fcm/pref/me", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        storeId = me?.data?.storeId ?? undefined;
+      } catch { /* ignore */ }
+    }
+
     try {
-      const refreshToken = localStorage.getItem("refreshToken")
-      // 1) 서버에 로그아웃 요청 (리프레시 토큰 무효화 용도)
-      //    백엔드에서 @PostMapping("/logout") 으로 만들었다고 가정
-      await api.post("/logout",{refreshToken});
-    } catch (err) {
-      // 실패하더라도 클라이언트 토큰은 지우는 편이 낫다
-      console.error("logout error", err);
+      // 2) 토픽 구독 해제
+      if (fcmToken && accessToken && storeId) {
+        const hdr = { headers: { Authorization: `Bearer ${accessToken}` } };
+        const t = encodeURIComponent(fcmToken);
+        await Promise.allSettled([
+          api.post(`/fcm/topic/unsubscribe?token=${t}&topic=store-${storeId}`, {}, hdr),
+          api.post(`/fcm/topic/unsubscribe?token=${t}&topic=inv-low-${storeId}`, {}, hdr),
+          api.post(`/fcm/topic/unsubscribe?token=${t}&topic=expire-soon-${storeId}`, {}, hdr),
+        ]);
+      }
+
+      // 3) 서버 토큰 비활성(엔드포인트 있을 때)
+      if (fcmToken && accessToken) {
+        await api.post(
+          "/fcm/token/revoke",
+          { token: fcmToken, platform: "WEB", deviceId: navigator.userAgent.slice(0,120) },
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        ).catch(() => {});
+      }
+
+      // 4) 브라우저 FCM 토큰 삭제
+      try {
+        const messaging = await getMessagingIfSupported();
+        if (messaging) await deleteToken(messaging);
+      } catch { /* ignore */ }
+
+      // 5) 서버 로그아웃(리프레시 무효화)
+      if (refreshToken) {
+        await api.post("/logout", { refreshToken }).catch(() => {});
+      }
     } finally {
-      // 2) 로컬 토큰 제거완
+      // 6) 클라이언트 정리 & 이동
+      delete (api as any).defaults?.headers?.common?.Authorization;
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
-
-      // 3) axios 기본 Authorization 헤더 제거
-      delete api.defaults.headers.common.Authorization;
-
-      // 4) 로그인 페이지로 이동
+      localStorage.removeItem("fcm_token");
       navigate("/login", { replace: true });
     }
   };
@@ -159,22 +204,45 @@ export function Layout({ children, userType, currentPage, onPageChange }: Layout
   };
 
     // 선택: 간단한 path -> 메뉴 매핑
-  const navigateByLink = (path: string) => {
-    // 필요 시 더 추가
+  const navigateByLink = (rawLink: string) => {
+    if (!rawLink) return;
+
+    // 1) 절대/상대 URL 모두 처리
+    const url = new URL(rawLink, window.location.origin);
+    let path = url.pathname; // ex) /user/inventory/low, /user/notice/list
+
+    // 2) 백엔드 context-path(/user) 제거
+    if (path.startsWith("/user")) {
+      path = path.substring("/user".length) || "/";
+    }
+
+    // 3) path -> currentPage 매핑
     const map: Record<string, string> = {
+      "/": "dashboard",
       "/dashboard": "dashboard",
+
+      // 📢 공지사항: NoticeEducation.tsx
       "/notice/list": "notice",
+
+      // 🔔 재고부족 / 유통임박: InventoryManagement.tsx
+      "/inventory/low": "inventory-management",
+      "/inventory/expire": "inventory-management",
+
+      // 기존 리포트/설정 매핑 (이미 쓰던 것 유지)
       "/reports/kpi": "kpi-report",
       "/reports/orders": "order-report",
       "/settings/notifications": "settings-notifications",
     };
+
     const pageId = map[path];
-    if (pageId) onPageChange(pageId);
-    else {
-      const base = window.location.origin;
-      window.location.href = path.startsWith("/") ? (base + path) : path;
+    if (pageId) {
+      onPageChange(pageId);
+    } else {
+      // 매핑 안 된 건 그냥 전체 URL로 이동 (fallback)
+      window.location.href = url.toString();
     }
   };
+
 
   const customTitles: Record<string, string> = {
     "settings-notifications": "가맹점 알림 설정",
