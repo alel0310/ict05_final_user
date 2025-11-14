@@ -1,6 +1,7 @@
 package com.boot.ict05_final_user.domain.staff.dto;
 
 import com.boot.ict05_final_user.domain.staff.entity.AttendanceStatus;
+import com.boot.ict05_final_user.domain.staff.entity.StaffEmploymentType;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -35,5 +36,15 @@ public class AttendanceListDTO {
 
     /** 근무시간대 이름 (오픈/미들/마감) */
     private String staffShiftTypeName;
+
+    // === StaffProfile JOIN 해서 가져올 정보 ===
+    /** 직원 시퀀스 */
+    private Long staffId;
+
+    /** 직원 이름 */
+    private String staffName;
+
+    /** 직원 근무형태 (점주/직원/알바 등) */
+    private StaffEmploymentType staffEmploymentType;
 
 }

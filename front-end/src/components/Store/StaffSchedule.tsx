@@ -26,6 +26,20 @@ interface Staff {
   status: 'active' | 'inactive' | 'vacation' | 'resigned';
 }
 
+// 백엔드 AttendanceListDTO에 맞는 타입
+interface AttendanceItem {
+  attendanceId: number;
+  attendanceWorkDate: string;        // "2025-11-25"
+  attendanceCheckIn: string | null;  // "2025-11-25T09:00:00"
+  attendanceCheckOut: string | null; // "2025-11-25T18:00:00"
+  attendanceStatus: string;          // e.g. "WORKING", "COMPLETED"
+  attendanceWorkHours: number;
+  staffShiftTypeName: string | null; // 오픈/미들/마감 이름 (지금은 null일 수도)
+  staffId: number;
+  staffName: string;
+  staffEmploymentType: string;       // "OWNER", "STAFF", "PART_TIME" 같은 값 예상
+}
+
 interface WorkSchedule {
   id: string;
   staffId: string;
@@ -159,9 +173,15 @@ export function StaffSchedule() {
   const [holidays, setHolidays] = useState<StoreHoliday[]>([]);
 
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState<'week' | 'month'>('week'); // 유지만
+  const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
   const [selectedStaff, setSelectedStaff] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
+
+  // 🔽 추가: 하루 근태 리스트 + 페이징 상태
+  const [attendanceList, setAttendanceList] = useState<AttendanceItem[]>([]);
+  const [attendancePage, setAttendancePage] = useState(0);
+  const [attendanceTotalPages, setAttendanceTotalPages] = useState(0);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
 
   // 모달
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
@@ -171,8 +191,9 @@ export function StaffSchedule() {
   );
 
   useEffect(() => {
-    // TODO: 초기 데이터 로딩
-  }, []);
+    // TODO: 직원 목록, 템플릿, 휴일 등은 나중에 로딩
+    loadAttendance(currentDate, 0);
+  }, [currentDate]);
 
   // 휴일 체크
   const isHoliday = (date: Date) => {
@@ -243,6 +264,69 @@ export function StaffSchedule() {
         return <Badge>{workType}</Badge>;
     }
   };
+
+  // ===== Attendance Helpers =====
+  const formatTime = (dateTime: string | null | undefined) => {
+    if (!dateTime) return '-';
+    // "YYYY-MM-DDTHH:MM:SS" → "HH:MM"
+    return dateTime.substring(11, 16);
+  };
+
+  const getAttendanceStatusBadge = (status: string) => {
+    switch (status) {
+      case 'WORKING':
+        return <Badge className="bg-green-100 text-green-800">근무중</Badge>;
+      case 'COMPLETED':
+        return <Badge className="bg-gray-100 text-gray-800">완료</Badge>;
+      case 'ABSENT':
+        return <Badge className="bg-red-100 text-red-800">결근</Badge>;
+      case 'LATE':
+        return <Badge className="bg-yellow-100 text-yellow-800">지각</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  const getEmploymentTypeLabel = (type: string) => {
+    switch (type) {
+      case 'OWNER':
+        return '점주';
+      case 'STAFF':
+        return '직원';
+      case 'PART_TIME':
+      case 'PART_TIMER':
+        return '알바';
+      default:
+        return type;
+    }
+  };
+
+  // 백엔드 근태 API 호출
+  const loadAttendance = async (targetDate: Date, page: number = 0) => {
+    try {
+      setAttendanceLoading(true);
+      const dateStr = targetDate.toISOString().split('T')[0]; // "YYYY-MM-DD"
+
+      const res = await fetch(
+        `http://localhost:8082/user/api/attendance/daily?date=${dateStr}&page=${page}&size=20`,
+        { credentials: 'include' }
+      );
+      if (!res.ok) {
+        throw new Error('근태 조회 실패');
+      }
+      const data = await res.json();
+
+      setAttendanceList(data.content || []);
+      setAttendancePage(data.number ?? 0);
+      setAttendanceTotalPages(data.totalPages ?? 0);
+    } catch (err) {
+      console.error(err);
+      toast.error('근태 데이터를 불러오지 못했습니다.');
+    } finally {
+      setAttendanceLoading(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'scheduled':
@@ -430,6 +514,7 @@ export function StaffSchedule() {
     const newDate = new Date(currentDate);
     newDate.setDate(currentDate.getDate() + (dir === 'next' ? 1 : -1));
     setCurrentDate(newDate);
+    setAttendancePage(0); // 날짜 바뀌면 0페이지부터
   };
 
   const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
@@ -520,113 +605,96 @@ export function StaffSchedule() {
       </Card>
 
       {/* 하루 리스트 뷰 */}
+      {/* 하루 리스트 뷰 */}
       <Card>
         <CardContent className="p-6 space-y-4">
-          {/* 2) 직원 리스트 (공지사항 리스트처럼) – 휴일이 아닌 경우에만 */}
-          {!isCurrentHoliday && (
+          {/* 직원 근태 리스트 */}
+          {attendanceLoading ? (
+            <div className="text-sm text-gray-500 px-1">근태 데이터를 불러오는 중입니다...</div>
+          ) : attendanceList.length > 0 ? (
             <>
-              {currentDaySchedules.length > 0 ? (
-                <div className="border rounded-lg overflow-hidden">
-                  {/* 헤더 */}
-                  <div className="grid grid-cols-7 bg-gray-50 px-4 py-2 text-xs font-medium text-gray-600">
-                    <div className="col-span-2 text-left">직원 / 상태</div>
-                    <div className="text-left">근무유형</div>
-                    <div className="text-left">예정 시간</div>
-                    <div className="text-left">실제 근무</div>
-                    <div className="text-left">휴게</div>
-                    <div className="text-right">관리</div>
-                  </div>
+              <div className="border rounded-lg overflow-hidden">
+                {/* 헤더 */}
+                <div className="grid grid-cols-7 bg-gray-50 px-4 py-2 text-xs font-medium text-gray-600">
+                  <div className="col-span-2 text-left">직원</div>
+                  <div className="text-left">출근</div>
+                  <div className="text-left">퇴근</div>
+                  <div className="text-left">근태 상태</div>
+                  <div className="text-left">실제 근무시간(h)</div>
+                  <div className="text-left">근무형태</div>
+                  {/* <div className="text-right">관리</div>  // 나중에 수정/삭제 붙일 때 사용 */}
+                </div>
 
-                  {/* 데이터 rows */}
-                  {currentDaySchedules.map(schedule => (
-                    <div
-                      key={schedule.id}
-                      className="grid grid-cols-7 items-center px-4 py-3 text-sm border-t hover:bg-gray-50"
-                    >
-                      {/* 직원 / 상태 */}
-                      <div className="col-span-2 flex items-center gap-2">
-                        {getStatusBadge(schedule.status)}
-                        <span className="font-medium">{schedule.staffName}</span>
-                      </div>
-
-                      {/* 근무 유형 */}
-                      <div className="flex items-center gap-2">
-                        {getWorkTypeIcon(schedule.workType)}
-                        {getWorkTypeBadge(schedule.workType)}
-                      </div>
-
-                      {/* 예정 시간 */}
-                      <div>
-                        {schedule.workType === 'vacation' || schedule.workType === 'off'
-                          ? '-'
-                          : `${schedule.startTime} - ${schedule.endTime}`}
-                      </div>
-
-                      {/* 실제 근무 */}
-                      <div className="text-xs text-gray-700">
-                        {schedule.actualStartTime && schedule.actualEndTime ? (
-                          <>
-                            {schedule.actualStartTime} - {schedule.actualEndTime}
-                            {(() => {
-                              const staff = staffList.find(s => s.id === schedule.staffId);
-                              const isPartTime = staff?.employmentType === '파트타임';
-                              return isPartTime ? (
-                                <>
-                                  <br />
-                                  급여:{' '}
-                                  {calculatePay(schedule).toLocaleString()}원
-                                </>
-                              ) : null;
-                            })()}
-                          </>
-                        ) : (
-                          <span className="text-gray-400">입력 없음</span>
-                        )}
-                      </div>
-
-                      {/* 휴게 */}
-                      <div className="text-xs text-gray-500">
-                        {schedule.workType === 'vacation' || schedule.workType === 'off'
-                          ? '-'
-                          : `${schedule.breakTime}분`}
-                      </div>
-
-                      {/* 관리 버튼 */}
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setEditingSchedule(schedule);
-                            setSelectedStaffForForm(schedule.staffId);
-                          }}
-                          className="p-1 h-7 w-7"
-                        >
-                          <Edit className="w-3 h-3" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            setDeleteConfirm({
-                              type: 'schedule',
-                              id: schedule.id
-                            })
-                          }
-                          className="p-1 h-7 w-7 text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
-                      </div>
+                {/* 데이터 rows */}
+                {attendanceList.map(item => (
+                  <div
+                    key={item.attendanceId}
+                    className="grid grid-cols-7 items-center px-4 py-3 text-sm border-t hover:bg-gray-50"
+                  >
+                    {/* 직원 */}
+                    <div className="col-span-2 flex flex-col">
+                      <span className="font-medium">{item.staffName}</span>
+                      <span className="text-xs text-gray-500">
+                        {getEmploymentTypeLabel(item.staffEmploymentType)}
+                      </span>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-sm text-gray-500 px-1">
-                  오늘 등록된 근무 일정이 없습니다.
-                </div>
-              )}
+
+                    {/* 출근 */}
+                    <div>{formatTime(item.attendanceCheckIn)}</div>
+
+                    {/* 퇴근 */}
+                    <div>{formatTime(item.attendanceCheckOut)}</div>
+
+                    {/* 근태 상태 */}
+                    <div>{getAttendanceStatusBadge(item.attendanceStatus)}</div>
+
+                    {/* 실제 근무시간 */}
+                    <div>{item.attendanceWorkHours?.toFixed(2)}</div>
+
+                    {/* 근무형태 (오픈/미들/마감 등) */}
+                    <div>{item.staffShiftTypeName || '-'}</div>
+
+                    {/* 관리 버튼 (나중에 구현) */}
+                    {/* <div className="flex justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="p-1 h-7 w-7"
+                        onClick={() => {
+                          toast.info('근태 수정 기능은 아직 준비 중입니다.');
+                        }}
+                      >
+                        <Edit className="w-3 h-3" />
+                      </Button>
+                    </div> */}
+                  </div>
+                ))}
+              </div>
+
+              {/* 페이징 버튼 */}
+              <div className="flex justify-end gap-2 mt-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={attendancePage <= 0}
+                  onClick={() => loadAttendance(currentDate, attendancePage - 1)}
+                >
+                  이전
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={attendancePage + 1 >= attendanceTotalPages}
+                  onClick={() => loadAttendance(currentDate, attendancePage + 1)}
+                >
+                  다음
+                </Button>
+              </div>
             </>
+          ) : (
+            <div className="text-sm text-gray-500 px-1">
+              오늘 등록된 근태 기록이 없습니다.
+            </div>
           )}
         </CardContent>
       </Card>
