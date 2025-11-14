@@ -3,12 +3,9 @@ package com.boot.ict05_final_user.domain.staff.service;
 import com.boot.ict05_final_user.config.security.auth.CustomUserDetails;
 import com.boot.ict05_final_user.domain.staff.dto.StaffListDTO;
 import com.boot.ict05_final_user.domain.staff.dto.StaffSearchDTO;
-import com.boot.ict05_final_user.domain.staff.entity.AttendanceStatus;
-import com.boot.ict05_final_user.domain.staff.repository.AttendanceRepository;
 import com.boot.ict05_final_user.domain.staff.repository.StaffRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
-import jakarta.persistence.Query;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -40,36 +37,18 @@ public class StaffService {
      *
      * @return 직원 리스트 DTO
      */
-    public List<StaffListDTO> selectAllStaff(Long storeId) {
+    public Page<StaffListDTO> selectAllStaff(Long storeId, Pageable pageable) {
 
         StaffSearchDTO searchDTO = new StaffSearchDTO();
         searchDTO.setStoreId(storeId);
 
-        Pageable pageable = Pageable.unpaged();
+        log.info("직원 목록 조회 요청 - storeId: {}, page: {}, size: {}",
+                storeId != null ? storeId : "전체조회",
+                pageable.getPageNumber(),
+                pageable.getPageSize()
+        );
 
-        log.info("직원 목록 조회 요청 - storeId: {}", storeId != null ? storeId : "전체조회");
-
-        Page<StaffListDTO> result = staffRepository.listStaff(searchDTO, pageable);
-
-        // ❗ QueryDSL에서 이미 attendanceStatus까지 조인해서 넘겨주고 있으니까
-        //    여기서는 그냥 그대로 반환만 하면 됨
-        return result.getContent();
-    }
-
-    // ✅ DB 값이 'NORMAL' / 'normal' / '정상' 등 무엇이 오든 안전하게 파싱
-    private AttendanceStatus parseStatusSafely(String v) {
-        if (v == null || v.isBlank()) return AttendanceStatus.NORMAL;
-        try {
-            return AttendanceStatus.valueOf(v.toUpperCase(Locale.ROOT)); // ENUM 이름 대응
-        } catch (Exception ignore) { }
-        try {
-            return AttendanceStatus.fromCode(v); // enum의 code 필드 (예: "normal", "vacation")
-        } catch (Exception ignore) { }
-        try {
-            return AttendanceStatus.fromLabel(v); // 한글 라벨 (예: "정상", "휴가")
-        } catch (Exception ignore) { }
-        log.warn("알 수 없는 attendance_status 값 '{}', NORMAL로 대체", v);
-        return AttendanceStatus.NORMAL;
+        return staffRepository.listStaff(searchDTO, pageable);
     }
 
     /**
@@ -100,6 +79,7 @@ public class StaffService {
         log.warn("예상치 못한 principal 타입: {}", principal.getClass());
         return null;
     }
+
 
 
 }
