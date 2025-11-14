@@ -159,7 +159,7 @@ export function StaffSchedule() {
   const [holidays, setHolidays] = useState<StoreHoliday[]>([]);
 
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState<'week' | 'month'>('week'); // 월간 구현 전이라도 일단 유지
+  const [viewMode, setViewMode] = useState<'week' | 'month'>('week'); // 유지만
   const [selectedStaff, setSelectedStaff] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -173,20 +173,6 @@ export function StaffSchedule() {
   useEffect(() => {
     // TODO: 초기 데이터 로딩
   }, []);
-
-  // 주 계산
-  const getWeekDates = (date: Date) => {
-    const start = new Date(date);
-    const day = start.getDay(); // 0=일
-    const diff = start.getDate() - day;
-    start.setDate(diff);
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(start);
-      d.setDate(start.getDate() + i);
-      return d;
-    });
-  };
-  const weekDates = getWeekDates(currentDate);
 
   // 휴일 체크
   const isHoliday = (date: Date) => {
@@ -440,11 +426,20 @@ export function StaffSchedule() {
     setSelectedWorkType('');
   };
 
-  const navigateWeek = (dir: 'prev' | 'next') => {
+  const navigateDay = (dir: 'prev' | 'next') => {
     const newDate = new Date(currentDate);
-    newDate.setDate(currentDate.getDate() + (dir === 'next' ? 7 : -7));
+    newDate.setDate(currentDate.getDate() + (dir === 'next' ? 1 : -1));
     setCurrentDate(newDate);
   };
+
+  const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+
+  const currentDaySchedules = getSchedulesForDate(currentDate);
+  const currentDateString = currentDate.toISOString().split('T')[0];
+  const staffingWarningsForDay = checkStaffingRequirements(schedules, currentDateString);
+  const businessHours = getBusinessHours();
+  const isCurrentHoliday = isHoliday(currentDate);
+  const holidayInfo = isCurrentHoliday ? getHolidayInfo(currentDate) : undefined;
 
   return (
     <div className="space-y-6">
@@ -506,271 +501,133 @@ export function StaffSchedule() {
         </CardContent>
       </Card>
 
-      {/* 주간 네비게이션 */}
+      {/* 날짜 네비게이션 (하루 단위) */}
       <Card>
         <CardContent className="p-4">
           <div className="flex items-center justify-between">
-            <Button variant="outline" onClick={() => navigateWeek('prev')} className="gap-2">
-              <ChevronLeft className="w-4 h-4" /> 이전 주
+            <Button variant="outline" onClick={() => navigateDay('prev')} className="gap-2">
+              <ChevronLeft className="w-4 h-4" /> 이전 날
             </Button>
             <h2 className="font-semibold">
-              {(() => {
-                const s = weekDates[0];
-                const e = weekDates[6];
-                const y = s.getFullYear();
-                const sm = s.getMonth() + 1;
-                const em = e.getMonth() + 1;
-                return sm === em
-                  ? `${y}년 ${sm}월 ${s.getDate()}일 - ${e.getDate()}일`
-                  : `${y}년 ${sm}월 ${s.getDate()}일 - ${em}월 ${e.getDate()}일`;
-              })()}
+              {currentDate.getFullYear()}년 {currentDate.getMonth() + 1}월{' '}
+              {currentDate.getDate()}일 ({dayNames[currentDate.getDay()]})
             </h2>
-            <Button variant="outline" onClick={() => navigateWeek('next')} className="gap-2">
-              다음 주 <ChevronRight className="w-4 h-4" />
+            <Button variant="outline" onClick={() => navigateDay('next')} className="gap-2">
+              다음 날 <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* 주간 캘린더 */}
+      {/* 하루 리스트 뷰 */}
       <Card>
-        <CardContent className="p-6">
-          <div className="grid grid-cols-7 gap-4">
-            {['일', '월', '화', '수', '목', '금', '토'].map((day, idx) => (
-              <div key={day} className="text-center">
-                <div className="font-semibold mb-2 pb-2 border-b">
-                  <div>{day}</div>
-                  <div className="text-sm text-gray-600">{weekDates[idx].getDate()}</div>
-                </div>
+        <CardContent className="p-6 space-y-4">
+          {/* 2) 직원 리스트 (공지사항 리스트처럼) – 휴일이 아닌 경우에만 */}
+          {!isCurrentHoliday && (
+            <>
+              {currentDaySchedules.length > 0 ? (
+                <div className="border rounded-lg overflow-hidden">
+                  {/* 헤더 */}
+                  <div className="grid grid-cols-7 bg-gray-50 px-4 py-2 text-xs font-medium text-gray-600">
+                    <div className="col-span-2 text-left">직원 / 상태</div>
+                    <div className="text-left">근무유형</div>
+                    <div className="text-left">예정 시간</div>
+                    <div className="text-left">실제 근무</div>
+                    <div className="text-left">휴게</div>
+                    <div className="text-right">관리</div>
+                  </div>
 
-                <div className="space-y-2 min-h-32">
-                  {(() => {
-                    const daySchedules = getSchedulesForDate(weekDates[idx]);
-                    const businessHours = getBusinessHours();
+                  {/* 데이터 rows */}
+                  {currentDaySchedules.map(schedule => (
+                    <div
+                      key={schedule.id}
+                      className="grid grid-cols-7 items-center px-4 py-3 text-sm border-t hover:bg-gray-50"
+                    >
+                      {/* 직원 / 상태 */}
+                      <div className="col-span-2 flex items-center gap-2">
+                        {getStatusBadge(schedule.status)}
+                        <span className="font-medium">{schedule.staffName}</span>
+                      </div>
 
-                    if (daySchedules.length === 0) {
-                      if (isHoliday(weekDates[idx])) {
-                        const holidayInfo = getHolidayInfo(weekDates[idx]);
-                        return (
-                          <div className="p-4 bg-red-50 rounded-lg border-2 border-red-200 border-dashed">
-                            <div className="text-center space-y-3">
-                              <div className="flex items-center justify-center gap-2">
-                                <div className="p-2 bg-red-100 rounded-full">
-                                  <CalendarX className="w-4 h-4 text-red-600" />
-                                </div>
-                              </div>
-                              <div>
-                                <div className="text-sm font-semibold text-red-800 mb-1">
-                                  매장 휴일
-                                </div>
-                                <div className="text-lg font-bold text-red-900">
-                                  {holidayInfo?.name}
-                                </div>
-                                <div className="text-xs text-red-600 mt-1">
-                                  {holidayInfo?.type === 'national'
-                                    ? '국가공휴일'
-                                    : holidayInfo?.type === 'store'
-                                    ? '매장휴일'
-                                    : '특별휴일'}
-                                </div>
-                              </div>
-                              <div className="pt-2 border-t border-red-200">
-                                <div className="text-xs text-red-500 font-medium">
-                                  매장 휴무
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      }
+                      {/* 근무 유형 */}
+                      <div className="flex items-center gap-2">
+                        {getWorkTypeIcon(schedule.workType)}
+                        {getWorkTypeBadge(schedule.workType)}
+                      </div>
 
-                      const dateString = weekDates[idx].toISOString().split('T')[0];
-                      const staffingWarnings = checkStaffingRequirements(schedules, dateString);
-                      return (
-                        <div
-                          className={`p-4 rounded-lg border-2 border-dashed ${
-                            staffingWarnings.length > 0
-                              ? 'bg-red-50 border-red-200'
-                              : 'bg-blue-50 border-blue-200'
-                          }`}
-                        >
-                          <div className="text-center space-y-3">
-                            <div className="flex items-center justify-center gap-2">
-                              <div
-                                className={`p-2 rounded-full ${
-                                  staffingWarnings.length > 0
-                                    ? 'bg-red-100'
-                                    : 'bg-blue-100'
-                                }`}
-                              >
-                                {staffingWarnings.length > 0 ? (
-                                  <AlertTriangle className="w-4 h-4 text-red-600" />
-                                ) : (
-                                  <Clock className="w-4 h-4 text-blue-600" />
-                                )}
-                              </div>
-                            </div>
-                            <div>
-                              <div
-                                className={`text-sm font-semibold mb-1 ${
-                                  staffingWarnings.length > 0
-                                    ? 'text-red-800'
-                                    : 'text-blue-800'
-                                }`}
-                              >
-                                {staffingWarnings.length > 0 ? '인력 부족' : '매장 영업시간'}
-                              </div>
-                              <div
-                                className={`text-lg font-bold ${
-                                  staffingWarnings.length > 0
-                                    ? 'text-red-900'
-                                    : 'text-blue-900'
-                                }`}
-                              >
-                                {businessHours.open} - {businessHours.close}
-                              </div>
-                              <div
-                                className={`text-xs mt-1 ${
-                                  staffingWarnings.length > 0
-                                    ? 'text-red-600'
-                                    : 'text-blue-600'
-                                }`}
-                              >
-                                (14시간 영업)
-                              </div>
-                            </div>
-                            <div
-                              className={`pt-2 border-t ${
-                                staffingWarnings.length > 0
-                                  ? 'border-red-200'
-                                  : 'border-blue-200'
-                              }`}
-                            >
-                              <div
-                                className={`text-xs font-medium ${
-                                  staffingWarnings.length > 0
-                                    ? 'text-red-500'
-                                    : 'text-blue-500'
-                                }`}
-                              >
-                                {staffingWarnings.length > 0
-                                  ? `${staffingWarnings.length}개 경고`
-                                  : '직원 스케줄 없음'}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    }
+                      {/* 예정 시간 */}
+                      <div>
+                        {schedule.workType === 'vacation' || schedule.workType === 'off'
+                          ? '-'
+                          : `${schedule.startTime} - ${schedule.endTime}`}
+                      </div>
 
-                    const dateString = weekDates[idx].toISOString().split('T')[0];
-                    const staffingWarnings = checkStaffingRequirements(schedules, dateString);
-
-                    return (
-                      <>
-                        {daySchedules.map(schedule => (
-                          <Card
-                            key={schedule.id}
-                            className="p-3 text-left hover:shadow-md transition-shadow cursor-pointer"
-                          >
-                            <div className="space-y-2">
-                              <div className="flex items-center justify-between">
-                                <span className="font-medium text-sm">
-                                  {schedule.staffName}
-                                </span>
-                                {getStatusBadge(schedule.status)}
-                              </div>
-
-                              <div className="flex items-center gap-1">
-                                {getWorkTypeIcon(schedule.workType)}
-                                {getWorkTypeBadge(schedule.workType)}
-                              </div>
-
-                              {schedule.workType !== 'vacation' &&
-                                schedule.workType !== 'off' && (
-                                  <div className="flex items-center gap-1 text-xs">
-                                    <Clock className="w-3 h-3" />
-                                    {schedule.startTime} - {schedule.endTime}
-                                  </div>
-                                )}
-
-                              {schedule.actualStartTime && schedule.actualEndTime && (
-                                <div className="text-xs text-gray-600">
-                                  실제: {schedule.actualStartTime} - {schedule.actualEndTime}
-                                  {(() => {
-                                    const staff = staffList.find(
-                                      s => s.id === schedule.staffId
-                                    );
-                                    const isPartTime =
-                                      staff?.employmentType === '파트타임';
-                                    return isPartTime ? (
-                                      <>
-                                        <br />
-                                        급여:{' '}
-                                        {calculatePay(schedule).toLocaleString()}원
-                                      </>
-                                    ) : null;
-                                  })()}
-                                </div>
-                              )}
-
-                              <div className="flex justify-between items-center">
-                                <div className="text-xs text-gray-500">
-                                  휴게: {schedule.breakTime}분
-                                </div>
-                                <div className="flex gap-1">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => {
-                                      setEditingSchedule(schedule);
-                                      setSelectedStaffForForm(schedule.staffId);
-                                    }}
-                                    className="p-1 h-6 w-6"
-                                  >
-                                    <Edit className="w-3 h-3" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() =>
-                                      setDeleteConfirm({
-                                        type: 'schedule',
-                                        id: schedule.id
-                                      })
-                                    }
-                                    className="p-1 h-6 w-6 text-red-600 hover:text-red-700"
-                                  >
-                                    <Trash2 className="w-3 h-3" />
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          </Card>
-                        ))}
-
-                        {staffingWarnings.length > 0 && (
-                          <div className="p-2 bg-orange-50 border border-orange-200 rounded-lg">
-                            <div className="flex items-center gap-1 mb-1">
-                              <AlertTriangle className="w-3 h-3 text-orange-600" />
-                              <span className="text-xs font-medium text-orange-800">
-                                인력 부족
-                              </span>
-                            </div>
-                            <div className="text-xs text-orange-700 space-y-1">
-                              {staffingWarnings.map((w, i) => (
-                                <div key={i}>{w}</div>
-                              ))}
-                            </div>
-                          </div>
+                      {/* 실제 근무 */}
+                      <div className="text-xs text-gray-700">
+                        {schedule.actualStartTime && schedule.actualEndTime ? (
+                          <>
+                            {schedule.actualStartTime} - {schedule.actualEndTime}
+                            {(() => {
+                              const staff = staffList.find(s => s.id === schedule.staffId);
+                              const isPartTime = staff?.employmentType === '파트타임';
+                              return isPartTime ? (
+                                <>
+                                  <br />
+                                  급여:{' '}
+                                  {calculatePay(schedule).toLocaleString()}원
+                                </>
+                              ) : null;
+                            })()}
+                          </>
+                        ) : (
+                          <span className="text-gray-400">입력 없음</span>
                         )}
-                      </>
-                    );
-                  })()}
+                      </div>
+
+                      {/* 휴게 */}
+                      <div className="text-xs text-gray-500">
+                        {schedule.workType === 'vacation' || schedule.workType === 'off'
+                          ? '-'
+                          : `${schedule.breakTime}분`}
+                      </div>
+
+                      {/* 관리 버튼 */}
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setEditingSchedule(schedule);
+                            setSelectedStaffForForm(schedule.staffId);
+                          }}
+                          className="p-1 h-7 w-7"
+                        >
+                          <Edit className="w-3 h-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            setDeleteConfirm({
+                              type: 'schedule',
+                              id: schedule.id
+                            })
+                          }
+                          className="p-1 h-7 w-7 text-red-600 hover:text-red-700"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
-            ))}
-          </div>
+              ) : (
+                <div className="text-sm text-gray-500 px-1">
+                  오늘 등록된 근무 일정이 없습니다.
+                </div>
+              )}
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -823,13 +680,13 @@ export function StaffSchedule() {
             schedules.map(s =>
               s.id === editingSchedule?.id
                 ? {
-                    ...s,
-                    ...data,
-                    startTime,
-                    endTime,
-                    breakTime,
-                    staffName: staff?.name || s.staffName
-                  }
+                  ...s,
+                  ...data,
+                  startTime,
+                  endTime,
+                  breakTime,
+                  staffName: staff?.name || s.staffName
+                }
                 : s
             )
           );
