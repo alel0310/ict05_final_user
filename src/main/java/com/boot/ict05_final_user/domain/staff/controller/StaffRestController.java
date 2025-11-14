@@ -69,17 +69,18 @@ public class StaffRestController {
      * 직원 데이터를 저장하고 생성된 직원 ID를 반환한다.
      */
     @PostMapping("/add")
-    public ResponseEntity<Long> creatStaff(@Valid @RequestBody StaffWriteFormDTO dto, @AuthenticationPrincipal AppUser user) {
-
+    public ResponseEntity<Long> creatStaff(
+            @Valid @RequestBody StaffWriteFormDTO dto,
+            @AuthenticationPrincipal AppUser user
+    ) {
         log.info("POST /api/staff/add dto={}, storeId={}", dto, user.getStoreId());
 
         Store store = storeService.findById(user.getStoreId());
 
-        // 직원 정보 저장
         StaffProfile staff = StaffProfile.builder()
                 .store(store)
                 .staffName(dto.getStaffName())
-                .staffEmploymentType(dto.getStaffEmploymentType()) // enum
+                .staffEmploymentType(dto.getStaffEmploymentType())
                 .staffEmail(dto.getStaffEmail())
                 .staffPhone(dto.getStaffPhone())
                 .staffBirth(dto.getStaffBirth())
@@ -87,11 +88,12 @@ public class StaffRestController {
                 .build();
 
         staffRepository.save(staff);
-
         log.info("직원 등록 완료 id={}", staff.getId());
 
+        // 👇 근태 생성 없음 (attendance는 나중에 다른 기능에서 따로 처리)
         return ResponseEntity.ok(staff.getId());
     }
+
 
 
 }
