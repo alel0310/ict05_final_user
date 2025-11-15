@@ -325,21 +325,21 @@ export default function OrderReport() {
                 <>
                   <thead className="bg-light-gray border-b">
                     <tr>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">날짜</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">주문ID</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">주문유형</th>
-                      <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900">총금액</th>
-                      <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900">메뉴수</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">결제수단</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">채널메모</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">날짜</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">주문ID</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">주문유형</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">총금액</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">메뉴수</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">결제수단</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">채널메모</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
                     {(rows as OrderDailyRow[]).map((r, i) => (
                       <tr key={i} className="hover:bg-gray-50">
-                        <td className="px-6 py-3 text-sm text-gray-900">{r.orderDate}</td>
-                        <td className="px-6 py-3 text-sm text-gray-900">{r.orderId}</td>
-                        <td className="px-6 py-3 text-sm text-gray-900">
+                        <td className="px-6 py-3 text-center text-sm text-gray-900">{r.orderDate}</td>
+                        <td className="px-6 py-3 text-right text-sm text-gray-900">{r.orderId}</td>
+                        <td className="px-6 py-3 text-right text-sm text-gray-900">
                           {orderTypeLabel[r.orderType] ?? r.orderType}
                         </td>
                         <td className="px-6 py-3 text-sm text-gray-900 text-right">
@@ -348,10 +348,10 @@ export default function OrderReport() {
                         <td className="px-6 py-3 text-sm text-gray-900 text-right">
                           {(r.menuCount ?? 0).toLocaleString()}
                         </td>
-                        <td className="px-6 py-3 text-sm text-gray-900">
+                        <td className="px-6 py-3 text-right text-sm text-gray-900">
                           {paymentTypeLabel[r.paymentType] ?? r.paymentType}
                         </td>
-                        <td className="px-6 py-3 text-sm text-gray-900">
+                        <td className="px-6 py-3 text-right text-sm text-gray-900">
                           {r.channelMemo || '-'}
                         </td>
                       </tr>
@@ -370,19 +370,19 @@ export default function OrderReport() {
                 <>
                   <thead className="bg-light-gray border-b">
                     <tr>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">월</th>
-                      <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900">총매출</th>
-                      <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900">주문수</th>
-                      <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900">평균주문금액</th>
-                      <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900">배달매출</th>
-                      <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900">포장매출</th>
-                      <th className="px-6 py-3 text-right text-sm font-semibold text-gray-900">매장매출</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">월</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">총매출</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">주문수</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">평균주문금액</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">배달매출</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">포장매출</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">매장매출</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
                     {(rows as OrderMonthlyRow[]).map((r, i) => (
                       <tr key={i} className="hover:bg-gray-50">
-                        <td className="px-6 py-3 text-sm text-gray-900">{r.yearMonth}</td>
+                        <td className="px-6 py-3 text-center text-sm text-gray-900">{r.yearMonth}</td>
                         <td className="px-6 py-3 text-sm text-gray-900 text-right">
                           ₩{fmtMoneyInt(r.totalSales)}
                         </td>

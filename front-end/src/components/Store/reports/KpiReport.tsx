@@ -327,22 +327,22 @@ export default function KpiReport() {
             <table className="w-full">
               <thead className="bg-light-gray border-b">
                 <tr>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">
                     날짜/월
                   </th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">
                     매출
                   </th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">
                     주문수
                   </th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">
                     UPT
                   </th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">
                     ADS
                   </th>
-                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-900">
+                  <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">
                     AUR
                   </th>
                 </tr>
@@ -350,7 +350,7 @@ export default function KpiReport() {
               <tbody className="divide-y divide-gray-200">
                 {rows.map((r, i) => (
                   <tr key={i} className="hover:bg-gray-50">
-                    <td className="px-6 py-3 text-sm text-gray-900">
+                    <td className="px-6 py-3 text-center text-sm text-gray-900">
                       {r.label}
                     </td>
                     <td className="px-6 py-3 text-sm text-gray-900 text-right">

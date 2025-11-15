@@ -296,8 +296,8 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 	}
 
 	// =========================
-//  주문 분석 일별 테이블(주문 단위)
-// =========================
+	//  주문 분석 일별 테이블(주문 단위)
+	// =========================
 	@Override
 	@Transactional(readOnly = true)
 	public CursorPage<OrderDailyRowDto> fetchOrderDailyRows(Long storeId, AnalyticsSearchDto cond) {
@@ -311,7 +311,7 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 				.and(eqStore(storeId))
 				.and(betweenClosedOpen(co.orderedAt, start, endEx));
 
-		// 🔹 커서: 다시 "마지막 주문 ID" 기준으로만 사용
+		// 🔹 커서: "마지막 주문 ID" 기준으로만 사용
 		if (cond.cursor() != null && !cond.cursor().isBlank()) {
 			try {
 				Long lastId = Long.valueOf(cond.cursor());
@@ -321,6 +321,7 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 			}
 		}
 
+		// 🔹 메뉴 수량 합계 (상세 테이블 기준)
 		NumberExpression<Integer> menuCountExpr = cod.quantity.sum();
 
 		List<Tuple> rows = query
@@ -336,6 +337,8 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 				)
 				.from(co)
 				.join(co.store, s)
+				// ⭐ 여기 추가: 주문 ↔ 주문상세 조인 (LEFT JOIN)
+				.leftJoin(cod).on(cod.order.id.eq(co.id))
 				.where(filter)
 				.groupBy(
 						co.orderedAt,
@@ -394,6 +397,7 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 
 		return new CursorPage<>(items, nextCursor);
 	}
+
 
 
 	// =========================
