@@ -66,7 +66,7 @@ public class MenuService {
     /** 메뉴 품절처리 */
     public void updateSoldOutStatus(Long storeId, Long menuId, StoreMenuSoldout status) {
         StoreMenu storeMenu = storeMenuRepository
-                .findByStore_StoreIdAndMenu_MenuId(storeId, menuId)
+                .findByStoreIdAndMenuId(storeId, menuId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "가맹점 메뉴를 찾을 수 없습니다. storeId=" + storeId + ", menuId=" + menuId));
 
