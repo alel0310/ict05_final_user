@@ -22,4 +22,6 @@ public interface FcmDeviceTokenRepository extends JpaRepository<FcmDeviceToken, 
         return findByMemberIdFkAndIsActiveTrue(memberIdFk).stream()
                 .map(FcmDeviceToken::getToken).toList();
     }
+
+    List<FcmDeviceToken> findByAppTypeAndIsActiveTrue(AppType appType);
 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
-  Plus, Search, Edit, Users, Calendar,
+  Plus, Search, Edit, Users,
   UserCheck, UserMinus
 } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -29,26 +29,34 @@ type BaseField = {
 
 type ModalField =
   | (BaseField & {
-    type: Exclude<UIFieldType, 'select'>;
-    placeholder?: string;
-    options?: never;
-  })
+      type: Exclude<UIFieldType, 'select'>;
+      placeholder?: string;
+      options?: never;
+    })
   | (BaseField & {
-    type: 'select';
-    options: { value: string; label: string }[];
-  });
-/* ---------------------------------------------------------------------- */
+      type: 'select';
+      options: { value: string; label: string }[];
+    });
 
-/* ---------- Staff 인터페이스 ---------- */
+/* ---------- Staff & Page 인터페이스 ---------- */
 interface Staff {
   id: number;
   staffName: string;
   staffBirth: string;
   staffEmploymentType: string;
   staffStartDate: string;
+  staffEndDate?: string;
   attendanceStatus: string;
   staffPhone: string;
-  staffEmail?: string;
+  staffEmail: string;
+}
+
+interface PageResponse<T> {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  number: number; // 현재 페이지(0부터)
+  size: number;
 }
 
 /* ---------- 컴포넌트 ---------- */
@@ -59,28 +67,47 @@ export function StaffList() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
 
+  // 페이징 상태
+  const [page, setPage] = useState(0);          // 현재 페이지(0-based)
+  const [size, setSize] = useState(8);         // 한 페이지 개수
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
+
   // ✅ 날짜 포맷 변환 (LocalDateTime 대응)
   const toDateTime = (v: string) =>
     v && v.length === 10 ? `${v}T00:00:00` : v;
 
-  /* ✅ 직원 목록 불러오기 */
-  useEffect(() => {
-    const fetchStaffList = async () => {
-      try {
-        const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
-        const token = localStorage.getItem('accessToken');
-        const res = await axios.get<Staff[]>(`${baseUrl}/api/staff/list`, {
+  /* ✅ 직원 목록 불러오기 (page/size 포함) */
+  const fetchStaffList = async (pageParam = page, sizeParam = size) => {
+    try {
+      const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
+      const token = localStorage.getItem('accessToken');
+
+      const res = await axios.get<PageResponse<Staff>>(
+        `${baseUrl}/api/staff/list`,
+        {
           headers: { Authorization: `Bearer ${token}` },
-        });
-        setStaff(res.data);
-      } catch {
-        toast.error('직원 목록을 불러오지 못했습니다.');
-      }
-    };
-    fetchStaffList();
+          params: { page: pageParam, size: sizeParam },
+        }
+      );
+
+      setStaff(res.data.content);
+      setTotalPages(res.data.totalPages);
+      setTotalElements(res.data.totalElements);
+      setPage(res.data.number);
+      setSize(res.data.size);
+    } catch (err) {
+      console.error(err);
+      toast.error('직원 목록을 불러오지 못했습니다.');
+    }
+  };
+
+  // 최초 로딩 시 1페이지 조회
+  useEffect(() => {
+    fetchStaffList(0, 8);  // 8명 기준으로 첫 페이지 조회
   }, []);
 
-  /* ✅ 등록 처리 */
+  /* 등록 처리 */
   const handleAddStaff = async (data: any) => {
     try {
       const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
@@ -89,7 +116,7 @@ export function StaffList() {
       const payload = {
         staffName: data.staffName,
         staffEmploymentType: data.staffEmploymentType,
-        staffEmail: data.staffEmail || null,
+        staffEmail: data.staffEmail,
         staffPhone: data.staffPhone,
         staffBirth: toDateTime(data.staffBirth),
         staffStartDate: toDateTime(data.staffStartDate),
@@ -99,11 +126,8 @@ export function StaffList() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      // 목록 재조회
-      const listRes = await axios.get<Staff[]>(`${baseUrl}/api/staff/list`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setStaff(listRes.data);
+      // 현재 페이지 다시 조회
+      await fetchStaffList(page, size);
 
       setIsAddModalOpen(false);
       toast.success(`직원이 등록되었습니다. (ID: ${res.data})`);
@@ -113,16 +137,67 @@ export function StaffList() {
     }
   };
 
-  /* ✅ 수정 처리 (로컬 상태만 변경 — 필요 시 PUT으로 확장 가능) */
-  const handleEditStaff = (data: any) => {
-    setStaff(prev =>
-      prev.map(m => (m.id === editingStaff?.id ? { ...m, ...data } : m))
-    );
-    setEditingStaff(null);
-    toast.success('직원 정보가 수정되었습니다.');
+  /* 수정 처리 */
+  const handleEditStaff = async (data: any) => {
+    if (!editingStaff) return;
+
+    try {
+      const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
+      const token = localStorage.getItem('accessToken');
+
+      const payload = {
+        staffName: data.staffName,
+        staffEmploymentType: data.staffEmploymentType,
+        staffEmail: data.staffEmail,
+        staffPhone: data.staffPhone,
+        staffBirth: toDateTime(data.staffBirth),
+        staffStartDate: toDateTime(data.staffStartDate),
+        staffEndDate: data.staffEndDate ? toDateTime(data.staffEndDate) : null,
+      };
+
+      await axios.put(
+        `${baseUrl}/api/staff/modify/${editingStaff.id}`,
+        payload,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      // 수정 후 현재 페이지 재조회
+      await fetchStaffList(page, size);
+
+      setEditingStaff(null);
+      toast.success('직원 정보가 수정되었습니다.');
+    } catch (err: any) {
+      console.error(err?.response?.data ?? err);
+      toast.error('직원 수정에 실패했습니다.');
+    }
   };
 
-  /* ✅ 필터링 */
+  /* 삭제 처리 */
+  const handleDeleteStaff = async (id: number) => {
+    const confirmed = window.confirm('해당 직원을 정말 삭제하시겠습니까?');
+    if (!confirmed) return;
+
+    try {
+      const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
+      const token = localStorage.getItem('accessToken');
+
+      await axios.delete(`${baseUrl}/api/staff/delete/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      // 삭제 후 현재 페이지 재조회
+      await fetchStaffList(page, size);
+
+      toast.success('직원이 삭제되었습니다.');
+    } catch (err: any) {
+      console.error(err?.response?.data ?? err);
+      toast.error('직원 삭제에 실패했습니다.');
+    }
+  };
+
+  /* ✅ 필터링 (현재 페이지 기준에서만 필터) */
   const filteredStaff = staff.filter(staffMember => {
     const matchesSearch =
       staffMember.staffName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -137,23 +212,22 @@ export function StaffList() {
 
   /* ✅ 근태 상태 뱃지 */
   const getAttendanceBadge = (attendanceStatus?: string | null) => {
-  if (!attendanceStatus) return null;  // ← 아무것도 출력하지 않음
+    if (!attendanceStatus) return null;
 
-  const status = attendanceStatus.toUpperCase();
-  switch (status) {
-    case 'ACTIVE':
-    case 'WORKING':
-      return <Badge className="bg-green-100 text-green-800">근무중</Badge>;
-    case 'RESIGNED':
-    case 'QUIT':
-      return <Badge className="bg-red-100 text-red-800">퇴사</Badge>;
-    default:
-      return <Badge>{attendanceStatus}</Badge>;
-  }
-};
+    const status = attendanceStatus.toUpperCase();
+    switch (status) {
+      case 'ACTIVE':
+      case 'WORKING':
+        return <Badge className="bg-green-100 text-green-800">근무중</Badge>;
+      case 'RESIGNED':
+      case 'QUIT':
+        return <Badge className="bg-red-100 text-red-800">퇴사</Badge>;
+      default:
+        return <Badge>{attendanceStatus}</Badge>;
+    }
+  };
 
-
-  /* ✅ 등록 모달 필드 */
+  /* 등록 모달 필드 */
   const staffAddFormFields: ModalField[] = [
     { name: 'staffName', label: '이름', type: 'text', required: true },
     { name: 'staffBirth', label: '생년월일', type: 'date', required: true },
@@ -185,6 +259,17 @@ export function StaffList() {
     },
   ];
 
+  /* 수정 모달 필드 (퇴사일 추가 / 선택값) */
+  const staffEditFormFields: ModalField[] = [
+    ...staffAddFormFields,
+    {
+      name: 'staffEndDate',
+      label: '퇴사일',
+      type: 'date',
+      required: false,
+    },
+  ];
+
   /* ✅ 렌더링 */
   return (
     <div className="space-y-6">
@@ -201,13 +286,13 @@ export function StaffList() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="p-4">
           <div className="flex items-center gap-3">
             <Users className="w-6 h-6 text-kpi-purple" />
             <div>
               <p className="text-sm text-dark-gray">전체 직원</p>
-              <p className="text-2xl font-semibold">{staff.length}</p>
+              <p className="text-2xl font-semibold">{totalElements}</p>
             </div>
           </div>
         </Card>
@@ -217,7 +302,7 @@ export function StaffList() {
             <div>
               <p className="text-sm text-dark-gray">근무중</p>
               <p className="text-2xl font-semibold">
-                {staff.filter(s => s.attendanceStatus === 'active').length}
+                {filteredStaff.filter(s => s.attendanceStatus === 'active').length}
               </p>
             </div>
           </div>
@@ -228,7 +313,7 @@ export function StaffList() {
             <div>
               <p className="text-sm text-dark-gray">퇴사</p>
               <p className="text-2xl font-semibold">
-                {staff.filter(s => s.attendanceStatus === 'resigned').length}
+                {filteredStaff.filter(s => s.attendanceStatus === 'resigned').length}
               </p>
             </div>
           </div>
@@ -262,7 +347,7 @@ export function StaffList() {
         </div>
       </Card>
 
-      {/* Staff List */}
+      {/* Staff List + Pagination */}
       <Card>
         <div className="p-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -285,8 +370,13 @@ export function StaffList() {
                     <div className="mt-3 space-y-1 text-sm text-dark-gray">
                       <div>생년월일: {staff.staffBirth}</div>
                       <div>전화번호: {staff.staffPhone}</div>
+                      <div>이메일: {staff.staffEmail}</div>
                       <div>입사일: {staff.staffStartDate}</div>
+                      {staff.staffEndDate && (
+                        <div>퇴사일: {staff.staffEndDate}</div>
+                      )}
                     </div>
+
                     <div className="flex gap-2 mt-4">
                       <Button
                         variant="outline"
@@ -296,17 +386,50 @@ export function StaffList() {
                       >
                         <Edit className="w-3 h-3" /> 수정
                       </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDeleteStaff(staff.id)}
+                        className="gap-1"
+                      >
+                        삭제
+                      </Button>
                     </div>
                   </div>
                 </div>
               </Card>
             ))}
           </div>
+
           {filteredStaff.length === 0 && (
             <div className="text-center py-8 text-dark-gray">
               검색 조건에 맞는 직원이 없습니다.
             </div>
           )}
+
+          {/* ✅ 페이징 네비게이션 */}
+          <div className="mt-6 flex items-center justify-center gap-4">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page === 0}
+              onClick={() => fetchStaffList(page - 1, size)}
+            >
+              이전
+            </Button>
+            <span className="text-sm text-dark-gray">
+              {totalPages > 0 ? page + 1 : 0} / {totalPages} 페이지
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page + 1 >= totalPages}
+              onClick={() => fetchStaffList(page + 1, size)}
+            >
+              다음
+            </Button>
+          </div>
         </div>
       </Card>
 
@@ -325,10 +448,17 @@ export function StaffList() {
         onClose={() => setEditingStaff(null)}
         onSubmit={handleEditStaff}
         title="직원 정보 수정"
-        fields={staffAddFormFields}
+        fields={staffEditFormFields}
         initialData={
           editingStaff
-            ? (editingStaff as unknown as Record<string, unknown>)
+            ? {
+                ...editingStaff,
+                staffBirth: editingStaff.staffBirth?.slice(0, 10),
+                staffStartDate: editingStaff.staffStartDate?.slice(0, 10),
+                staffEndDate: editingStaff.staffEndDate
+                  ? editingStaff.staffEndDate.slice(0, 10)
+                  : undefined,
+              }
             : undefined
         }
       />

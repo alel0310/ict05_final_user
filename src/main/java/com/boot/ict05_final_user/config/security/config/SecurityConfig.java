@@ -60,7 +60,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
         // 개발/운영 도메인 추가
-        cfg.setAllowedOrigins(List.of("http://localhost:3000", "http://localhost:5173"));
+        cfg.setAllowedOrigins(List.of("http://localhost:3000", "http://localhost:5173", "http://localhost:8082"));
         cfg.setAllowedMethods(List.of("GET","POST","PUT","DELETE","PATCH","OPTIONS"));
         cfg.setAllowedHeaders(List.of("Authorization","Content-Type","X-Requested-With","X-Refresh-Token"));
         cfg.setExposedHeaders(List.of("Authorization","Set-Cookie"));
@@ -93,8 +93,9 @@ public class SecurityConfig {
                 // 공개 엔드포인트
                 .requestMatchers("/login").permitAll()
                 .requestMatchers("/jwt/exchange", "/jwt/refresh").permitAll()
-                .requestMatchers(HttpMethod.POST, "/exist", "/me","/API/**", "/dashboard/**", "/join", "/member/exist-email", "/member","/API/menu/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/exist", "/me","/API/**", "/dashboard/**", "/join", "/member/exist-email", "/member","/API/menu/**", "/api/customer-orders/**").permitAll()
 
+                .requestMatchers(HttpMethod.POST, "/fcm/notice/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/fcm/token", "/fcm/topic/**", "/fcm/send/**").authenticated()
 
                 // 인증 필요

@@ -28,12 +28,19 @@ import { StaffSchedule } from "./components/Store/StaffSchedule"; // ⬅️ 추�
 import api from "./lib/authApi";
 import KpiReport from "./components/Store/reports/KpiReport";
 import NotificationSettings from "./components/Store/NotificationSettings";
+import OrderReport from "./components/Store/reports/OrderReport";
  // ✅ 인터셉터/강제로그아웃 핸들러
+
+type HeaderInfo = {
+  memberName: string;
+  storeName?: string | null;
+};
 
 export default function App() {
   const navigate = useNavigate();
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [ready, setReady] = useState(false);
+  const [headerInfo, setHeaderInfo] = useState<HeaderInfo | null>(null);
 
   useEffect(()=> {
     const access = localStorage.getItem("accessToken");
@@ -41,12 +48,30 @@ export default function App() {
       navigate("/login", {replace: true});
       return;
     }
-    api.get("/me").then(()=>setReady(true)).catch(()=>{
- 
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("refreshToken");
-      navigate("/login", { replace: true });
-    });
+    // 1) 토큰 검증
+    api
+      .get("/me")
+      .then(() => {
+        setReady(true);
+      })
+      .catch(() => {
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("refreshToken");
+        navigate("/login", { replace: true });
+      });
+
+    // 2) 헤더용 마이페이지 정보 한번 더 가져오기
+    api
+      .get("/api/myPage")
+      .then((res) => {
+        setHeaderInfo({
+          memberName: res.data.name,       // 응답의 name
+          storeName: res.data.storeName,   // 응답의 storeName
+        });
+      })
+      .catch((err) => {
+        console.error("헤더용 myPage 조회 실패", err);
+      });
   }, [navigate]);
   // if (!ready) return null; // <-- ready 전에 Dashboard가 useEffect 실행 못함
   // const handleLogout =() => {
@@ -81,6 +106,8 @@ export default function App() {
       case "staff-schedule": return <ErrorBoundary><StaffSchedule /></ErrorBoundary>;
       case "notice": return <ErrorBoundary><NoticeEducation /></ErrorBoundary>;
       case "kpi-report": return <ErrorBoundary><KpiReport /></ErrorBoundary>;
+      case "order-report": return <ErrorBoundary><OrderReport /></ErrorBoundary>;
+      
       case "settings-notifications": return (<ErrorBoundary><NotificationSettings /></ErrorBoundary>);
       default:
         return (
@@ -98,6 +125,8 @@ return (
   <>
     <Layout
       userType="Store"
+      memberName={headerInfo?.memberName ?? ""}  // 없으면 빈 문자열
+      storeName={headerInfo?.storeName ?? ""}
       currentPage={currentPage}
       onPageChange={handlePageChange}
     >

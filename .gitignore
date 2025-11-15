@@ -43,3 +43,5 @@ out/
 **/firebase-admin.json
 **/service-account*.json
 spy.log
+spy.log
+*.log
