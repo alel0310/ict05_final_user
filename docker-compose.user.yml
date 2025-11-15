@@ -13,9 +13,11 @@ services:
     image: nginx:1.27
     container_name: ict05-user-nginx
     ports:
-      - "8086:80"    # 브라우저에서 EC2_IP:8086 로 접속
+      - "8086:80"   # 브라우저에서 EC2_IP:8086 으로 접속
     volumes:
+      # 방금 만든 nginx 설정
       - ./nginx.user.conf:/etc/nginx/nginx.conf:ro
-      - ./front-end/build:/usr/share/nginx/html:ro
+      # 리액트 빌드 결과를 /usr/share/nginx/html/user 에 마운트
+      - ./front-end/build:/usr/share/nginx/html/user:ro
     depends_on:
       - user-app
