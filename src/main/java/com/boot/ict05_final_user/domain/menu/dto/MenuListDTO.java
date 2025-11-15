@@ -1,7 +1,7 @@
 package com.boot.ict05_final_user.domain.menu.dto;
 
 import com.boot.ict05_final_user.domain.menu.entity.MenuShow;
-import com.boot.ict05_final_user.domain.menu.entity.SoldOutStatus;
+import com.boot.ict05_final_user.domain.menu.entity.StoreMenuSoldout;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -42,7 +42,7 @@ public class MenuListDTO {
     private String menuInformation;
 
     /** 재고상태 */
-    private SoldOutStatus soldOutStatus;
+    private StoreMenuSoldout storeMenuSoldout;
 
     /** 한글 라벨 : 카테고리 */
     public String getMenuCategoryLabel() {

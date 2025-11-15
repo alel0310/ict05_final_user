@@ -1,7 +1,7 @@
 package com.boot.ict05_final_user.domain.menu.dto;
 
 import com.boot.ict05_final_user.domain.menu.entity.MenuShow;
-import com.boot.ict05_final_user.domain.menu.entity.SoldOutStatus;
+import com.boot.ict05_final_user.domain.menu.entity.StoreMenuSoldout;
 import lombok.Data;
 
 @Data
@@ -17,7 +17,7 @@ public class MenuSearchDTO {
     private String size = "10";
 
     /** 재고상태 */
-    private SoldOutStatus soldOutStatus;
+    private StoreMenuSoldout storeMenuSoldout;
 
     /** 판매상태(true: 판매중 / false: 중단) */
     private MenuShow menuShow;

@@ -7,6 +7,7 @@ import com.boot.ict05_final_user.domain.menu.entity.MenuShow;
 import com.boot.ict05_final_user.domain.menu.entity.QMenu;
 import com.boot.ict05_final_user.domain.menu.entity.QMenuCategory;
 import com.boot.ict05_final_user.domain.menu.entity.QMenuRecipe;
+import com.boot.ict05_final_user.domain.menu.entity.QStoreMenu;
 import com.boot.ict05_final_user.domain.inventory.entity.QMaterial;
 import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
@@ -35,19 +36,21 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
 
         QMenu menu = QMenu.menu;
         QMenuCategory category = QMenuCategory.menuCategory;
-        QMenuRecipe recipe = QMenuRecipe.menuRecipe;   // 상세용에서 쓸 여지를 남겨둠
+        QStoreMenu storeMenu = QStoreMenu.storeMenu;   // 🔹 가맹점별 상태
+        QMenuRecipe recipe = QMenuRecipe.menuRecipe;   // (상세용)
         QMaterial material = QMaterial.material;
 
         // WHERE 조건
         BooleanExpression where = andAll(
                 eqNameOrInfo(dto, menu),
                 eqCategory(dto, menu),
-                eqSoldOutStatus(dto, menu)
+                eqSoldOutStatus(dto, storeMenu)
         );
+
+        // 본사 메뉴 쇼 상태: 기본 SHOW만
         if (dto.getMenuShow() != null) {
             where = andAll(where, menu.menuShow.eq(dto.getMenuShow()));
         } else {
-            // 가맹점 기본: SHOW만
             where = andAll(where, menu.menuShow.eq(MenuShow.SHOW));
         }
 
@@ -56,10 +59,11 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
                 ? pageable.getSort()
                 : Sort.by(Sort.Direction.DESC, "menuId");
 
-        // 1) 페이지 대상 ID만 먼저 조회
+        // 1) 페이지 대상 menuId만 먼저 조회
         List<Long> pageIds = queryFactory
                 .select(menu.menuId)
-                .from(menu)
+                .from(storeMenu)
+                .join(storeMenu.menu, menu)
                 .leftJoin(menu.menuCategory, category)
                 .where(where)
                 .orderBy(toOrderSpec(menu, sort))
@@ -74,7 +78,7 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
             return new PageImpl<>(List.of(), pageable, 0);
         }
 
-        // 2) 메뉴 기본 정보 조회 (리스트 + 상세 모달에서 쓸 필드 전부)
+        // 2) 메뉴 + 가맹점별 상태 조회
         var rows = queryFactory
                 .select(Projections.tuple(
                         menu.menuId,
@@ -86,10 +90,11 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
                         menu.menuKcal,
                         menu.menuInformation,
                         menu.menuCode,
-                        menu.soldOutStatus,
+                        storeMenu.storeMenuSoldout,   // 🔹 가맹점별 품절
                         menu.menuShow
                 ))
-                .from(menu)
+                .from(storeMenu)
+                .join(storeMenu.menu, menu)
                 .leftJoin(menu.menuCategory, category)
                 .where(menu.menuId.in(pageIds))
                 .orderBy(toOrderSpec(menu, sort))
@@ -111,7 +116,7 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
                 d.setMenuKcal(t.get(menu.menuKcal));
                 d.setMenuInformation(t.get(menu.menuInformation));
                 d.setMenuCode(t.get(menu.menuCode));
-                d.setSoldOutStatus(t.get(menu.soldOutStatus));
+                d.setStoreMenuSoldout(t.get(storeMenu.storeMenuSoldout)); // 🔹 여기!
                 d.setMenuShow(t.get(menu.menuShow));
                 return d;
             });
@@ -121,7 +126,8 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
         // 3) Count
         Long total = queryFactory
                 .select(menu.menuId.countDistinct())
-                .from(menu)
+                .from(storeMenu)
+                .join(storeMenu.menu, menu)
                 .leftJoin(menu.menuCategory, category)
                 .where(where)
                 .fetchOne();
@@ -129,11 +135,9 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
         return new PageImpl<>(content, pageable, total != null ? total : 0L);
     }
 
-    // ====== 아래는 헬퍼 메서드들 (클래스 안에 위치해야 함) ======
+    // ====== 검색 조건 헬퍼들 ======
 
-    /**
-     * 이름 검색
-     */
+    /** 이름 검색 */
     private BooleanExpression eqNameOrInfo(MenuSearchDTO dto, QMenu menu) {
         String kw = dto.getS();
         if (!StringUtils.hasText(kw)) return null;
@@ -145,25 +149,19 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
         };
     }
 
-    /**
-     * 카테고리 필터
-     */
+    /** 카테고리 필터 */
     private BooleanExpression eqCategory(MenuSearchDTO dto, QMenu menu) {
         if (dto.getMenuCategoryId() == null || dto.getMenuCategoryId() == 0) return null;
         return menu.menuCategory.menuCategoryId.eq(dto.getMenuCategoryId());
     }
 
-    /**
-     * 품절상태 필터
-     */
-    private BooleanExpression eqSoldOutStatus(MenuSearchDTO dto, QMenu menu) {
-        if (dto.getSoldOutStatus() == null) return null;
-        return menu.soldOutStatus.eq(dto.getSoldOutStatus());
+    /** 품절상태 필터 – 이제 StoreMenu 기준 */
+    private BooleanExpression eqSoldOutStatus(MenuSearchDTO dto, QStoreMenu storeMenu) {
+        if (dto.getStoreMenuSoldout() == null) return null;
+        return storeMenu.storeMenuSoldout.eq(dto.getStoreMenuSoldout());
     }
 
-    /**
-     * 여러 조건 and 결합
-     */
+    /** 여러 조건 and 결합 */
     private BooleanExpression andAll(BooleanExpression... exps) {
         BooleanExpression result = null;
         for (BooleanExpression exp : exps) {
@@ -174,6 +172,7 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
     }
 
     // 정렬 변환 (pageable Sort → QueryDSL OrderSpecifier[])
+
     private com.querydsl.core.types.OrderSpecifier<?>[] toOrderSpec(QMenu menu, Sort sort) {
         return sort.stream()
                 .map(order -> {
@@ -191,6 +190,8 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
                 })
                 .toArray(com.querydsl.core.types.OrderSpecifier[]::new);
     }
+
+    // ====== 상세 조회 (재료 목록 중심) ======
 
     @Override
     public MenuDetailDTO getMenuDetail(Long menuId) {
@@ -210,10 +211,8 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
                         menu.menuKcal,
                         menu.menuInformation,
                         menu.menuCode,
-                        menu.soldOutStatus,
                         menu.menuShow,
-                        menu.ingredients,   // 🔹 menu 테이블의 문자열 재료
-                        material.name       // 🔹 recipe/material 조인 재료
+                        material.name       // 🔹 레시피 재료 이름
                 ))
                 .from(menu)
                 .leftJoin(menu.menuCategory, category)
@@ -240,13 +239,9 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
         dto.setMenuKcal(first.get(menu.menuKcal));
         dto.setMenuInformation(first.get(menu.menuInformation));
         dto.setMenuCode(first.get(menu.menuCode));
-        dto.setSoldOutStatus(first.get(menu.soldOutStatus));
         dto.setMenuShow(first.get(menu.menuShow));
 
-        // 1️⃣ 기본값: menu 테이블에 저장된 문자열 재료
-        dto.setIngredients(first.get(menu.ingredients));
-
-        // 2️⃣ recipe/material 조인 결과가 있으면, 그걸로 덮어쓰기
+        // 🔹 재료 이름 목록만 추출해서 DTO에 세팅
         Set<String> ingredientNames = new LinkedHashSet<>();
         for (var t : rows) {
             String name = t.get(material.name);
@@ -254,15 +249,8 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
                 ingredientNames.add(name);
             }
         }
-        if (!ingredientNames.isEmpty()) {
-            dto.setIngredients(String.join(", ", ingredientNames));
-        }
+        dto.setIngredientNames(new ArrayList<>(ingredientNames));
 
-        return dto;   // 🔥 잊지 말기
+        return dto;
     }
-
 }
-
-
-
-
