@@ -2,6 +2,7 @@ package com.boot.ict05_final_user.domain.analytics.controller;
 
 import com.boot.ict05_final_user.domain.analytics.dto.*;
 import com.boot.ict05_final_user.domain.analytics.service.AnalyticsService;
+import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -118,4 +119,77 @@ public class AnalyticsRestController {
 	}
 
 
+	// ======================
+	// 메뉴 분석 Summary (상단 카드)
+	// ======================
+
+	@Operation(
+			summary = "메뉴 분석 요약 카드",
+			description = "판매수량 TOP3, 카테고리 매출 TOP3, 평균 판매가, 재고 소진률 TOP3를 반환합니다."
+	)
+	@GetMapping("/api/analytics/menus/summary")
+	public ResponseEntity<MenuSummaryDto> getMenuSummary(
+			@RequestParam String start,
+			@RequestParam String end,
+			@RequestParam(required = false) Long storeId
+	) {
+		if (storeId == null) storeId = 1L;
+		LocalDate s = LocalDate.parse(start);
+		LocalDate e = LocalDate.parse(end);
+		return ResponseEntity.ok(service.getMenuSummary(storeId, s, e));
+	}
+
+	// ======================
+	// 메뉴 분석 테이블 - 일별
+	// ======================
+
+	@Operation(
+			summary = "메뉴 분석 일별 테이블",
+			description = "일별 메뉴 판매/매출/주문수 집계 테이블을 커서 페이징 형태로 반환합니다."
+	)
+	@GetMapping("/api/analytics/menus/day-rows")
+	public ResponseEntity<CursorPage<MenuDailyRowDto>> getMenuDailyRows(
+			@RequestParam String start,
+			@RequestParam String end,
+			@RequestParam(defaultValue = "50") Integer size,
+			@RequestParam(required = false) String cursor,
+			@RequestParam(required = false) Long storeId
+	) {
+		if (storeId == null) storeId = 1L;
+		AnalyticsSearchDto cond = new AnalyticsSearchDto(
+				LocalDate.parse(start),
+				LocalDate.parse(end),
+				AnalyticsSearchDto.ViewBy.DAY,
+				size,
+				cursor
+		);
+		return ResponseEntity.ok(service.getMenuDailyRows(storeId, cond));
+	}
+
+	// ======================
+	// 메뉴 분석 테이블 - 월별
+	// ======================
+
+	@Operation(
+			summary = "메뉴 분석 월별 테이블",
+			description = "월별 메뉴 판매/매출/주문수 집계 테이블을 커서 페이징 형태로 반환합니다."
+	)
+	@GetMapping("/api/analytics/menus/month-rows")
+	public ResponseEntity<CursorPage<MenuMonthlyRowDto>> getMenuMonthlyRows(
+			@RequestParam String start,
+			@RequestParam String end,
+			@RequestParam(defaultValue = "50") Integer size,
+			@RequestParam(required = false) String cursor,
+			@RequestParam(required = false) Long storeId
+	) {
+		if (storeId == null) storeId = 1L;
+		AnalyticsSearchDto cond = new AnalyticsSearchDto(
+				LocalDate.parse(start),
+				LocalDate.parse(end),
+				AnalyticsSearchDto.ViewBy.MONTH,
+				size,
+				cursor
+		);
+		return ResponseEntity.ok(service.getMenuMonthlyRows(storeId, cond));
+	}
 }

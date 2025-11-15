@@ -13,4 +13,9 @@ public interface AnalyticsRespositoryCustom {
 	OrderSummaryDto fetchOrderSummary(Long storeId, LocalDate today);
 	CursorPage<OrderDailyRowDto> fetchOrderDailyRows(Long storeId, AnalyticsSearchDto cond);
 	CursorPage<OrderMonthlyRowDto> fetchOrderMonthlyRows(Long storeId, AnalyticsSearchDto cond);
+
+	// 메뉴 분석
+	MenuSummaryDto fetchMenuSummary(Long storeId, LocalDate start, LocalDate end);
+	CursorPage<MenuDailyRowDto> fetchMenuDailyRows(Long storeId, AnalyticsSearchDto cond);
+	CursorPage<MenuMonthlyRowDto> fetchMenuMonthlyRows(Long storeId, AnalyticsSearchDto cond);
 }

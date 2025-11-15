@@ -38,5 +38,32 @@ public class AnalyticsService {
 	public CursorPage<OrderMonthlyRowDto> getOrderMonthlyRows(Long storeId, AnalyticsSearchDto cond) {
 		return repo.fetchOrderMonthlyRows(storeId, cond);
 	}
+	// ===== 메뉴 분석 =====
+
+	/**
+	 * 메뉴 분석 상단 카드 요약.
+	 *
+	 * - 판매수량 TOP3
+	 * - 카테고리 매출 TOP3
+	 * - 메뉴 평균 판매가 (전체 메뉴 매출 ÷ 전체 판매수량)
+	 * - 재고 소진률 TOP3
+	 */
+	public MenuSummaryDto getMenuSummary(Long storeId, LocalDate start, LocalDate end) {
+		return repo.fetchMenuSummary(storeId, start, end);
+	}
+
+	/**
+	 * 메뉴 분석 일별 테이블.
+	 */
+	public CursorPage<MenuDailyRowDto> getMenuDailyRows(Long storeId, AnalyticsSearchDto cond) {
+		return repo.fetchMenuDailyRows(storeId, cond);
+	}
+
+	/**
+	 * 메뉴 분석 월별 테이블.
+	 */
+	public CursorPage<MenuMonthlyRowDto> getMenuMonthlyRows(Long storeId, AnalyticsSearchDto cond) {
+		return repo.fetchMenuMonthlyRows(storeId, cond);
+	}
 
 }

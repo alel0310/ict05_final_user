@@ -2,6 +2,10 @@ package com.boot.ict05_final_user.domain.analytics.repository;
 
 import com.boot.ict05_final_user.domain.analytics.dto.*;
 import com.boot.ict05_final_user.domain.analytics.dto.AnalyticsSearchDto.ViewBy;
+import com.boot.ict05_final_user.domain.inventory.entity.QStoreMaterial;
+import com.boot.ict05_final_user.domain.menu.entity.QMenu;
+import com.boot.ict05_final_user.domain.menu.entity.QMenuCategory;
+import com.boot.ict05_final_user.domain.menu.entity.QMenuUsageMaterialLog;
 import com.boot.ict05_final_user.domain.order.entity.*;
 import com.boot.ict05_final_user.domain.store.entity.QStore;
 import com.querydsl.core.Tuple;
@@ -26,6 +30,10 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 	private final QCustomerOrder co = QCustomerOrder.customerOrder;
 	private final QCustomerOrderDetail cod = QCustomerOrderDetail.customerOrderDetail;
 	private final QStore s = QStore.store;
+	private final QMenu m = QMenu.menu;
+	private final QMenuCategory mc = QMenuCategory.menuCategory;
+	private final QMenuUsageMaterialLog mum = QMenuUsageMaterialLog.menuUsageMaterialLog;
+	private final QStoreMaterial sm = QStoreMaterial.storeMaterial;
 
 	// =========================
 	//  KPI Summary (카드 4개)
@@ -504,6 +512,346 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 
 		return new CursorPage<>(items, nextCursor);
 	}
+
+
+	// ============================================================
+	//                      ★ 메뉴 분석 (신규) ★
+	// ============================================================
+
+	// ============================================================================
+	//                            ★ 메뉴 분석 Summary ★
+	// ============================================================================
+	@Override
+	public MenuSummaryDto fetchMenuSummary(Long storeId, LocalDate start, LocalDate end) {
+
+		LocalDateTime startDT = start.atStartOfDay();
+		LocalDateTime endExDT = end.plusDays(1).atStartOfDay();
+
+		BooleanExpression base = statusCompleted()
+				.and(eqStore(storeId))
+				.and(betweenClosedOpen(co.orderedAt, startDT, endExDT));
+
+		// ===== 1) 판매수량 TOP3 =====
+		NumberExpression<Integer> qtySumExpr = cod.quantity.sum();
+		List<Tuple> topQty = query
+				.select(
+						m.menuId,
+						m.menuName,
+						qtySumExpr
+				)
+				.from(cod)
+				.join(cod.order, co)
+				.join(co.store, s)
+				.join(cod.menuIdFk, m)
+				.where(base)
+				.groupBy(m.menuId, m.menuName)
+				.orderBy(qtySumExpr.desc())
+				.limit(3)
+				.fetch();
+
+		List<MenuTopMenuDto> topMenus = topQty.stream()
+				.map(t -> {
+					Integer qtyInt = t.get(qtySumExpr);
+					long qty = (qtyInt == null) ? 0L : qtyInt.longValue();
+					return new MenuTopMenuDto(
+							t.get(m.menuId),
+							t.get(m.menuName),
+							qty
+					);
+				})
+				.toList();
+
+		// ===== 2) 카테고리 매출 TOP3 =====
+		NumberExpression<BigDecimal> salesSumExpr = cod.lineTotal.sum();
+		List<Tuple> topCat = query
+				.select(
+						mc.menuCategoryId,
+						mc.menuCategoryName,
+						salesSumExpr
+				)
+				.from(cod)
+				.join(cod.order, co)
+				.join(co.store, s)
+				.join(cod.menuIdFk, m)
+				.join(m.menuCategory, mc)
+				.where(base)
+				.groupBy(mc.menuCategoryId, mc.menuCategoryName)
+				.orderBy(salesSumExpr.desc())
+				.limit(3)
+				.fetch();
+
+		List<MenuCategoryRankDto> topCategories = topCat.stream()
+				.map(t -> {
+					BigDecimal salesBD = nvlBD(t.get(salesSumExpr));
+					return new MenuCategoryRankDto(
+							t.get(mc.menuCategoryId),
+							t.get(mc.menuCategoryName),
+							salesBD.longValue()
+					);
+				})
+				.toList();
+
+		// ===== 3) 평균 메뉴 단가 (전체 매출 / 전체 수량) =====
+		Tuple avgTuple = query
+				.select(
+						salesSumExpr,
+						qtySumExpr
+				)
+				.from(cod)
+				.join(cod.order, co)
+				.join(co.store, s)
+				.where(base)
+				.fetchOne();
+
+		BigDecimal totalSalesBD = (avgTuple == null) ? BigDecimal.ZERO : nvlBD(avgTuple.get(salesSumExpr));
+		Integer totalQtyInt     = (avgTuple == null) ? 0 : avgTuple.get(qtySumExpr);
+
+		long totalSales = totalSalesBD.longValue();
+		long totalQty   = (totalQtyInt == null) ? 0L : totalQtyInt.longValue();
+
+		long avgPrice = (totalQty == 0L)
+				? 0L
+				: Math.round((double) totalSales / (double) totalQty);
+
+		// ===== 4) 재고 소진률 TOP3 =====
+		NumberExpression<BigDecimal> usedSumExpr = mum.count.sum();
+
+		List<Tuple> depletionList = query
+				.select(
+						m.menuId,
+						m.menuName,
+						usedSumExpr,
+						sm.quantity
+				)
+				.from(mum)
+				.join(mum.menuFk, m)
+				.join(mum.storeMaterialFk, sm)
+				.join(mum.customerOrderFk, co)  // <- 네가 이미 고친 부분 그대로 유지
+				.where(base.and(sm.store.id.eq(storeId)))
+				.groupBy(m.menuId, m.menuName, sm.quantity)
+				.fetch();
+
+		List<MenuDepletionDto> depletionDtos = new ArrayList<>();
+		for (Tuple t : depletionList) {
+			Long menuId = t.get(m.menuId);
+			String menuName = t.get(m.menuName);
+
+			BigDecimal usedBD   = nvlBD(t.get(usedSumExpr));   // 사용량
+			BigDecimal remainBD = nvlBD(t.get(sm.quantity));   // 현재 재고
+
+			double used   = usedBD.doubleValue();
+			double remain = remainBD.doubleValue();
+			double baseQty = used + remain;
+
+			double rate = (baseQty == 0.0) ? 0.0 : (used / baseQty * 100.0);
+			double rounded = round1(rate); // 이미 아래 helper에 있는 1자리 반올림
+
+			depletionDtos.add(new MenuDepletionDto(menuId, menuName, rounded));
+		}
+
+		List<MenuDepletionDto> topDepletion = depletionDtos.stream()
+				.sorted(Comparator.comparingDouble(MenuDepletionDto::depletionRate).reversed())
+				.limit(3)
+				.toList();
+
+		return new MenuSummaryDto(
+				topMenus,
+				topCategories,
+				avgPrice,
+				topDepletion
+		);
+	}
+
+
+
+
+
+
+
+	// ============================================================================
+	//                         ★ 메뉴 분석 일별 테이블 ★
+	// ============================================================================
+	@Override
+	public CursorPage<MenuDailyRowDto> fetchMenuDailyRows(Long storeId, AnalyticsSearchDto cond) {
+
+		LocalDateTime startDT = cond.startDate().atStartOfDay();
+		LocalDateTime endExDT = cond.endDate().plusDays(1).atStartOfDay();
+
+		BooleanExpression base = statusCompleted()
+				.and(eqStore(storeId))
+				.and(betweenClosedOpen(co.orderedAt, startDT, endExDT));
+
+		StringTemplate dayLabel = Expressions.stringTemplate(
+				"DATE_FORMAT({0}, '%Y-%m-%d')", co.orderedAt
+		);
+
+		NumberExpression<Integer>   qtySumExpr   = cod.quantity.sum();
+		NumberExpression<BigDecimal> salesSumExpr = cod.lineTotal.sum();
+		NumberExpression<Long>       orderCntExpr = co.id.countDistinct();
+
+		// ----- 커서 처리 -----
+		BooleanExpression cursorFilter = null;
+		if (cond.cursor() != null && cond.cursor().contains("|")) {
+			String[] arr = cond.cursor().split("\\|");
+			String cDate = arr[0];
+			Long cMenuId = Long.valueOf(arr[1]);
+
+			cursorFilter = dayLabel.lt(cDate)
+					.or(dayLabel.eq(cDate).and(m.menuId.lt(cMenuId)));
+		}
+
+		// ----- 쿼리 -----
+		List<Tuple> rows = query
+				.select(
+						dayLabel,
+						mc.menuCategoryName,
+						m.menuName,
+						qtySumExpr,
+						salesSumExpr,
+						orderCntExpr,
+						m.menuId
+				)
+				.from(cod)
+				.join(cod.order, co)
+				.join(co.store, s)
+				.join(cod.menuIdFk, m)
+				.join(m.menuCategory, mc)
+				.where(base, cursorFilter)
+				.groupBy(dayLabel, m.menuId, m.menuName, mc.menuCategoryName)
+				.orderBy(
+						dayLabel.desc(),
+						salesSumExpr.desc(),
+						m.menuId.desc()
+				)
+				.limit(cond.size() + 1)
+				.fetch();
+
+		List<MenuDailyRowDto> result = new ArrayList<>();
+		String nextCursor = null;
+
+		for (Tuple t : rows) {
+			if (result.size() == cond.size()) {
+				String d = t.get(dayLabel);
+				Long mid = t.get(m.menuId);
+				nextCursor = d + "|" + mid;
+				break;
+			}
+
+			Integer qtyInt       = t.get(qtySumExpr);
+			BigDecimal salesBD   = nvlBD(t.get(salesSumExpr));
+			Long orderCntLong    = nvlLong(t.get(orderCntExpr));
+
+			result.add(new MenuDailyRowDto(
+					t.get(dayLabel),
+					t.get(mc.menuCategoryName),
+					t.get(m.menuName),
+					qtyInt == null ? 0L : qtyInt.longValue(),
+					salesBD.longValue(),
+					orderCntLong
+			));
+		}
+
+		return new CursorPage<>(result, nextCursor);
+	}
+
+
+
+
+
+
+
+	// ============================================================================
+	//                         ★ 메뉴 분석 월별 테이블 ★
+	// ============================================================================
+	@Override
+	public CursorPage<MenuMonthlyRowDto> fetchMenuMonthlyRows(Long storeId, AnalyticsSearchDto cond) {
+
+		LocalDateTime startDT = cond.startDate().atStartOfDay();
+		LocalDateTime endExDT = cond.endDate().plusDays(1).atStartOfDay();
+
+		BooleanExpression base = statusCompleted()
+				.and(eqStore(storeId))
+				.and(betweenClosedOpen(co.orderedAt, startDT, endExDT));
+
+		StringTemplate ymLabel = Expressions.stringTemplate(
+				"DATE_FORMAT({0}, '%Y-%m')", co.orderedAt
+		);
+
+		NumberExpression<Integer>   qtySumExpr   = cod.quantity.sum();
+		NumberExpression<BigDecimal> salesSumExpr = cod.lineTotal.sum();
+		NumberExpression<Long>       orderCntExpr = co.id.countDistinct();
+
+		// ----- 커서 처리 -----
+		BooleanExpression cursorFilter = null;
+		if (cond.cursor() != null && cond.cursor().contains("|")) {
+			String[] arr = cond.cursor().split("\\|");
+			String cYm = arr[0];
+			Long cMenuId = Long.valueOf(arr[1]);
+
+			cursorFilter = ymLabel.lt(cYm)
+					.or(ymLabel.eq(cYm).and(m.menuId.lt(cMenuId)));
+		}
+
+		// ----- 쿼리 -----
+		List<Tuple> rows = query
+				.select(
+						ymLabel,
+						m.menuName,
+						mc.menuCategoryName,
+						qtySumExpr,
+						salesSumExpr,
+						orderCntExpr,
+						m.menuId
+				)
+				.from(cod)
+				.join(cod.order, co)
+				.join(co.store, s)
+				.join(cod.menuIdFk, m)
+				.join(m.menuCategory, mc)
+				.where(base, cursorFilter)
+				.groupBy(ymLabel, m.menuId, m.menuName, mc.menuCategoryName)
+				.orderBy(
+						ymLabel.desc(),
+						salesSumExpr.desc(),
+						m.menuId.desc()
+				)
+				.limit(cond.size() + 1)
+				.fetch();
+
+		List<MenuMonthlyRowDto> result = new ArrayList<>();
+		String nextCursor = null;
+
+		Map<String, Integer> rankMap = new HashMap<>();
+
+		for (Tuple t : rows) {
+			if (result.size() == cond.size()) {
+				String ym = t.get(ymLabel);
+				Long mid = t.get(m.menuId);
+				nextCursor = ym + "|" + mid;
+				break;
+			}
+
+			String ym = t.get(ymLabel);
+			int rank = rankMap.compute(ym, (k, v) -> (v == null) ? 1 : v + 1);
+
+			Integer qtyInt     = t.get(qtySumExpr);
+			BigDecimal salesBD = nvlBD(t.get(salesSumExpr));
+			Long orderCntLong  = nvlLong(t.get(orderCntExpr));
+
+			result.add(new MenuMonthlyRowDto(
+					ym,
+					rank,
+					t.get(m.menuName),
+					t.get(mc.menuCategoryName),
+					qtyInt == null ? 0L : qtyInt.longValue(),
+					salesBD.longValue(),
+					orderCntLong
+			));
+		}
+
+		return new CursorPage<>(result, nextCursor);
+	}
+
 
 
 
