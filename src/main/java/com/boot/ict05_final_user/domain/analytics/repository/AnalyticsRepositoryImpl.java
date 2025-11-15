@@ -668,6 +668,7 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 	//                         ★ 메뉴 분석 일별 테이블 ★
 	// ============================================================================
 	@Override
+	@Transactional(readOnly = true)
 	public CursorPage<MenuDailyRowDto> fetchMenuDailyRows(Long storeId, AnalyticsSearchDto cond) {
 
 		LocalDateTime startDT = cond.startDate().atStartOfDay();
@@ -757,6 +758,8 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 	@Override
 	public CursorPage<MenuMonthlyRowDto> fetchMenuMonthlyRows(Long storeId, AnalyticsSearchDto cond) {
 
+		int size = (cond.size() == null ? 50 : cond.size());
+
 		LocalDateTime startDT = cond.startDate().atStartOfDay();
 		LocalDateTime endExDT = cond.endDate().plusDays(1).atStartOfDay();
 
@@ -764,23 +767,48 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 				.and(eqStore(storeId))
 				.and(betweenClosedOpen(co.orderedAt, startDT, endExDT));
 
+		// YYYY-MM 라벨
 		StringTemplate ymLabel = Expressions.stringTemplate(
 				"DATE_FORMAT({0}, '%Y-%m')", co.orderedAt
 		);
 
-		NumberExpression<Integer>   qtySumExpr   = cod.quantity.sum();
+		// 집계식
+		NumberExpression<Integer>    qtySumExpr   = cod.quantity.sum();
 		NumberExpression<BigDecimal> salesSumExpr = cod.lineTotal.sum();
 		NumberExpression<Long>       orderCntExpr = co.id.countDistinct();
 
-		// ----- 커서 처리 -----
+		// ----- 커서 처리: "YYYY-MM|sales|menuId" 형식 -----
 		BooleanExpression cursorFilter = null;
-		if (cond.cursor() != null && cond.cursor().contains("|")) {
-			String[] arr = cond.cursor().split("\\|");
-			String cYm = arr[0];
-			Long cMenuId = Long.valueOf(arr[1]);
+		String cursor = cond.cursor();
 
-			cursorFilter = ymLabel.lt(cYm)
-					.or(ymLabel.eq(cYm).and(m.menuId.lt(cMenuId)));
+		if (cursor != null && !cursor.isBlank()) {
+			try {
+				String[] parts = cursor.split("\\|");
+				if (parts.length == 3) {
+					String cYm     = parts[0];                  // ex) 2025-09
+					long   cSales  = Long.parseLong(parts[1]);  // ex) 68850
+					long   cMenuId = Long.parseLong(parts[2]);  // ex) 144
+
+					BigDecimal cSalesBD = BigDecimal.valueOf(cSales);
+
+					// 정렬: ym DESC, sales DESC, menuId DESC
+					cursorFilter =
+							ymLabel.lt(cYm)
+									.or(
+											ymLabel.eq(cYm).and(
+													salesSumExpr.lt(cSalesBD)
+															.or(
+																	salesSumExpr.eq(cSalesBD)
+																			.and(m.menuId.lt(cMenuId))
+															)
+											)
+									);
+				}
+				// parts.length != 3 → 그냥 무시 (첫 페이지처럼 동작)
+			} catch (Exception ignore) {
+				// 잘못된 커서 값이면 무시
+				cursorFilter = null;
+			}
 		}
 
 		// ----- 쿼리 -----
@@ -806,42 +834,59 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 						salesSumExpr.desc(),
 						m.menuId.desc()
 				)
-				.limit(cond.size() + 1)
+				.limit(size + 1)
+				.setHint("org.hibernate.readOnly", true)
+				.setHint("org.hibernate.flushMode", "COMMIT")
+				.setHint("jakarta.persistence.query.timeout", 3000)
 				.fetch();
 
 		List<MenuMonthlyRowDto> result = new ArrayList<>();
 		String nextCursor = null;
 
-		Map<String, Integer> rankMap = new HashMap<>();
+		boolean hasNext = rows.size() > size;
+		List<Tuple> pageRows = hasNext ? rows.subList(0, size) : rows;
 
-		for (Tuple t : rows) {
-			if (result.size() == cond.size()) {
-				String ym = t.get(ymLabel);
-				Long mid = t.get(m.menuId);
-				nextCursor = ym + "|" + mid;
-				break;
-			}
-
+		// ----- DTO 매핑 (순위 없음) -----
+		for (Tuple t : pageRows) {
 			String ym = t.get(ymLabel);
-			int rank = rankMap.compute(ym, (k, v) -> (v == null) ? 1 : v + 1);
 
-			Integer qtyInt     = t.get(qtySumExpr);
-			BigDecimal salesBD = nvlBD(t.get(salesSumExpr));
-			Long orderCntLong  = nvlLong(t.get(orderCntExpr));
+			Integer qtyInt       = t.get(qtySumExpr);
+			BigDecimal salesBD   = nvlBD(t.get(salesSumExpr));
+			Long orderCntLong    = nvlLong(t.get(orderCntExpr));
+
+			long qty    = (qtyInt == null) ? 0L : qtyInt.longValue();
+			long sales  = salesBD.longValue();
+			long orders = orderCntLong;
 
 			result.add(new MenuMonthlyRowDto(
 					ym,
-					rank,
 					t.get(m.menuName),
 					t.get(mc.menuCategoryName),
-					qtyInt == null ? 0L : qtyInt.longValue(),
-					salesBD.longValue(),
-					orderCntLong
+					qty,
+					sales,
+					orders
 			));
+		}
+
+		// ----- nextCursor 생성 -----
+		if (hasNext && !pageRows.isEmpty()) {
+			Tuple last          = pageRows.get(pageRows.size() - 1);
+			String ymLast       = last.get(ymLabel);
+			BigDecimal salesBD  = nvlBD(last.get(salesSumExpr));
+			Long menuIdLast     = last.get(m.menuId);
+
+			long salesLastLong = salesBD.longValue();
+
+			// YYYY-MM|sales|menuId
+			nextCursor = ymLast + "|" + salesLastLong + "|" + menuIdLast;
 		}
 
 		return new CursorPage<>(result, nextCursor);
 	}
+
+
+
+
 
 
 	// ===== Helpers =====

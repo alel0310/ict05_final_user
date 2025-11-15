@@ -120,8 +120,8 @@ public class AnalyticsRestController {
 
 
 	// ======================
-// 메뉴 분석 Summary (상단 카드)
-// ======================
+	// 메뉴 분석 Summary (상단 카드)
+	// ======================
 	@Operation(
 			summary = "메뉴 분석 요약 카드",
 			description = "판매수량 TOP3, 카테고리 매출 TOP3, 평균 판매가, 재고 소진률 TOP3를 반환합니다. " +

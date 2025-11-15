@@ -7,7 +7,6 @@ package com.boot.ict05_final_user.domain.analytics.dto;
  */
 public record MenuMonthlyRowDto(
 		String yearMonth,    // 기준 월 (YYYY-MM)
-		int rank,            // 해당 월 내 메뉴 매출 기준 랭킹 (1,2,3,...)
 		String menuName,     // 메뉴명
 		String categoryName, // 카테고리명
 		long quantity,       // 판매수량 합계

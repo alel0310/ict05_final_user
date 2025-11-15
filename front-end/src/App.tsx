@@ -27,8 +27,9 @@ import { OrderProvider } from "./components/Common/OrderContext";
 import { StaffSchedule } from "./components/Store/StaffSchedule"; // ⬅️ 추가
 import api from "./lib/authApi";
 import KpiReport from "./components/Store/reports/KpiReport";
-import NotificationSettings from "./components/Store/NotificationSettings";
 import OrderReport from "./components/Store/reports/OrderReport";
+import NotificationSettings from "./components/Store/NotificationSettings";
+import MenuReport from "./components/Store/reports/MenuReport";
  // ✅ 인터셉터/강제로그아웃 핸들러
 
 type HeaderInfo = {
@@ -107,6 +108,7 @@ export default function App() {
       case "notice": return <ErrorBoundary><NoticeEducation /></ErrorBoundary>;
       case "kpi-report": return <ErrorBoundary><KpiReport /></ErrorBoundary>;
       case "order-report": return <ErrorBoundary><OrderReport /></ErrorBoundary>;
+      case "menu-report": return <ErrorBoundary><MenuReport /></ErrorBoundary>;
       
       case "settings-notifications": return (<ErrorBoundary><NotificationSettings /></ErrorBoundary>);
       default:
