@@ -43,13 +43,12 @@ public class AnalyticsService {
 	/**
 	 * 메뉴 분석 상단 카드 요약.
 	 *
-	 * - 판매수량 TOP3
-	 * - 카테고리 매출 TOP3
-	 * - 메뉴 평균 판매가 (전체 메뉴 매출 ÷ 전체 판매수량)
-	 * - 재고 소진률 TOP3
+	 * - 기준: KST 오늘 날짜 기준 "이번달 1일 ~ 어제까지"
+	 * - 판매수량 TOP3 / 카테고리 매출 TOP3 / 평균 단가 / 재고 소진률 TOP3
 	 */
-	public MenuSummaryDto getMenuSummary(Long storeId, LocalDate start, LocalDate end) {
-		return repo.fetchMenuSummary(storeId, start, end);
+	public MenuSummaryDto getMenuSummary(Long storeId) {
+		LocalDate today = LocalDate.now(KST);
+		return repo.fetchMenuSummary(storeId, today);
 	}
 
 	/**

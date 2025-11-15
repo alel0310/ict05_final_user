@@ -2,10 +2,8 @@ package com.boot.ict05_final_user.domain.analytics.repository;
 
 import com.boot.ict05_final_user.domain.analytics.dto.*;
 import com.boot.ict05_final_user.domain.analytics.dto.AnalyticsSearchDto.ViewBy;
-import com.boot.ict05_final_user.domain.inventory.entity.QStoreMaterial;
 import com.boot.ict05_final_user.domain.menu.entity.QMenu;
 import com.boot.ict05_final_user.domain.menu.entity.QMenuCategory;
-import com.boot.ict05_final_user.domain.menu.entity.QMenuUsageMaterialLog;
 import com.boot.ict05_final_user.domain.order.entity.*;
 import com.boot.ict05_final_user.domain.store.entity.QStore;
 import com.querydsl.core.Tuple;
@@ -32,8 +30,6 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 	private final QStore s = QStore.store;
 	private final QMenu m = QMenu.menu;
 	private final QMenuCategory mc = QMenuCategory.menuCategory;
-	private final QMenuUsageMaterialLog mum = QMenuUsageMaterialLog.menuUsageMaterialLog;
-	private final QStoreMaterial sm = QStoreMaterial.storeMaterial;
 
 	// =========================
 	//  KPI Summary (카드 4개)
@@ -522,22 +518,27 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 	//                            ★ 메뉴 분석 Summary ★
 	// ============================================================================
 	@Override
-	public MenuSummaryDto fetchMenuSummary(Long storeId, LocalDate start, LocalDate end) {
+	@Transactional(readOnly = true)
+	public MenuSummaryDto fetchMenuSummary(Long storeId, LocalDate today) {
 
-		LocalDateTime startDT = start.atStartOfDay();
-		LocalDateTime endExDT = end.plusDays(1).atStartOfDay();
+		LocalDateTime todayStart = today.atStartOfDay();
+		LocalDateTime monthStart = today.withDayOfMonth(1).atStartOfDay();
 
+		// MTD: 이번 달 1일 00:00 ~ 오늘 00:00 (어제까지)
 		BooleanExpression base = statusCompleted()
 				.and(eqStore(storeId))
-				.and(betweenClosedOpen(co.orderedAt, startDT, endExDT));
+				.and(betweenClosedOpen(co.orderedAt, monthStart, todayStart));
 
-		// ===== 1) 판매수량 TOP3 =====
+		// -------- 0) 공통: 메뉴별 수량/매출 집계 --------
 		NumberExpression<Integer> qtySumExpr = cod.quantity.sum();
-		List<Tuple> topQty = query
+		NumberExpression<BigDecimal> salesSumExpr = cod.lineTotal.sum();
+
+		List<Tuple> menuRows = query
 				.select(
 						m.menuId,
 						m.menuName,
-						qtySumExpr
+						qtySumExpr,
+						salesSumExpr
 				)
 				.from(cod)
 				.join(cod.order, co)
@@ -545,11 +546,35 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 				.join(cod.menuIdFk, m)
 				.where(base)
 				.groupBy(m.menuId, m.menuName)
-				.orderBy(qtySumExpr.desc())
-				.limit(3)
 				.fetch();
 
-		List<MenuTopMenuDto> topMenus = topQty.stream()
+		// 전체 메뉴 매출 합계 (매출 기여도 계산용)
+		BigDecimal totalSalesBD = BigDecimal.ZERO;
+		for (Tuple t : menuRows) {
+			totalSalesBD = totalSalesBD.add(nvlBD(t.get(salesSumExpr)));
+		}
+		long totalSalesAll = totalSalesBD.longValue();
+
+		// 공통 Comparator
+		Comparator<Tuple> byQtyDesc = Comparator.comparingLong((Tuple t) -> {
+			Integer q = t.get(qtySumExpr);
+			return q == null ? 0L : q.longValue();
+		}).reversed();
+
+		Comparator<Tuple> bySalesDesc = Comparator.comparingLong((Tuple t) -> {
+			BigDecimal s = nvlBD(t.get(salesSumExpr));
+			return s.longValue();
+		}).reversed();
+
+		Comparator<Tuple> bySalesAsc = Comparator.comparingLong((Tuple t) -> {
+			BigDecimal s = nvlBD(t.get(salesSumExpr));
+			return s.longValue();
+		});
+
+		// -------- 1) 판매수량 Top3 메뉴 --------
+		List<MenuTopMenuDto> topMenusByQty = menuRows.stream()
+				.sorted(byQtyDesc)
+				.limit(3)
 				.map(t -> {
 					Integer qtyInt = t.get(qtySumExpr);
 					long qty = (qtyInt == null) ? 0L : qtyInt.longValue();
@@ -561,13 +586,14 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 				})
 				.toList();
 
-		// ===== 2) 카테고리 매출 TOP3 =====
-		NumberExpression<BigDecimal> salesSumExpr = cod.lineTotal.sum();
-		List<Tuple> topCat = query
+		// -------- 2) 매출 Top3 카테고리 --------
+		NumberExpression<BigDecimal> catSalesExpr = cod.lineTotal.sum();
+
+		List<Tuple> catRows = query
 				.select(
 						mc.menuCategoryId,
 						mc.menuCategoryName,
-						salesSumExpr
+						catSalesExpr
 				)
 				.from(cod)
 				.join(cod.order, co)
@@ -576,13 +602,13 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 				.join(m.menuCategory, mc)
 				.where(base)
 				.groupBy(mc.menuCategoryId, mc.menuCategoryName)
-				.orderBy(salesSumExpr.desc())
+				.orderBy(catSalesExpr.desc())
 				.limit(3)
 				.fetch();
 
-		List<MenuCategoryRankDto> topCategories = topCat.stream()
+		List<MenuCategoryRankDto> topCategoriesBySales = catRows.stream()
 				.map(t -> {
-					BigDecimal salesBD = nvlBD(t.get(salesSumExpr));
+					BigDecimal salesBD = nvlBD(t.get(catSalesExpr));
 					return new MenuCategoryRankDto(
 							t.get(mc.menuCategoryId),
 							t.get(mc.menuCategoryName),
@@ -591,82 +617,52 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 				})
 				.toList();
 
-		// ===== 3) 평균 메뉴 단가 (전체 매출 / 전체 수량) =====
-		Tuple avgTuple = query
-				.select(
-						salesSumExpr,
-						qtySumExpr
-				)
-				.from(cod)
-				.join(cod.order, co)
-				.join(co.store, s)
-				.where(base)
-				.fetchOne();
-
-		BigDecimal totalSalesBD = (avgTuple == null) ? BigDecimal.ZERO : nvlBD(avgTuple.get(salesSumExpr));
-		Integer totalQtyInt     = (avgTuple == null) ? 0 : avgTuple.get(qtySumExpr);
-
-		long totalSales = totalSalesBD.longValue();
-		long totalQty   = (totalQtyInt == null) ? 0L : totalQtyInt.longValue();
-
-		long avgPrice = (totalQty == 0L)
-				? 0L
-				: Math.round((double) totalSales / (double) totalQty);
-
-		// ===== 4) 재고 소진률 TOP3 =====
-		NumberExpression<BigDecimal> usedSumExpr = mum.count.sum();
-
-		List<Tuple> depletionList = query
-				.select(
-						m.menuId,
-						m.menuName,
-						usedSumExpr,
-						sm.quantity
-				)
-				.from(mum)
-				.join(mum.menuFk, m)
-				.join(mum.storeMaterialFk, sm)
-				.join(mum.customerOrderFk, co)  // <- 네가 이미 고친 부분 그대로 유지
-				.where(base.and(sm.store.id.eq(storeId)))
-				.groupBy(m.menuId, m.menuName, sm.quantity)
-				.fetch();
-
-		List<MenuDepletionDto> depletionDtos = new ArrayList<>();
-		for (Tuple t : depletionList) {
-			Long menuId = t.get(m.menuId);
-			String menuName = t.get(m.menuName);
-
-			BigDecimal usedBD   = nvlBD(t.get(usedSumExpr));   // 사용량
-			BigDecimal remainBD = nvlBD(t.get(sm.quantity));   // 현재 재고
-
-			double used   = usedBD.doubleValue();
-			double remain = remainBD.doubleValue();
-			double baseQty = used + remain;
-
-			double rate = (baseQty == 0.0) ? 0.0 : (used / baseQty * 100.0);
-			double rounded = round1(rate); // 이미 아래 helper에 있는 1자리 반올림
-
-			depletionDtos.add(new MenuDepletionDto(menuId, menuName, rounded));
-		}
-
-		List<MenuDepletionDto> topDepletion = depletionDtos.stream()
-				.sorted(Comparator.comparingDouble(MenuDepletionDto::depletionRate).reversed())
+		// -------- 3) 매출 기여도 Top3 메뉴 --------
+		List<MenuSalesContributionDto> topMenusBySalesContribution = menuRows.stream()
+				.sorted(bySalesDesc)
 				.limit(3)
+				.map(t -> {
+					BigDecimal salesBD = nvlBD(t.get(salesSumExpr));
+					long sales = salesBD.longValue();
+					double share = (totalSalesAll == 0L)
+							? 0.0
+							: round1((sales * 100.0) / totalSalesAll); // 소수점 1자리
+
+					return new MenuSalesContributionDto(
+							t.get(m.menuId),
+							t.get(m.menuName),
+							sales,
+							share
+					);
+				})
+				.toList();
+
+		// -------- 4) 저성과 Top 메뉴 (매출 하위 3개) --------
+		List<MenuLowPerformanceDto> lowPerformMenus = menuRows.stream()
+				.sorted(bySalesAsc) // 매출 오름차순
+				.limit(3)
+				.map(t -> {
+					Integer qtyInt = t.get(qtySumExpr);
+					long qty = (qtyInt == null) ? 0L : qtyInt.longValue();
+					BigDecimal salesBD = nvlBD(t.get(salesSumExpr));
+					long sales = salesBD.longValue();
+
+					return new MenuLowPerformanceDto(
+							t.get(m.menuId),
+							t.get(m.menuName),
+							qty,
+							sales
+					);
+				})
 				.toList();
 
 		return new MenuSummaryDto(
-				topMenus,
-				topCategories,
-				avgPrice,
-				topDepletion
+				topMenusByQty,
+				topCategoriesBySales,
+				topMenusBySalesContribution,
+				lowPerformMenus
 		);
 	}
-
-
-
-
-
-
 
 	// ============================================================================
 	//                         ★ 메뉴 분석 일별 테이블 ★
@@ -753,11 +749,6 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 
 		return new CursorPage<>(result, nextCursor);
 	}
-
-
-
-
-
 
 
 	// ============================================================================
@@ -851,8 +842,6 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 
 		return new CursorPage<>(result, nextCursor);
 	}
-
-
 
 
 	// ===== Helpers =====

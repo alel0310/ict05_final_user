@@ -120,23 +120,19 @@ public class AnalyticsRestController {
 
 
 	// ======================
-	// 메뉴 분석 Summary (상단 카드)
-	// ======================
-
+// 메뉴 분석 Summary (상단 카드)
+// ======================
 	@Operation(
 			summary = "메뉴 분석 요약 카드",
-			description = "판매수량 TOP3, 카테고리 매출 TOP3, 평균 판매가, 재고 소진률 TOP3를 반환합니다."
+			description = "판매수량 TOP3, 카테고리 매출 TOP3, 평균 판매가, 재고 소진률 TOP3를 반환합니다. " +
+					"기간은 KPI/주문 요약과 동일하게 '이번달 1일 ~ 어제까지(MTD)' 기준입니다."
 	)
 	@GetMapping("/api/analytics/menus/summary")
 	public ResponseEntity<MenuSummaryDto> getMenuSummary(
-			@RequestParam String start,
-			@RequestParam String end,
 			@RequestParam(required = false) Long storeId
 	) {
-		if (storeId == null) storeId = 1L;
-		LocalDate s = LocalDate.parse(start);
-		LocalDate e = LocalDate.parse(end);
-		return ResponseEntity.ok(service.getMenuSummary(storeId, s, e));
+		if (storeId == null) storeId = 1L; // 임시, 나중에 @StoreScoped 교체
+		return ResponseEntity.ok(service.getMenuSummary(storeId));
 	}
 
 	// ======================
