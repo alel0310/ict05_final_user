@@ -6,6 +6,9 @@ WORKDIR /app
 # 프로젝트 전체 복사
 COPY . .
 
+# gradlew 실행 권한 부여
+RUN chmod +x gradlew
+
 # 스프링 부트 jar 빌드 (테스트는 일단 제외)
 RUN ./gradlew clean bootJar -x test
 
