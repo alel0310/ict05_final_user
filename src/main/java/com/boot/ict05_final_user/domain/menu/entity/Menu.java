@@ -61,5 +61,6 @@ public class Menu {
     /** 카테고리 교체 */
     public void changeCategory(MenuCategory category) { this.menuCategory = category; }
 
+
 }
 

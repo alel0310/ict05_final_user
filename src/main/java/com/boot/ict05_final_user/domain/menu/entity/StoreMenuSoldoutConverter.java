@@ -17,4 +17,5 @@ public class StoreMenuSoldoutConverter implements AttributeConverter<StoreMenuSo
         if (dbData == null) return StoreMenuSoldout.ON_SALE;
         return StoreMenuSoldout.fromCode(dbData);
     }
+
 }
