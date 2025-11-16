@@ -32,6 +32,7 @@ export interface DataTableProps {
   filters?: { label: string; value: string; count?: number }[];
   onExport?: () => void;
   hideSearch?: boolean;
+  hideHeaderSummary?: boolean;
 
   // ✅ 추가된 서버 페이징 관련 props
   serverSidePagination?: boolean;
@@ -62,6 +63,7 @@ export function DataTable({
   filters = [],
   onExport,
   hideSearch = false,
+  hideHeaderSummary = false,
 
   // ✅ 추가된 props 기본값
   serverSidePagination = false,
@@ -103,7 +105,7 @@ export function DataTable({
     let out = safe;
 
     // 로컬 검색(서버가 검색 처리하지 않는 경우만 유지)
-    if (!hideSearch && searchTerm) {
+    if (!isServerFilter && !hideSearch && searchTerm) {
       const q = searchTerm.toLowerCase();
       out = out.filter((row) =>
         Object.values(row).some((v) =>
@@ -182,44 +184,51 @@ export function DataTable({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
-          <p className="text-sm text-dark-gray">
-            총 {headerTotal}개 항목
-          </p>
+      {!hideHeaderSummary && (
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
+            <p className="text-sm text-dark-gray">
+              총 {headerTotal}개 항목
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            {onExport && (
+              <Button variant="outline" onClick={onExport} className="gap-2">
+                <Download className="w-4 h-4" />
+                내보내기
+              </Button>
+            )}
+            {onAdd && (
+              <Button onClick={onAdd} className="bg-kpi-red hover:bg-red-600 text-white gap-2">
+                <span>+ {addButtonText}</span>
+              </Button>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          {onExport && (
-            <Button variant="outline" onClick={onExport} className="gap-2">
-              <Download className="w-4 h-4" />
-              내보내기
-            </Button>
-          )}
-          {onAdd && (
-            <Button onClick={onAdd} className="bg-kpi-red hover:bg-red-600 text-white gap-2">
-              <span>+ {addButtonText}</span>
-            </Button>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Filters & Search */}
-      {!hideSearch && (
+      {(filters.length > 0 || !hideSearch) && (
         <Card className="p-4 bg-white rounded-xl shadow-sm">
           <div className="flex flex-col lg:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="w-5 h-5 text-dark-gray absolute left-3 top-1/2 transform -translate-y-1/2" />
-              <Input
-                placeholder={searchPlaceholder}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
+            {/* 검색창: hideSearch 가 false 일 때만 보여줌 */}
+            {!hideSearch && (
+              <div className="flex-1 relative">
+                <Search className="w-5 h-5 text-dark-gray absolute left-3 top-1/2 transform -translate-y-1/2" />
+                <Input
+                  placeholder={searchPlaceholder}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            )}
+
+            {/* 상태 필터 버튼은 hideSearch 와 상관없이 항상 표시 */}
             {filters.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                {/* 전체 버튼 예시(값이 'all'이라고 가정) */}
+                {/* 전체 버튼 */}
                 <button
                   onClick={() => {
                     setActiveFilter("all");
@@ -231,30 +240,35 @@ export function DataTable({
                     }
                   }}
                   className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                    activeFilter === 'all' ? 'bg-kpi-red text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    activeFilter === "all"
+                      ? "bg-kpi-red text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                   }`}
                 >
                   전체
                 </button>
 
                 {(filters ?? []).map((filter) => {
-                  const zero = typeof filter.count === 'number' && filter.count === 0 && filter.value !== 'all';
+                  const zero =
+                    typeof filter.count === "number" &&
+                    filter.count === 0 &&
+                    filter.value !== "all";
                   const isActive = activeFilter === filter.value;
 
                   const base =
-                    'px-4 py-2 rounded-lg text-sm font-medium transition-colors';
+                    "px-4 py-2 rounded-lg text-sm font-medium transition-colors";
                   const style = zero
-                    ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                    ? "bg-gray-100 text-gray-300 cursor-not-allowed"
                     : isActive
-                      ? 'bg-kpi-red text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200';
+                    ? "bg-kpi-red text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200";
 
                   return (
                     <button
                       key={filter.value}
                       disabled={zero}
                       onClick={() => {
-                        if (zero) return; // 0건이면 서버 호출 금지
+                        if (zero) return;
                         setActiveFilter(filter.value);
                         if (isServerFilter) {
                           onFilterChange && onFilterChange(filter.value);
@@ -267,11 +281,13 @@ export function DataTable({
                       aria-disabled={zero}
                     >
                       {filter.label}
-                      {filter.value !== 'all' && typeof filter.count === 'number' ? ` (${filter.count})` : ''}
+                      {filter.value !== "all" &&
+                      typeof filter.count === "number"
+                        ? ` (${filter.count})`
+                        : ""}
                     </button>
                   );
                 })}
-
               </div>
             )}
           </div>
