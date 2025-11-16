@@ -90,7 +90,7 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
                         menu.menuKcal,
                         menu.menuInformation,
                         menu.menuCode,
-                        storeMenu.storeMenuSoldout,   // 🔹 가맹점별 품절
+                        storeMenu.storeMenuSoldout,   // 가맹점별 품절
                         menu.menuShow
                 ))
                 .from(storeMenu)
@@ -116,7 +116,7 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
                 d.setMenuKcal(t.get(menu.menuKcal));
                 d.setMenuInformation(t.get(menu.menuInformation));
                 d.setMenuCode(t.get(menu.menuCode));
-                d.setStoreMenuSoldout(t.get(storeMenu.storeMenuSoldout)); // 🔹 여기!
+                d.setStoreMenuSoldout(t.get(storeMenu.storeMenuSoldout)); // 여기!
                 d.setMenuShow(t.get(menu.menuShow));
                 return d;
             });
