@@ -142,26 +142,25 @@ export function InventoryOrders() {
 
   const normalizeDetail = (data: any) => {
     const items = Array.isArray(data.items) ? data.items : [];
+
     const normItems = items.map((it: any) => {
-      const unitPrice = Number(
-        it.unitPrice ?? it.price ?? it.sellingPrice ?? it.material?.sellingPrice ?? 0
-      );
       const count = Number(it.count ?? 0);
+      const unitPrice = Number(it.unitPrice ?? 0);
+
       return {
-        // 표시에 쓰는 필드들(테이블 렌더에 맞춤)
-        materialName:
-          it.materialName ?? it.name ?? it.material?.name ?? it.storeMaterialName ?? '-',
+        // 화면 표시용
+        materialName: it.materialName ?? "-",
         unitPrice,
         totalPrice: Number(it.totalPrice ?? unitPrice * count),
         count,
 
-        // 저장 시 사용할 키들(버튼 payload에서 사용)
-        materialId: it.materialId ?? it.material?.id ?? it.storeMaterialId ?? it.id ?? null,
-        id: it.id ?? null, // 상세행 id가 오는 경우 대비
+        // 서버가 내려준 키들 그대로 보존
+        id: it.id ?? null,                    // pod.id (상세행 id)
+        storeMaterialId: it.storeMaterialId ?? null, // 가맹점 재고 id
+        materialId: it.materialId ?? null,    // 본사 재료 id (읽기전용, 디버깅용)
       };
     });
 
-    // 총액이 없다면 합산해서 만들어둠
     const computedTotal =
       normItems.reduce((s: number, x: any) => s + Number(x.totalPrice ?? 0), 0) || 0;
 
@@ -169,8 +168,8 @@ export function InventoryOrders() {
       ...data,
       items: normItems,
       totalPrice: Number(data.totalPrice ?? computedTotal),
-      priority: data.priority ?? 'NORMAL',
-      notes: data.notes ?? data.remark ?? '',
+      priority: data.priority ?? "NORMAL",
+      notes: data.notes ?? data.remark ?? "",
     };
   };
 
@@ -798,11 +797,11 @@ export function InventoryOrders() {
                             priority: selectedOrder.priority,
                             notes: selectedOrder.notes ?? "",
                             items: (selectedOrder.items ?? [])
-                              .map((it: any) => ({
-                                materialId: it.materialId ?? it.material?.id ?? it.storeMaterialId,
-                                count: Number(it.count ?? 0),
+                              .map((row: any) => ({
+                                storeMaterialId: row.storeMaterialId,        // 무조건 이 값만 신뢰
+                                count: Number(row.count ?? 0),
                               }))
-                              .filter((it: any) => it.materialId && it.count > 0),
+                              .filter((it: any) => it.storeMaterialId && it.count > 0),
                           };
 
                           await api.put(`/api/purchase/${selectedOrder.id}`, payload, {
@@ -824,9 +823,9 @@ export function InventoryOrders() {
 
                           // 모달 열어둔 상태라면 상세도 최신으로 갱신
                           if (selectedOrder?.id) {
-                            const detail = await api.get(`/api/purchase/detail/${selectedOrder.id}`);
-                            setSelectedOrder(detail.data);
-                          }
+                          const detail = await api.get(`/api/purchase/detail/${selectedOrder.id}`);
+                          setSelectedOrder(normalizeDetail(detail.data));
+                        }
                         } catch (error) {
                           console.error('🚨 발주 수정 실패:', error);
                           toast.error('발주 수정에 실패했습니다.');

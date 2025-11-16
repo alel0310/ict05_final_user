@@ -1,5 +1,6 @@
 package com.boot.ict05_final_user.domain.purchaseOrder.entity;
 
+import com.boot.ict05_final_user.domain.store.entity.Store;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.*;
@@ -25,6 +26,10 @@ public class PurchaseOrder {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "purchase_order_id", columnDefinition = "BIGINT UNSIGNED")
     private Long id;
+
+    @ManyToOne
+    @JoinColumn(name = "store_id_fk")
+    private Store store;
 
     @Column(name = "purchase_order_code", length = 32, nullable = false, unique = true)
     private String orderCode;
