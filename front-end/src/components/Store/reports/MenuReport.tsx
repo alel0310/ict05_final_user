@@ -435,8 +435,8 @@ export default function MenuReport() {
                     {(rows as MenuMonthlyRow[]).map((r, i) => (
                       <tr key={i} className="hover:bg-gray-50">
                         <td className="px-6 py-3 text-center text-sm text-gray-900">{r.yearMonth}</td>
-                        <td className="px-6 py-3 text-sm text-gray-900 text-left">{r.menuName}</td>
-                        <td className="px-6 py-3 text-sm text-gray-900 text-left">{r.categoryName}</td>
+                        <td className="px-6 py-3 text-sm text-gray-900 text-center">{r.menuName}</td>
+                        <td className="px-6 py-3 text-sm text-gray-900 text-center">{r.categoryName}</td>
                         <td className="px-6 py-3 text-sm text-gray-900 text-right">
                           {r.quantity.toLocaleString()}
                         </td>

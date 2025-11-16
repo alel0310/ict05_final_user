@@ -777,36 +777,28 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		NumberExpression<BigDecimal> salesSumExpr = cod.lineTotal.sum();
 		NumberExpression<Long>       orderCntExpr = co.id.countDistinct();
 
-		// ----- 커서 처리: "YYYY-MM|sales|menuId" 형식 -----
+		// ----- 커서 처리: "YYYY-MM|menuId" 형식 -----
 		BooleanExpression cursorFilter = null;
 		String cursor = cond.cursor();
 
 		if (cursor != null && !cursor.isBlank()) {
 			try {
 				String[] parts = cursor.split("\\|");
-				if (parts.length == 3) {
-					String cYm     = parts[0];                  // ex) 2025-09
-					long   cSales  = Long.parseLong(parts[1]);  // ex) 68850
-					long   cMenuId = Long.parseLong(parts[2]);  // ex) 144
-
-					BigDecimal cSalesBD = BigDecimal.valueOf(cSales);
+				if (parts.length == 2) {
+					String cYm     = parts[0];                 // ex) 2025-09
+					long   cMenuId = Long.parseLong(parts[1]); // ex) 144
 
 					// 정렬: ym DESC, sales DESC, menuId DESC
+					// WHERE 에서는 ym + menuId만으로 "이후 페이지" 판단
 					cursorFilter =
 							ymLabel.lt(cYm)
 									.or(
-											ymLabel.eq(cYm).and(
-													salesSumExpr.lt(cSalesBD)
-															.or(
-																	salesSumExpr.eq(cSalesBD)
-																			.and(m.menuId.lt(cMenuId))
-															)
-											)
+											ymLabel.eq(cYm)
+													.and(m.menuId.lt(cMenuId))
 									);
 				}
-				// parts.length != 3 → 그냥 무시 (첫 페이지처럼 동작)
 			} catch (Exception ignore) {
-				// 잘못된 커서 값이면 무시
+				// 잘못된 커서 값이면 무시하고 첫 페이지처럼 동작
 				cursorFilter = null;
 			}
 		}
@@ -846,7 +838,6 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		boolean hasNext = rows.size() > size;
 		List<Tuple> pageRows = hasNext ? rows.subList(0, size) : rows;
 
-		// ----- DTO 매핑 (순위 없음) -----
 		for (Tuple t : pageRows) {
 			String ym = t.get(ymLabel);
 
@@ -870,19 +861,17 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 
 		// ----- nextCursor 생성 -----
 		if (hasNext && !pageRows.isEmpty()) {
-			Tuple last          = pageRows.get(pageRows.size() - 1);
-			String ymLast       = last.get(ymLabel);
-			BigDecimal salesBD  = nvlBD(last.get(salesSumExpr));
-			Long menuIdLast     = last.get(m.menuId);
+			Tuple last      = pageRows.get(pageRows.size() - 1);
+			String ymLast   = last.get(ymLabel);
+			Long menuIdLast = last.get(m.menuId);
 
-			long salesLastLong = salesBD.longValue();
-
-			// YYYY-MM|sales|menuId
-			nextCursor = ymLast + "|" + salesLastLong + "|" + menuIdLast;
+			// "YYYY-MM|menuId"
+			nextCursor = ymLast + "|" + menuIdLast;
 		}
 
 		return new CursorPage<>(result, nextCursor);
 	}
+
 
 
 
