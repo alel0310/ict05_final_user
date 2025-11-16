@@ -52,6 +52,7 @@ export function DailyClosingPage() {
   const [newExpense, setNewExpense] = useState({ description: "", amount: "" });  // 새 지출 항목 입력값
   const [depositAmount, setDepositAmount] = useState(0);                          // 은행 입금액
   const [isClosed, setIsClosed] = useState(false);                                // 마감 완료 여부
+  const [differenceMemo, setDifferenceMemo] = useState("");
 
   // [ 시재 관련 ]
   const [startingCash, setStartingCash] = useState(200000);   // 시재 시작금
@@ -89,9 +90,11 @@ export function DailyClosingPage() {
   // = 실제 금고 내 현금(권종 입력값 합계) - 계산된 시재 금액  
   // → 결과: 0이면 일치, +면 현금 과다, -면 현금 부족
   const difference = actualCashFromCounts - calculatedCash;
+  const carryoverCash = calculatedCash; // 입금 후 이월 시재금(이론)
 
   // 이벤트
   const handleAddExpense = () => {
+    if (isClosed) return; // 마감 후 입력 방지
     if (!newExpense.description || !newExpense.amount) {
       toast.error("지출 내역과 금액을 입력하세요.");
       return;
@@ -106,20 +109,24 @@ export function DailyClosingPage() {
     toast.success("지출 항목이 추가되었습니다.");
   };
 
-  const handleRemoveExpense = (id: number) =>
+  const handleRemoveExpense = (id: number) => {
+    if (isClosed) return; // 마감 후 입력 방지
     setExpenses(expenses.filter((e) => e.id !== id));
+  }
 
   const handleDenomCountChange = (value: number, count: number) => {
+    if (isClosed) return; // 마감 후 입력 방지
     setDenomCounts((prev) => ({ ...prev, [value]: count }));
   };
 
   const handleCompleteClosing = () => {
+    // 차액이 있을 때 메모 필수
+    if (difference !== 0 && !differenceMemo.trim()) {
+      toast.error("차액이 있을 경우 사유 메모를 입력해야 마감할 수 있습니다.");
+      return;
+    }
     setIsClosed(true);
     toast.success("일일 마감이 완료되었습니다.");
-  };
-
-  const printClosingReport = () => {
-    toast.success("마감 보고서를 출력합니다.");
   };
 
   return (
@@ -133,9 +140,6 @@ export function DailyClosingPage() {
           </p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={printClosingReport} className="gap-2">
-            <Printer className="w-4 h-4" /> 보고서 출력
-          </Button>
           <Button
             className="bg-kpi-green text-white gap-2"
             onClick={handleCompleteClosing}
@@ -361,6 +365,7 @@ export function DailyClosingPage() {
                           handleDenomCountChange(denom.value, parseInt(e.target.value) || 0)
                         }
                         className="w-16 h-8"
+                        disabled={isClosed}
                       />
                       <span className="text-xs text-gray-500">장</span>
                       <span className="text-xs text-gray-600 w-20 text-right">
@@ -387,6 +392,7 @@ export function DailyClosingPage() {
                           handleDenomCountChange(denom.value, parseInt(e.target.value) || 0)
                         }
                         className="w-16 h-8"
+                        disabled={isClosed}
                       />
                       <span className="text-xs text-gray-500">개</span>
                       <span className="text-xs text-gray-600 w-20 text-right">
@@ -449,6 +455,7 @@ export function DailyClosingPage() {
                   onChange={(e) =>
                     setDepositAmount(parseFloat(e.target.value) || 0)
                   }
+                  disabled={isClosed}
                 />
               </div>
 
@@ -477,6 +484,27 @@ export function DailyClosingPage() {
                     : `-₩${Math.abs(difference).toLocaleString()}`}
                 </span>
               </div>
+
+              {/* 차액 사유 메모 */}
+              {difference !== 0 && (
+                <div className="pt-3">
+                  <Label className="text-sm text-gray-700 flex items-center gap-1">
+                    <AlertTriangle className="w-4 h-4 text-kpi-red" />
+                    차액 사유 메모
+                  </Label>
+                  <textarea
+                    className="mt-1 w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-kpi-orange"
+                    rows={2}
+                    value={differenceMemo}
+                    onChange={(e) => setDifferenceMemo(e.target.value)}
+                    placeholder="예: 현금 계산 실수로 보임, 오후 교대 시 재확인 예정"
+                    disabled={isClosed}
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    차액이 발생한 경우 사유를 간단히 기록해 주세요.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </section>  
