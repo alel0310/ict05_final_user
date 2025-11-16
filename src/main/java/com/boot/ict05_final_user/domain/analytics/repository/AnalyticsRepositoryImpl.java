@@ -756,6 +756,7 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 	//                         ★ 메뉴 분석 월별 테이블 ★
 	// ============================================================================
 	@Override
+	@Transactional(readOnly = true)
 	public CursorPage<MenuMonthlyRowDto> fetchMenuMonthlyRows(Long storeId, AnalyticsSearchDto cond) {
 
 		int size = (cond.size() == null ? 50 : cond.size());
@@ -896,7 +897,6 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 	}
 
 	private BooleanExpression statusCompleted() {
-		// Enum 매핑(@Enumerated STRING) → 그대로 enum 비교
 		return co.status.eq(OrderStatus.COMPLETED);
 	}
 
