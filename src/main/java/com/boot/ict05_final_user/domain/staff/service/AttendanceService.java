@@ -13,6 +13,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.boot.ict05_final_user.config.security.principal.AppUser;
+
 
 import java.time.LocalDate;
 
@@ -66,6 +68,14 @@ public class AttendanceService {
         }
 
         Object principal = auth.getPrincipal();
+        log.debug("근태 조회 principal 타입: {}", principal.getClass());
+
+        // ✅ 1) 지금 실제로 쓰이는 AppUser 우선 처리
+        if (principal instanceof AppUser appUser) {
+            Long storeId = appUser.getStoreId();
+            log.debug("현재 로그인 AppUser storeId: {}", storeId);
+            return storeId;
+        }
 
         if (principal instanceof CustomUserDetails user) {
             Long storeId = user.getStoreId();

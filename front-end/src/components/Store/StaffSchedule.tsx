@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import axios from 'axios';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -14,6 +15,14 @@ import {
 import { toast } from 'sonner';
 
 // ===== Types =====
+type PageResponse<T> = {
+  content: T[];
+  totalPages: number;
+  totalElements: number;
+  number: number;
+  size: number;
+};
+
 interface Staff {
   id: string;
   name: string;
@@ -104,6 +113,14 @@ const toFormValues = (s: WorkSchedule): FormValues => ({
   status: s.status,
   notes: s.notes,
 });
+
+// UTC 꼬임 방지용: 로컬 기준 YYYY-MM-DD
+const formatDateLocal = (date: Date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
 
 // ===== Constants =====
 const BUSINESS_HOURS = { open: '08:00', close: '22:00' };
@@ -272,8 +289,11 @@ export function StaffSchedule() {
     return dateTime.substring(11, 16);
   };
 
+  // ===== Attendance Helpers =====
   const getAttendanceStatusBadge = (status: string) => {
     switch (status) {
+      case 'NORMAL':
+        return <Badge className="bg-green-100 text-green-800">정상출근</Badge>;
       case 'WORKING':
         return <Badge className="bg-green-100 text-green-800">근무중</Badge>;
       case 'COMPLETED':
@@ -305,16 +325,21 @@ export function StaffSchedule() {
   const loadAttendance = async (targetDate: Date, page: number = 0) => {
     try {
       setAttendanceLoading(true);
-      const dateStr = targetDate.toISOString().split('T')[0]; // "YYYY-MM-DD"
 
-      const res = await fetch(
-        `http://localhost:8082/user/api/attendance/daily?date=${dateStr}&page=${page}&size=20`,
-        { credentials: 'include' }
+      const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
+      const token = localStorage.getItem('accessToken');
+      const dateStr = formatDateLocal(targetDate);  // ✅ toISOString() 대신
+
+      const res = await axios.get<PageResponse<AttendanceItem>>(
+        `${baseUrl}/api/attendance/daily`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          params: { date: dateStr, page, size: 20 },
+        }
       );
-      if (!res.ok) {
-        throw new Error('근태 조회 실패');
-      }
-      const data = await res.json();
+
+      const data = res.data;
+      console.log('📌 근태 응답', data);   // ← 이 줄 추가
 
       setAttendanceList(data.content || []);
       setAttendancePage(data.number ?? 0);
@@ -326,6 +351,8 @@ export function StaffSchedule() {
       setAttendanceLoading(false);
     }
   };
+
+
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -605,7 +632,6 @@ export function StaffSchedule() {
       </Card>
 
       {/* 하루 리스트 뷰 */}
-      {/* 하루 리스트 뷰 */}
       <Card>
         <CardContent className="p-6 space-y-4">
           {/* 직원 근태 리스트 */}
@@ -621,7 +647,6 @@ export function StaffSchedule() {
                   <div className="text-left">퇴근</div>
                   <div className="text-left">근태 상태</div>
                   <div className="text-left">실제 근무시간(h)</div>
-                  <div className="text-left">근무형태</div>
                   {/* <div className="text-right">관리</div>  // 나중에 수정/삭제 붙일 때 사용 */}
                 </div>
 
@@ -650,9 +675,6 @@ export function StaffSchedule() {
 
                     {/* 실제 근무시간 */}
                     <div>{item.attendanceWorkHours?.toFixed(2)}</div>
-
-                    {/* 근무형태 (오픈/미들/마감 등) */}
-                    <div>{item.staffShiftTypeName || '-'}</div>
 
                     {/* 관리 버튼 (나중에 구현) */}
                     {/* <div className="flex justify-end gap-1">

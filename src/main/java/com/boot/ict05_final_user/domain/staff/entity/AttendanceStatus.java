@@ -10,7 +10,8 @@ public enum AttendanceStatus {
     EARLY_LEAVE("early_leave", "조퇴"),
     ABSENT("absent", "결근"),
     VACATION("vacation", "휴가"),
-    HOLIDAY("holiday", "휴일");
+    HOLIDAY("holiday", "휴일"),
+    RESIGN("resign", "퇴사");
 
     private final String code;   // DB 저장값
     private final String label;  // 한글 라벨

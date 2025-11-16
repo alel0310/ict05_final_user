@@ -34,9 +34,6 @@ public class AttendanceListDTO {
     /** 실제 근무 시간 */
     private BigDecimal attendanceWorkHours;
 
-    /** 근무시간대 이름 (오픈/미들/마감) */
-    private String staffShiftTypeName;
-
     // === StaffProfile JOIN 해서 가져올 정보 ===
     /** 직원 시퀀스 */
     private Long staffId;
