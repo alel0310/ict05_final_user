@@ -1,13 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import api from "../../lib/authApi";
-import { Truck, Search, Filter, Eye, CheckCircle, XCircle, Clock, AlertCircle, Package, Download, Trash } from 'lucide-react';
+import { Truck, Eye, CheckCircle, Clock, Package, Trash } from 'lucide-react';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { DataTable, Column } from '../Common/DataTable';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
-import { DownloadToggle } from '../Common/DownloadToggle';
 import { toast } from 'sonner';
 
 export function InventoryOrders() {
@@ -22,7 +21,7 @@ export function InventoryOrders() {
   const [totalElements, setTotalElements] = useState(0);  // 필터 적용된 총건수
   const [totalAllElements, setTotalAllElements] = useState(0); // 전체 총건수(필터 미적용)
   const [statusFilter, setStatusFilter] = useState<'all'|'PENDING'|'RECEIVED'|'SHIPPING'|'DELIVERED'|'CANCELED'>('all');
-  const [activeFilter, setActiveFilter] = useState<string>("ALL");
+  const [activeFilter, setActiveFilter] = useState<string>("all");
   const [statusTotals, setStatusTotals] = useState({
     PENDING: 0,
     RECEIVED: 0,
@@ -31,26 +30,28 @@ export function InventoryOrders() {
     CANCELED: 0,
   });
   
-  useEffect(() => {
-    fetchOrders(currentPage, statusFilter);
-  }, [currentPage, statusFilter]);
+  // 🔎 검색어 상태 (입력 중 / 실제 적용된 검색어 분리)
+  const [searchTerm, setSearchTerm] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");   // 이 값이 바뀔 때만 서버 재조회
 
-  const fetchOrders = async (page = 0, status = statusFilter) => {
+  useEffect(() => {
+    fetchOrders(currentPage, statusFilter, appliedSearch);
+  }, [currentPage, statusFilter, appliedSearch]);
+
+  const fetchOrders = async (page = 0, status = statusFilter, keyword = appliedSearch) => {
       try {
     const res = await api.get("/api/purchase/list", {
       params: {
         page,
         size: 10,
         status: status !== 'all' ? status : undefined, // 서버 필터
+        s: keyword && keyword.trim() !== "" ? keyword.trim() : undefined,
+        type: "all",
       },
       withCredentials: false,
     });
 
       const data = res.data;
-      console.log("✅ page:", page, res.data);
-      console.log("🧭 totalPages:", data.totalPages);
-      console.log("📦 totalElements:", data.totalElements);
-      console.log("📄 content.length:", data.content?.length);
       const list = Array.isArray(data.content) ? data.content : [];
 
       const fetchedOrders = list.map((po: any) => ({
@@ -139,11 +140,6 @@ export function InventoryOrders() {
     }
   };
 
-  const filteredOrders = useMemo(() => {
-    if (activeFilter === "ALL") return orders;
-    return orders.filter((o) => o.status === activeFilter);
-  }, [orders, activeFilter]);
-
   const normalizeDetail = (data: any) => {
     const items = Array.isArray(data.items) ? data.items : [];
     const normItems = items.map((it: any) => {
@@ -207,7 +203,7 @@ export function InventoryOrders() {
       toast.success(`${selectedIds.length}건의 발주서가 삭제되었습니다.`);
       setOrders(prev => prev.filter(order => !selectedIds.includes(order.id)));
       setSelectedIds([]);
-      await fetchOrders(currentPage, statusFilter);
+      await fetchOrders(currentPage, statusFilter, appliedSearch);  // 삭제 후 재조회
       await fetchTotalAll();
       await fetchStatusTotals();
       fetchOrders(currentPage);
@@ -239,370 +235,13 @@ export function InventoryOrders() {
 
       toast.success("검수 완료 및 본사 동기화 요청 완료");
 
-      // ✅ 상태 변경 후 서버에서 최신 목록 재조회 (추가된 한 줄)
-      await fetchOrders(currentPage, statusFilter);  
+      // 상태 변경 후 재조회
+      await fetchOrders(currentPage, statusFilter, appliedSearch);  
       await fetchTotalAll();
       await fetchStatusTotals(); 
     } catch (error) {
       console.error("🚨 상태 변경 및 동기화 실패:", error);
       toast.error("상태 변경에 실패했습니다.");
-    }
-  };
-
-
-  // 다운로드 기능
-  const handleDownload = async (format: 'excel' | 'pdf') => {
-    try {
-      // 파일 생성 시뮬레이션을 위한 지연
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // 데이터가 없는 경우 처리
-      if (!orders || orders.length === 0) {
-        throw new Error('다운로드할 발주 데이터가 없습니다.');
-      }
-      
-      const exportData = orders.map(order => ({
-        발주번호: order.orderCode || '-',
-        공급업체: order.supplier || '-',
-        발주일자: order.orderDate || '-',
-        실제납기일자: order.actualDate || '-',
-        발주상태: getStatusText(order.status),
-        우선순위: getPriorityText(order.priority),
-        총금액: `${Number(order.totalPrice ?? 0).toLocaleString()}원`,
-        품목수: Number.isFinite(order.itemCount) ? order.itemCount : 0,
-        비고: order.notes || '-'
-      }));
-
-      if (format === 'excel') {
-        const csvContent = [
-          Object.keys(exportData[0]).join(','),
-          ...exportData.map(row => Object.values(row).map(v => `"${v}"`).join(','))
-        ].join('\n');
-        
-        const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `발주관리_${new Date().toISOString().split('T')[0]}.csv`;
-        link.click();
-      } else {
-        // HTML 보고서 생성 (인쇄용)
-        const reportWindow = window.open('', '_blank');
-        const htmlContent = `
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>발주 관리 보고서</title>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
-        
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body { 
-            font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background: #fff;
-            padding: 40px;
-        }
-        
-        .header {
-            text-align: center;
-            margin-bottom: 40px;
-            border-bottom: 3px solid #14213D;
-            padding-bottom: 20px;
-        }
-        
-        .header h1 {
-            color: #14213D;
-            font-size: 28px;
-            font-weight: 700;
-            margin-bottom: 10px;
-        }
-        
-        .header-info {
-            color: #666;
-            font-size: 14px;
-        }
-        
-        .summary {
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            padding: 20px;
-            border-radius: 12px;
-            margin-bottom: 30px;
-            border-left: 5px solid #F77F00;
-        }
-        
-        .summary h2 {
-            color: #14213D;
-            font-size: 18px;
-            margin-bottom: 10px;
-            font-weight: 600;
-        }
-        
-        .summary-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-        }
-        
-        .summary-item {
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        .summary-label {
-            font-size: 12px;
-            color: #666;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 5px;
-        }
-        
-        .summary-value {
-            font-size: 18px;
-            font-weight: 600;
-            color: #14213D;
-        }
-        
-        .order-grid {
-            display: grid;
-            gap: 20px;
-        }
-        
-        .order-card {
-            border: 1px solid #e0e0e0;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        }
-        
-        .order-header {
-            background: linear-gradient(135deg, #14213D 0%, #1a2b4d 100%);
-            color: white;
-            padding: 16px 20px;
-            font-weight: 600;
-            font-size: 16px;
-        }
-        
-        .order-content {
-            padding: 20px;
-        }
-        
-        .order-details {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 15px;
-        }
-        
-        .detail-item {
-            display: flex;
-            flex-direction: column;
-        }
-        
-        .detail-label {
-            font-size: 11px;
-            color: #666;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 4px;
-            font-weight: 500;
-        }
-        
-        .detail-value {
-            font-size: 14px;
-            color: #333;
-            font-weight: 500;
-        }
-        
-        .notes-section {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 8px;
-            border-left: 4px solid #9D4EDD;
-            margin-top: 15px;
-        }
-        
-        .notes-label {
-            font-size: 12px;
-            color: #666;
-            font-weight: 600;
-            margin-bottom: 8px;
-            text-transform: uppercase;
-        }
-        
-        .notes-content {
-            font-size: 14px;
-            color: #333;
-            line-height: 1.5;
-        }
-        
-        .status-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        .status-completed { background: #d4edda; color: #155724; }
-        .status-pending { background: #fff3cd; color: #856404; }
-        .status-cancelled { background: #f8d7da; color: #721c24; }
-        
-        .footer {
-            margin-top: 40px;
-            text-align: center;
-            color: #666;
-            font-size: 12px;
-            border-top: 1px solid #eee;
-            padding-top: 20px;
-        }
-        
-        @media print {
-            body { padding: 20px; }
-            .order-card { break-inside: avoid; }
-            .header { break-after: avoid; }
-        }
-        
-        @page {
-            margin: 2cm;
-            size: A4;
-        }
-    </style>
-</head>
-<body>
-    <div class="header">
-        <h1>📋 발주 관리 보고서</h1>
-        <div class="header-info">
-            <div>생성일시: ${new Date().toLocaleString('ko-KR')}</div>
-        </div>
-    </div>
-    
-    <div class="summary">
-        <h2>📊 보고서 요약</h2>
-        <div class="summary-grid">
-            <div class="summary-item">
-                <div class="summary-label">총 발주 건수</div>
-                <div class="summary-value">${exportData.length}건</div>
-            </div>
-            <div class="summary-item">
-                <div class="summary-label">보고서 생성</div>
-                <div class="summary-value">${new Date().toLocaleDateString('ko-KR')}</div>
-            </div>
-            <div class="summary-item">
-                <div class="summary-label">생성 시간</div>
-                <div class="summary-value">${new Date().toLocaleTimeString('ko-KR')}</div>
-            </div>
-        </div>
-    </div>
-
-    <div class="order-grid">
-        ${exportData.map((order, index) => `
-        <div class="order-card">
-            <div class="order-header">
-                #${index + 1} 발주번호: ${order.발주번호}
-            </div>
-            <div class="order-content">
-                <div class="order-details">
-                    <div class="detail-item">
-                        <div class="detail-label">공급업체</div>
-                        <div class="detail-value">${order.공급업체}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">발주일자</div>
-                        <div class="detail-value">${order.발주일자}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">실제납기일자</div>
-                        <div class="detail-value">${order.실제납기일자}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">발주상태</div>
-                        <div class="detail-value">
-                            <span class="status-badge ${
-                              order.발주상태 === '검수완료'
-                                ? 'status-completed'
-                                : order.발주상태 === '대기중' || order.발주상태 === '접수됨' || order.발주상태 === '배송중'
-                                ? 'status-pending'
-                                : 'status-cancelled'
-                            }">
-                              ${order.발주상태}
-                            </span>
-                        </div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">우선순위</div>
-                        <div class="detail-value">${order.우선순위}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">총금액</div>
-                        <div class="detail-value">${order.총금액}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">품목수</div>
-                        <div class="detail-value">${order.품목수}개</div>
-                    </div>
-                </div>
-                ${order.비고 !== '-' ? `
-                <div class="notes-section">
-                    <div class="notes-label">비고</div>
-                    <div class="notes-content">${order.비고}</div>
-                </div>` : ''}
-            </div>
-        </div>
-        `).join('')}
-    </div>
-    
-    <div class="footer">
-        <div>FranFriend ERP System - 발주 관리 보고서</div>
-        <div>본 보고서는 ${new Date().toLocaleString('ko-KR')}에 자동 생성되었습니다.</div>
-    </div>
-    
-    <script>
-        window.onload = function() {
-            setTimeout(() => {
-                window.print();
-            }, 500);
-        };
-    </script>
-</body>
-</html>`;
-        
-        if (reportWindow) {
-          reportWindow.document.write(htmlContent);
-          reportWindow.document.close();
-        }
-      }
-    } catch (error) {
-      console.error('Download error:', error);
-      throw error;
-    }
-  };
-
-  // 상태 텍스트 변환
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'PENDING': return '대기중';
-      case 'RECEIVED': return '접수됨';
-      case 'SHIPPING': return '배송중';
-      case 'DELIVERED': return '검수완료';
-      case 'CANCELED': return '취소';
-      default: return '알수없음';
-    }
-  };
-
-  // 우선순위 텍스트 변환
-  const getPriorityText = (priority: string) => {
-    switch (priority) {
-      case 'URGENT': return '우선';
-      case 'NORMAL': return '일반';
-      default: return '알수없음';
     }
   };
 
@@ -667,7 +306,7 @@ export function InventoryOrders() {
       key: 'orderDate', 
       label: '발주주문일', 
       sortable: true,
-      render: (value, row) => (
+      render: (value) => (
         <div>
           <div className="text-sm">{value}</div>
         </div>
@@ -677,7 +316,7 @@ export function InventoryOrders() {
       key: 'actualDate', 
       label: '실제납기일', 
       sortable: true,
-      render: (value, row) => (
+      render: (value) => (
         <div>
           <div className="text-sm">{value ? value : '-'}</div>
         </div>
@@ -780,57 +419,173 @@ export function InventoryOrders() {
 
       {/* 발주 내역 관리 */}
       <Card className="p-6">
-        <div className="flex items-center justify-between mb-4">
+        {/* 첫 줄: 제목, 삭제 버튼, 힌트 */}
+        <div className="flex items-center justify-between mb-2">
           <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <Truck className="w-5 h-5" />
             발주 내역 관리
           </h3>
           <div className="flex items-center gap-3">
             <Button
-            size="sm"
-            variant="destructive"
-            onClick={handleBulkDelete}
-            disabled={selectedIds.length === 0}
-          >
-            <Trash className="w-3 h-3 mr-1" /> 삭제
-          </Button>
-            <DownloadToggle
-              onDownload={handleDownload}
-              filename={`발주관리_${new Date().toISOString().split('T')[0]}`}
-            />
-            <p className="text-sm text-dark-gray">💡 발주번호를 클릭하면 상세 정보를 확인할 수 있습니다</p>
+              size="sm"
+              variant="destructive"
+              onClick={handleBulkDelete}
+              disabled={selectedIds.length === 0}
+            >
+              <Trash className="w-3 h-3 mr-1" /> 삭제
+            </Button>
+            <p className="text-sm text-dark-gray">
+              발주번호를 클릭하면 상세 정보를 확인할 수 있습니다
+            </p>
+          </div>
+        </div>
+
+        {/* 둘째 줄: 총 n개 항목 + 검색창 */}
+        <div className="mb-4">
+          <p className="text-sm text-dark-gray mb-2">
+            총 {totalAllElements}개 항목
+          </p>
+
+          <div className="flex items-center justify-between gap-4">
+            {/* 왼쪽: 검색창 */}
+            <div className="flex items-center gap-2">
+              <Input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="발주번호, 공급업체, 품목명 검색"
+                className="h-9 w-56"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    setCurrentPage(0);
+                    setAppliedSearch(searchTerm);
+                  }
+                }}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setCurrentPage(0);
+                  setAppliedSearch(searchTerm);
+                }}
+              >
+                검색
+              </Button>
+            </div>
+            
+            {/* 오른쪽 : 상태 필터 버튼들 */}
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => {
+                  setStatusFilter('all');
+                  setCurrentPage(0);
+                  fetchOrders(0, 'all', appliedSearch);
+                }}
+                className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                  statusFilter === 'all'
+                    ? 'bg-kpi-red text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                전체
+              </button>
+
+              <button
+                onClick={() => {
+                  setStatusFilter('PENDING');
+                  setCurrentPage(0);
+                  fetchOrders(0, 'PENDING', appliedSearch);
+                }}
+                className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                  statusFilter === 'PENDING'
+                    ? 'bg-kpi-red text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                대기중 ({statusTotals.PENDING})
+              </button>
+
+              <button
+                onClick={() => {
+                  setStatusFilter('RECEIVED');
+                  setCurrentPage(0);
+                  fetchOrders(0, 'RECEIVED', appliedSearch);
+                }}
+                className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                  statusFilter === 'RECEIVED'
+                    ? 'bg-kpi-red text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                접수됨 ({statusTotals.RECEIVED})
+              </button>
+
+              <button
+                onClick={() => {
+                  setStatusFilter('SHIPPING');
+                  setCurrentPage(0);
+                  fetchOrders(0, 'SHIPPING', appliedSearch);
+                }}
+                className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                  statusFilter === 'SHIPPING'
+                    ? 'bg-kpi-red text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                배송중 ({statusTotals.SHIPPING})
+              </button>
+
+              <button
+                onClick={() => {
+                  setStatusFilter('DELIVERED');
+                  setCurrentPage(0);
+                  fetchOrders(0, 'DELIVERED', appliedSearch);
+                }}
+                className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                  statusFilter === 'DELIVERED'
+                    ? 'bg-kpi-red text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                검수완료 ({statusTotals.DELIVERED})
+              </button>
+
+              <button
+                onClick={() => {
+                  setStatusFilter('CANCELED');
+                  setCurrentPage(0);
+                  fetchOrders(0, 'CANCELED', appliedSearch);
+                }}
+                className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                  statusFilter === 'CANCELED'
+                    ? 'bg-kpi-red text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                취소됨 ({statusTotals.CANCELED})
+              </button>
+            </div>
           </div>
         </div>
 
        <DataTable
           columns={orderColumns}
-          data={orders}             // 서버 데이터 그대로
+          data={orders}
           title=""
-          searchPlaceholder="발주번호, 공급업체, 품목명 검색"
           showActions={false}
-          filters={[
-            { label: '대기중', value: 'PENDING' },
-            { label: '접수됨', value: 'RECEIVED' },
-            { label: '배송중', value: 'SHIPPING' },
-            { label: '검수완료', value: 'DELIVERED' },
-            { label: '취소됨', value: 'CANCELED' },
-          ]}
+          hideSearch={true}          // DataTable 안 검색바는 안 씀
+          hideHeaderSummary={true}
           serverSidePagination
-          serverFilterEnabled        // DataTable이 서버 필터 모드로 동작
-          currentPage={currentPage + 1}   // 1-base
+          currentPage={currentPage + 1}
           totalPageCount={totalPages}
           totalElements={totalElements}
           totalDisplayCount={totalAllElements}
           pageSize={10}
           pageBlockSize={10}
-          onFilterChange={(value) => {
-            setStatusFilter(value as any); // 상태 저장
-            setCurrentPage(0);             // 1페이지로 리셋
-            fetchOrders(0, value as any);  // 즉시 재조회
-          }}
           onPageChange={(page) => {
-            setCurrentPage(page - 1);
-            fetchOrders(page - 1, statusFilter);
+            const zeroBased = page - 1;
+            setCurrentPage(zeroBased);
+            fetchOrders(zeroBased, statusFilter, appliedSearch);
           }}
         />
 
@@ -1047,7 +802,7 @@ export function InventoryOrders() {
                                 materialId: it.materialId ?? it.material?.id ?? it.storeMaterialId,
                                 count: Number(it.count ?? 0),
                               }))
-                              .filter(it => it.materialId && it.count > 0),
+                              .filter((it: any) => it.materialId && it.count > 0),
                           };
 
                           await api.put(`/api/purchase/${selectedOrder.id}`, payload, {
