@@ -6,9 +6,11 @@ import com.boot.ict05_final_user.domain.myPage.service.MyPageService;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Map;
 
@@ -23,9 +25,8 @@ public class MyPageRestController {
     @GetMapping("/myPage")
     @Operation(summary = "마이페이지 상세 조회", description = "회원의 프로필 정보를 조회한다.")
     public ResponseEntity<MyPageDTO> myPage(@AuthenticationPrincipal AppUser user) {
-        return ResponseEntity.ok(
-                myPageService.getMyInfo(user.getMemberId(), user.getStoreId())
-        );
+        MyPageDTO dto = myPageService.getMyPro(user.getMemberId());
+        return ResponseEntity.ok(dto);
     }
 
     // 2) 마이페이지 기본 정보 수정(이름, 전화번호 등)
@@ -36,6 +37,28 @@ public class MyPageRestController {
     ) {
         MyPageDTO updated = myPageService.updateMyPage(user.getMemberId(), request);
         return ResponseEntity.ok(updated);
+    }
+
+    // 2-1) 프로필 이미지 업로드
+    @PostMapping(
+            value = "/myPage/profile-image",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    @Operation(summary = "프로필 이미지 업로드")
+    public ResponseEntity<MyPageDTO> uploadProfileImage(
+            @AuthenticationPrincipal AppUser user,
+            @RequestPart("file") MultipartFile file
+    ) {
+        MyPageDTO updated = myPageService.updateProfileImage(user.getMemberId(), file);
+        return ResponseEntity.ok(updated);
+    }
+
+    // 프로필 이미지 기본값으로 초기화
+    @DeleteMapping("/myPage/profile-image")
+    @Operation(summary = "프로필 이미지 초기화", description = "저장된 프로필 이미지를 제거하고 기본 이미지로 되돌린다.")
+    public ResponseEntity<Void> resetProfileImage(@AuthenticationPrincipal AppUser user) {
+        myPageService.resetProfileImage(user.getMemberId());
+        return ResponseEntity.noContent().build();   // 204
     }
 
     // 3) 현재 비밀번호 확인
@@ -87,10 +110,5 @@ public class MyPageRestController {
 
         return ResponseEntity.noContent().build();   // 204
     }
-
-//    @GetMapping("/myPage")
-//    public ResponseEntity<MyPageDTO> mypro(@AuthenticationPrincipal AppUser user) {
-//        return ResponseEntity.ok(myPageService.getMyPro(user.getMemberId()));
-//    }
 
 }

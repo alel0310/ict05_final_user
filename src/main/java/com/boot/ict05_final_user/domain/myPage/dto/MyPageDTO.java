@@ -28,9 +28,6 @@ public class MyPageDTO {
     /** 지점명 */
     private String storeName;
 
-    /** 근무형태 */
-    private String employmentType;
-
     /**
      * Entity → DTO 변환 메서드
      */

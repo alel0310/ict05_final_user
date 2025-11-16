@@ -1,8 +1,7 @@
 package com.boot.ict05_final_user.domain.menu.dto;
 
-import com.boot.ict05_final_user.domain.menu.entity.MenuCategory;
 import com.boot.ict05_final_user.domain.menu.entity.MenuShow;
-import com.boot.ict05_final_user.domain.menu.entity.SoldOutStatus;
+import com.boot.ict05_final_user.domain.menu.entity.StoreMenuSoldout;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -45,13 +44,12 @@ public class MenuDetailDTO {
     private Integer menuKcal;
 
     /** 판매중 / 품절 */
-    private SoldOutStatus soldOutStatus;
+    private StoreMenuSoldout storeMenuSoldout;
 
     /** 설명 */
     private String menuInformation;
 
     /** 재료 */
-    private String ingredients;
-
+    private List<String> ingredientNames;
 
 }

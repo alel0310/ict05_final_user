@@ -9,6 +9,9 @@ import { User, Mail, Phone, Link2, Edit3 } from "lucide-react";
 import api from "../../lib/authApi";
 import { useNavigate } from "react-router-dom";
 
+const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_API_BASE_URL;
+const DEFAULT_PROFILE_IMAGE = "/images/default-profile.png";
+
 interface MyPageDTO  {
   id: number;
   name: string;
@@ -44,8 +47,8 @@ export function MyPage() {
 
   const profileImage = previewUrl
     || (user?.memberImagePath
-        ? user.memberImagePath
-        : "https://via.placeholder.com/150?text=기본+프로필");
+          ? `${BACKEND_BASE_URL}${user.memberImagePath}`
+          : DEFAULT_PROFILE_IMAGE);
 
   // 초기 로드
   useEffect(() => {
@@ -76,6 +79,29 @@ export function MyPage() {
     const url = URL.createObjectURL(f);
     setPreviewUrl(url);
   };
+
+  // 이미지 기본값으로 초기화
+  const handleResetImage = async () => {
+    if (!user) return;
+
+    // 아직 저장 안 한 로컬 변경 먼저 리셋
+    setPreviewUrl(null);
+    setImageFile(null);
+
+    try {
+      await api.delete("/api/myPage/profile-image");
+
+      // 로컬 상태도 바로 반영
+      setUser((prev) => (prev ? { ...prev, memberImagePath: null } : prev));
+
+      toast.success("기본 프로필 이미지로 변경되었습니다.");
+    } catch (e: any) {
+      toast.error(
+        e?.response?.data?.message || "프로필 이미지를 초기화하는 중 오류가 발생했습니다."
+      );
+    }
+  };
+
 
   // 현재 비밀번호 검증
   const handleVerifyPassword = async () => {
@@ -151,18 +177,17 @@ export function MyPage() {
       await api.put("/api/myPage", { 
         name, 
         phone,
-        // 이미지 업로드까지 구현하면 이쪽에 최종 경로 세팅
-        // memberImagePath: user.memberImagePath,
       });
 
-      // 2) 아바타 업로드(선택)
-      // if (imageFile) {
-      //   const fd = new FormData();
-      //   fd.append("file", imageFile);
-      //   await api.put("/api/mypage/mypage/avatar", fd, {
-      //     headers: { "Content-Type": "multipart/form-data" },
-      //   });
-      // }
+      // 2) 프로필 이미지 업로드(선택)
+      if (imageFile) {
+        const fd = new FormData();
+        fd.append("file", imageFile);   // 백엔드 @RequestPart("file") 와 이름 맞춤
+
+        await api.post<MyPageDTO>("/api/myPage/profile-image", fd, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+      }
 
       // 3) 비밀번호 변경
       if (passwordVerified && newPassword) {
@@ -234,13 +259,36 @@ export function MyPage() {
               src={profileImage}
               alt="프로필 이미지"
               className="w-32 h-32 rounded-full object-cover border border-gray-200 shadow-sm mb-2"
+              onError={(e) => {
+                e.currentTarget.src = DEFAULT_PROFILE_IMAGE;
+              }}
             />
+
             {editing && (
-              <label className="cursor-pointer px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm transition">
-                프로필 변경
-                <input type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
-              </label>
+              <div className="flex gap-2">
+                <label className="cursor-pointer px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm transition">
+                  프로필 변경
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleImageChange}
+                  />
+                </label>
+
+                {user?.memberImagePath && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="text-xs"
+                    onClick={handleResetImage}
+                  >
+                    기본 이미지
+                  </Button>
+                )}
+              </div>
             )}
+
             {editing ? (
               <div className="mt-3 w-full max-w-xs">
                 <Label className="sr-only">이름</Label>

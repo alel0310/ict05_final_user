@@ -239,8 +239,8 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 	}
 
 	// =========================
-//  주문 분석 Summary (카드 4개)
-// =========================
+	//  주문 분석 Summary (카드 4개)
+	// =========================
 	@Override
 	@Transactional(readOnly = true)
 	public OrderSummaryDto fetchOrderSummary(Long storeId, LocalDate today) {
@@ -279,7 +279,7 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 				.where(base)
 				.setHint("org.hibernate.readOnly", true)
 				.setHint("org.hibernate.flushMode", "COMMIT")
-				.setHint("javax.persistence.query.timeout", 3000)
+				.setHint("jakarta.persistence.query.timeout", 3000)
 				.fetchOne();
 
 		BigDecimal deliveryBD = nvlBD(t == null ? null : t.get(deliverySalesExpr));
@@ -311,10 +311,14 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 				.and(eqStore(storeId))
 				.and(betweenClosedOpen(co.orderedAt, start, endEx));
 
-		// 커서: 마지막 주문 ID 기준으로 이어가기 (id desc)
+		// 🔹 커서: 다시 "마지막 주문 ID" 기준으로만 사용
 		if (cond.cursor() != null && !cond.cursor().isBlank()) {
-			Long lastId = Long.valueOf(cond.cursor());
-			filter = filter.and(co.id.lt(lastId));
+			try {
+				Long lastId = Long.valueOf(cond.cursor());
+				filter = filter.and(co.id.lt(lastId));
+			} catch (NumberFormatException ignore) {
+				// 잘못된 커서 값이면 그냥 무시하고 처음 페이지처럼 동작
+			}
 		}
 
 		NumberExpression<Integer> menuCountExpr = cod.quantity.sum();
@@ -342,7 +346,8 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 						co.paymentType,
 						co.memo
 				)
-				.orderBy(co.id.desc())
+				// 🔹 화면 정렬: 날짜 내림차순 + 같은 날은 ID 내림차순
+				.orderBy(co.orderedAt.desc(), co.id.desc())
 				.limit(size + 1)
 				.setHint("org.hibernate.readOnly", true)
 				.setHint("org.hibernate.flushMode", "COMMIT")
@@ -382,11 +387,14 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		if (rows.size() > size) {
 			Tuple last = rows.get(size - 1);
 			Long lastId = last.get(co.id);
-			nextCursor = lastId != null ? String.valueOf(lastId) : null;
+			if (lastId != null) {
+				nextCursor = String.valueOf(lastId); // 🔹 커서 = 마지막 주문 ID
+			}
 		}
 
 		return new CursorPage<>(items, nextCursor);
 	}
+
 
 	// =========================
 	//  주문 분석 월별 테이블(월 단위 집계)
@@ -449,7 +457,7 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 				.limit(size + 1)
 				.setHint("org.hibernate.readOnly", true)
 				.setHint("org.hibernate.flushMode", "COMMIT")
-				.setHint("javax.persistence.query.timeout", 3000)
+				.setHint("jakarta.persistence.query.timeout", 3000)
 				.fetch();
 
 		List<OrderMonthlyRowDto> items = new ArrayList<>();

@@ -44,3 +44,4 @@ out/
 **/service-account*.json
 spy.log
 spy.log
+*.log
