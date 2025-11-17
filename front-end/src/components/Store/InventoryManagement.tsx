@@ -23,6 +23,8 @@ import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
 import type { CheckedState } from '@radix-ui/react-checkbox';
 import { toast } from 'sonner';
+import { createStoreMaterial } from '../../services/storeMaterialApi';
+import type { StoreMaterialCreateRequest, MaterialTemperature, MaterialStatus, } from '../../types/storeMaterial';
 
 /* =======================
    타입 정의
@@ -388,6 +390,7 @@ export function InventoryManagement() {
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       if (modalType === 'restock' && selectedItem) {
+        // 입고 로직
         setInventory(prev =>
           prev.map(item =>
             item.id === selectedItem.id
@@ -402,6 +405,7 @@ export function InventoryManagement() {
         );
         toast.success(`${selectedItem.name} ${data.quantity}${selectedItem.unit} 재입고 완료`);
       } else if (modalType === 'adjust' && selectedItem) {
+        // 조정 로직
         const newQty = parseInt(data.newStock, 10);
         setInventory(prev =>
           prev.map(item =>
@@ -412,6 +416,7 @@ export function InventoryManagement() {
         );
         toast.success(`${selectedItem.name} 재고 조정 완료`);
       } else if (modalType === 'order') {
+        // 발주 로직
         const newOrder: Order = {
           id: `PO-${String(Date.now()).slice(-6)}`, // ✅ 문자열 ID
           items: [{ name: data.itemName, quantity: Number(data.quantity), unit: data.unit, unitPrice: Number(data.unitPrice) }],
@@ -424,29 +429,78 @@ export function InventoryManagement() {
         setOrders(prev => [newOrder, ...prev]);
         toast.success('발주 등록이 완료되었습니다.');
       } else if (modalType === 'register') {
-        const newItem: InventoryItem = {
-          id: Math.max(...inventory.map(i => i.id)) + 1,
+        // 가맹점 재료 등록 API 연동
+        
+
+        // 1) 본사 재료 사용 여부 파싱
+        const useHqMaterial =
+          data.hqMaterial === true ||
+          data.hqMaterial === 'true' ||
+          data.hqMaterial === 'HQ';
+
+        // 2) (임시) 가맹점 ID
+        //    나중에 로그인 세션/전역 상태에서 storeId 끌어오면 여기만 교체하면 됨.
+        const storeId = 2;
+
+        // 3) payload 구성 – StoreMaterialCreateRequest와 1:1 매핑
+        const payload: StoreMaterialCreateRequest = {
+          storeId,
+
+          code: data.code,
           name: data.itemName,
-          category: data.category,
-          currentStock: parseInt(data.initialStock || '0', 10),
-          minStock: parseInt(data.minStock, 10),
-          maxStock: parseInt(data.maxStock, 10),
-          unit: data.unit,
-          unitPrice: parseInt(data.unitPrice, 10),
-          lastRestocked: new Date().toISOString().split('T')[0],
-          expiryDate: data.expiryDate,
-          supplier: data.supplier || '직접구매',
-          status: (parseInt(data.initialStock || '0', 10) <= parseInt(data.minStock, 10)) ? 'low' as StockStatus : 'sufficient',
-          weeklyUsage: parseInt(data.weeklyUsage || '0', 10),
-          location: data.location
+
+          category: data.category ?? null,
+
+          baseUnit: data.baseUnit,
+          salesUnit: data.salesUnit,
+
+          conversionRate: data.conversionRate
+            ? Number(data.conversionRate)
+            : 1,
+
+          supplier: data.supplier || null,
+
+          temperature: (data.temperature || null) as
+            | MaterialTemperature
+            | null,
+
+          status: (data.status || 'USE') as MaterialStatus,
+
+          optimalQuantity: data.optimalQuantity
+            ? Number(data.optimalQuantity)
+            : null,
+
+          purchasePrice: data.purchasePrice
+            ? Number(data.purchasePrice)
+            : null,
+
+          // 본사 재료 연결이면 materialId, 아니면 null
+          hqMaterialId:
+            useHqMaterial && data.materialId
+              ? Number(data.materialId)
+              : null,
         };
-        setInventory(prev => [...prev, newItem]);
-        toast.success(`${data.itemName}이(가) 자재로 등록되었습니다.`);
+
+        const newId = await createStoreMaterial(payload);
+
+        toast.success(`'${payload.name}' 재료가 등록되었습니다. (#${newId})`);
+          
+        // 필요하면 로컬 목록 즉시 반영
+        // (지금 InventoryItem 타입과 StoreMaterial 필드가 1:1은 아니라서
+        //  임시 매핑 후 setInventory(...) 할지, 아니면 새로 조회할지 결정)
+        // 예시: 최소한 적정재고/단위 정도만 붙여서 카드 숫자만 갱신
+        // setInventory(prev => [...prev, toInventoryItem(payload, newId)]);
       }
 
       setIsModalOpen(false);
-    } catch {
-      toast.error('오류가 발생했습니다.');
+    } catch (e: any) {
+      console.error(e);
+      toast.error(
+        e?.response?.data?.message ||
+          (modalType === 'register'
+            ? '가맹점 재료 등록 중 오류가 발생했습니다.'
+            : '오류가 발생했습니다.'),
+      );
     } finally {
       setIsLoading(false);
     }
@@ -478,23 +532,113 @@ export function InventoryManagement() {
     }
     // register
     return [
-      { name: 'itemName', label: '품목명', type: 'text' as const, required: true },
       {
-        name: 'category', label: '카테고리', type: 'select' as const, required: true,
+        name: 'hqMaterial',
+        label: '본사 재료 사용 여부',
+        type: 'select' as const,
+        required: true,
         options: [
-          { value: '주재료', label: '주재료' }, { value: '부재료', label: '부재료' }, { value: '조미료', label: '조미료' },
-          { value: '음료', label: '음료' }, { value: '채소', label: '채소' }, { value: '기타', label: '기타' }
-        ]
+          { value: 'false', label: '가맹점 자체 재료' },
+          { value: 'true', label: '본사 재료와 연결' },
+        ],
       },
-      { name: 'initialStock', label: '초기 재고', type: 'number' as const, required: false, placeholder: '0' },
-      { name: 'minStock', label: '최소 재고', type: 'number' as const, required: true },
-      { name: 'maxStock', label: '최대 재고', type: 'number' as const, required: true },
-      { name: 'unit', label: '단위', type: 'text' as const, required: true, placeholder: 'kg, 개, 통 등' },
-      { name: 'unitPrice', label: '단가', type: 'number' as const, required: true },
-      { name: 'weeklyUsage', label: '주간 예상 사용량', type: 'number' as const, required: false, placeholder: '0' },
-      { name: 'location', label: '보관위치', type: 'text' as const, required: true, placeholder: '냉장고 A-1' },
-      { name: 'supplier', label: '공급업체', type: 'text' as const, required: false, placeholder: '직접구매' },
-      { name: 'expiryDate', label: '유통기한', type: 'date' as const, required: true }
+      {
+        name: 'materialId',
+        label: '본사 재료 ID (임시)',
+        type: 'number' as const,
+        required: false,
+        placeholder: '본사 재료와 연결 시 materialId 입력',
+      },
+      {
+        name: 'code',
+        label: '가맹점 재료 코드',
+        type: 'text' as const,
+        required: true,
+        placeholder: '점포 내 고유 코드',
+      },
+      {
+        name: 'itemName',
+        label: '품목명',
+        type: 'text' as const,
+        required: true,
+      },
+      {
+        name: 'category',
+        label: '카테고리',
+        type: 'select' as const,
+        required: true,
+        options: [
+          { value: 'MAIN', label: '주재료' },
+          { value: 'SUB', label: '부재료' },
+          { value: 'SAUCE', label: '소스/조미료' },
+          { value: 'BEVERAGE', label: '음료' },
+          { value: 'VEGETABLE', label: '채소' },
+          { value: 'ETC', label: '기타' },
+        ],
+      },
+      {
+        name: 'baseUnit',
+        label: '소진 단위',
+        type: 'text' as const,
+        required: true,
+        placeholder: '개, g, 샷 등',
+      },
+      {
+        name: 'salesUnit',
+        label: '입고 단위',
+        type: 'text' as const,
+        required: true,
+        placeholder: '박스, 봉, kg 등',
+      },
+      {
+        name: 'conversionRate',
+        label: '변환비율 (입고 → 소진)',
+        type: 'number' as const,
+        required: true,
+        placeholder: '예: 1박스=1000g → 1000',
+      },
+      {
+        name: 'optimalQuantity',
+        label: '적정 재고 (소진 단위)',
+        type: 'number' as const,
+        required: false,
+        placeholder: '예: 30',
+      },
+      {
+        name: 'purchasePrice',
+        label: '매입 단가 (입고 단위)',
+        type: 'number' as const,
+        required: false,
+        placeholder: '예: 15000',
+      },
+      {
+        name: 'supplier',
+        label: '공급업체',
+        type: 'text' as const,
+        required: false,
+        placeholder: '대표 공급업체명',
+      },
+      {
+        name: 'temperature',
+        label: '보관 온도',
+        type: 'select' as const,
+        required: false,
+        options: [
+          { value: 'TEMPERATURE', label: '상온' },
+          { value: 'REFRIGERATE', label: '냉장' },
+          { value: 'FREEZE', label: '냉동' },
+        ],
+      },
+      {
+        name: 'status',
+        label: '재료 상태',
+        type: 'select' as const,
+        required: true,
+        options: [
+          { value: 'USE', label: '사용' },
+          { value: 'STOP', label: '미사용' },
+        ],
+      },
     ];
   };
 

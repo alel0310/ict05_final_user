@@ -1,7 +1,7 @@
 package com.boot.ict05_final_user.domain.purchaseOrder.repository;
 
-import com.boot.ict05_final_user.domain.inventory.entity.QMaterial;
-import com.boot.ict05_final_user.domain.inventory.entity.QStoreMaterial;
+import com.boot.ict05_final_user.domain.material.entity.QMaterial;
+import com.boot.ict05_final_user.domain.material.entity.QStoreMaterial;
 import com.boot.ict05_final_user.domain.inventory.entity.StoreMaterial;
 import com.boot.ict05_final_user.domain.purchaseOrder.dto.*;
 import com.boot.ict05_final_user.domain.purchaseOrder.entity.*;
@@ -9,8 +9,6 @@ import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -266,12 +264,12 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
                 throw new IllegalStateException("본사 재료와 매핑되지 않은 가맹점 재료입니다. id=" + storeMaterialId);
             }
 
-            BigDecimal itemTotal = sm.getSellingPrice().multiply(BigDecimal.valueOf(itemDTO.getCount()));
+            BigDecimal itemTotal = sm.getPurchasePrice().multiply(BigDecimal.valueOf(itemDTO.getCount()));
 
             queryFactory.insert(pod)
                     .set(pod.purchaseOrder.id, purchaseOrderId)
                     .set(pod.material.id, sm.getId())      // StoreMaterial FK
-                    .set(pod.unitPrice, sm.getSellingPrice())
+                    .set(pod.unitPrice, sm.getPurchasePrice())
                     .set(pod.count, itemDTO.getCount())
                     .set(pod.totalPrice, itemTotal)
                     .execute();
@@ -381,7 +379,7 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
                 throw new IllegalStateException("본사 재료와 매핑되지 않은 가맹점 재료입니다. id=" + storeMaterialId);
             }
 
-            BigDecimal unitPrice = sm.getSellingPrice();
+            BigDecimal unitPrice = sm.getPurchasePrice();
             BigDecimal totalPrice = unitPrice.multiply(BigDecimal.valueOf(count));
 
             Long detailId = queryFactory

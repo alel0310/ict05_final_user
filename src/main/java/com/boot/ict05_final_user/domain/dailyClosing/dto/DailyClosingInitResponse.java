@@ -64,9 +64,11 @@ public class DailyClosingInitResponse {
     private boolean closed;
 
     /** 지출 내역 목록 */
+    @Builder.Default
     private List<DailyClosingExpenseDto> expenses = new ArrayList<>();
 
     /** 권종별 시재 목록 */
+    @Builder.Default
     private List<DailyClosingDenomDto> denoms = new ArrayList<>();
 
     /**
@@ -95,7 +97,7 @@ public class DailyClosingInitResponse {
                 .carryoverCash(c.getCarryoverCash())
                 .differenceAmount(c.getDifferenceAmount())
                 .differenceMemo(c.getDifferenceMemo())
-                .closed(true)
+                .closed(true)   // 마감 상태
                 .build();
     }
 }

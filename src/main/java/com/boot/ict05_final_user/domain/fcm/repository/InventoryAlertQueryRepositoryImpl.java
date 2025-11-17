@@ -3,7 +3,8 @@ package com.boot.ict05_final_user.domain.fcm.repository;
 import com.boot.ict05_final_user.domain.fcm.repository.InventoryAlertQueryRepository;
 import com.boot.ict05_final_user.domain.inventory.entity.InventoryStatus;
 import com.boot.ict05_final_user.domain.inventory.entity.QStoreInventory;
-import com.boot.ict05_final_user.domain.inventory.entity.QStoreMaterial;
+import com.boot.ict05_final_user.domain.material.entity.QStoreMaterial;
+import com.boot.ict05_final_user.domain.inventory.entity.QStoreInventoryBatch;
 import com.querydsl.core.types.Order;
 import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.core.types.dsl.BooleanExpression;
@@ -31,6 +32,8 @@ public class InventoryAlertQueryRepositoryImpl implements InventoryAlertQueryRep
     @Override
     public List<Long> findStoresWithLowStock(int threshold) {
         QStoreInventory si = QStoreInventory.storeInventory;
+        QStoreMaterial sm = QStoreMaterial.storeMaterial;
+        QStoreInventoryBatch sib = QStoreInventoryBatch.storeInventoryBatch;
 
         BigDecimal th = BigDecimal.valueOf(threshold);
 
@@ -63,14 +66,15 @@ public class InventoryAlertQueryRepositoryImpl implements InventoryAlertQueryRep
     public List<Long> findStoresWithExpireSoon(LocalDate today, int days) {
         QStoreInventory si = QStoreInventory.storeInventory;
         QStoreMaterial sm = QStoreMaterial.storeMaterial;
+        QStoreInventoryBatch sib = QStoreInventoryBatch.storeInventoryBatch;
 
         LocalDate start = today;
         LocalDate endExclusive = today.plusDays(days);
 
         BooleanExpression cond =
-                sm.expirationDate.isNotNull()
-                        .and(sm.expirationDate.goe(start))
-                        .and(sm.expirationDate.lt(endExclusive));
+                sib.expirationDate.isNotNull()
+                        .and(sib.expirationDate.goe(start))
+                        .and(sib.expirationDate.lt(endExclusive));
 
         return query
                 .select(si.store.id)
