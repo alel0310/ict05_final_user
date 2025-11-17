@@ -20,7 +20,11 @@ interface MyPageDTO  {
   memberImagePath: string | null;
 }
 
-export function MyPage() {
+interface MyPageProps {
+  onProfileImageChange?: (path: string | null) => void;
+}
+
+export function MyPage({ onProfileImageChange }: MyPageProps) {
   const navigate = useNavigate();
   const [user, setUser] = useState<MyPageDTO | null>(null);
   const [loading, setLoading] = useState(true);
@@ -62,6 +66,7 @@ export function MyPage() {
         setPhone(res.data.phone || "");
         setPreviewUrl(null);
         setImageFile(null);
+        onProfileImageChange?.(res.data.memberImagePath ?? null);
       })
       .catch(err => {
         const msg = err?.response?.data?.message || "마이페이지 정보를 불러오지 못했습니다.";
@@ -93,6 +98,8 @@ export function MyPage() {
 
       // 로컬 상태도 바로 반영
       setUser((prev) => (prev ? { ...prev, memberImagePath: null } : prev));
+
+      onProfileImageChange?.(null);
 
       toast.success("기본 프로필 이미지로 변경되었습니다.");
     } catch (e: any) {
@@ -204,6 +211,7 @@ export function MyPage() {
       setPhone(res.data.phone || "");
       setPreviewUrl(null);
       setImageFile(null);
+      onProfileImageChange?.(res.data.memberImagePath ?? null);
 
       // 폼 상태 리셋
       setEditing(false);

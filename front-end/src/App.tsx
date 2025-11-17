@@ -35,6 +35,7 @@ import TimeReport from "./components/Store/reports/TimeReport";
 type HeaderInfo = {
   memberName: string;
   storeName?: string | null;
+  memberImagePath?: string | null;
 };
 
 export default function App() {
@@ -68,6 +69,7 @@ export default function App() {
         setHeaderInfo({
           memberName: res.data.name,       // 응답의 name
           storeName: res.data.storeName,   // 응답의 storeName
+          memberImagePath: res.data.memberImagePath,
         });
       })
       .catch((err) => {
@@ -84,6 +86,13 @@ export default function App() {
 
   const handlePageChange = (page: string) => setCurrentPage(page);
 
+  const handleProfileImageChange = (path: string | null) => {
+    setHeaderInfo((prev) => ({
+      ...(prev ?? { memberName: "", storeName: null }),
+      memberImagePath: path,
+    }));
+  };
+
   const renderPage = () => {
     switch (currentPage) {
       case "dashboard": return <StoreDashboard/>;
@@ -98,7 +107,7 @@ export default function App() {
       case "finance": return <ErrorBoundary><FinanceManagement /></ErrorBoundary>;
       case "daily-closing": return (<OrderProvider><ErrorBoundary><DailyClosingPage onPageChange={handlePageChange}/></ErrorBoundary></OrderProvider>);
       case "daily-closing-list": return (<OrderProvider><ErrorBoundary><DailyClosingList /></ErrorBoundary></OrderProvider>);
-      case "mypage": return <ErrorBoundary><MyPage /></ErrorBoundary>
+      case "mypage": return <ErrorBoundary><MyPage onProfileImageChange={handleProfileImageChange}/></ErrorBoundary>
       case "staff":
       case "staff-list": return <ErrorBoundary><StaffList /></ErrorBoundary>;
     
@@ -132,6 +141,7 @@ return (
       storeName={headerInfo?.storeName ?? ""}
       currentPage={currentPage}
       onPageChange={handlePageChange}
+      memberImagePath={headerInfo?.memberImagePath ?? null} 
     >
       {renderPage()}
     </Layout>

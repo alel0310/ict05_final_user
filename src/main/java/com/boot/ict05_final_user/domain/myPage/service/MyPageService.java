@@ -10,6 +10,8 @@ import com.boot.ict05_final_user.domain.user.entity.MemberStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +20,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -115,6 +118,44 @@ public class MyPageService {
             return MyPageDTO.fromEntity(member);
         } catch (IOException e) {
             throw new RuntimeException("프로필 이미지 저장 중 오류가 발생했습니다.", e);
+        }
+    }
+
+    /**
+     * 회원 프로필 이미지 파일을 Resource 로 반환한다.
+     * DB 에 memberImagePath 가 없거나 파일이 실제로 없으면 null 을 반환한다.
+     */
+    @Transactional(readOnly = true)
+    public Resource loadProfileImage(Long memberId) {
+        Member member = myPageRepository.findById(memberId)
+                .orElseThrow(() -> new IllegalArgumentException("회원이 존재하지 않습니다."));
+
+        String imagePath = member.getMemberImagePath();
+        if (imagePath == null || imagePath.isBlank()) {
+            return null;
+        }
+
+        try {
+            // DB 에는 prefix 포함 경로가 들어있으므로 파일명만 뽑기
+            String filename;
+            int idx = imagePath.lastIndexOf('/');
+            if (idx >= 0 && idx < imagePath.length() - 1) {
+                filename = imagePath.substring(idx + 1);
+            } else {
+                filename = imagePath;
+            }
+
+            Path uploadDir = Paths.get(profileImageDir).toAbsolutePath().normalize();
+            Path filePath = uploadDir.resolve(filename).normalize();
+
+            if (!Files.exists(filePath)) {
+                return null;
+            }
+
+            return new UrlResource(filePath.toUri());
+        } catch (MalformedURLException e) {
+            log.error("프로필 이미지 로드 중 오류", e);
+            return null;
         }
     }
 

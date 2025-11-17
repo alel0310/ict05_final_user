@@ -5,6 +5,7 @@ import com.boot.ict05_final_user.domain.myPage.dto.MyPageDTO;
 import com.boot.ict05_final_user.domain.myPage.service.MyPageService;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -12,6 +13,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.Map;
 
 @RestController
@@ -51,6 +54,31 @@ public class MyPageRestController {
     ) {
         MyPageDTO updated = myPageService.updateProfileImage(user.getMemberId(), file);
         return ResponseEntity.ok(updated);
+    }
+
+    // 프로필 이미지 조회  헤더에서 사용하는 용도
+    @GetMapping("/myPage/profile-image")
+    public ResponseEntity<Resource> getMyProfileImage(
+            @AuthenticationPrincipal AppUser user
+    ) throws IOException {
+
+        Long memberId = user.getMemberId();
+        Resource image = myPageService.loadProfileImage(memberId);
+
+        if (image == null) {
+            // 이미지 없으면 404  프론트에서는 기본 이미지로 처리
+            return ResponseEntity.notFound().build();
+        }
+
+        String contentType = Files.probeContentType(image.getFile().toPath());
+        if (contentType == null) {
+            contentType = MediaType.IMAGE_PNG_VALUE;
+        }
+
+        return ResponseEntity
+                .ok()
+                .contentType(MediaType.parseMediaType(contentType))
+                .body(image);
     }
 
     // 프로필 이미지 기본값으로 초기화

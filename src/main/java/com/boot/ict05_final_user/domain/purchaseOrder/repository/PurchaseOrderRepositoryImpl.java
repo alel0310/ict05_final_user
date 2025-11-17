@@ -1,7 +1,7 @@
 package com.boot.ict05_final_user.domain.purchaseOrder.repository;
 
-import com.boot.ict05_final_user.domain.material.entity.QMaterial;
-import com.boot.ict05_final_user.domain.material.entity.QStoreMaterial;
+import com.boot.ict05_final_user.domain.inventory.entity.QMaterial;
+import com.boot.ict05_final_user.domain.inventory.entity.QStoreMaterial;
 import com.boot.ict05_final_user.domain.inventory.entity.StoreMaterial;
 import com.boot.ict05_final_user.domain.purchaseOrder.dto.*;
 import com.boot.ict05_final_user.domain.purchaseOrder.entity.*;
