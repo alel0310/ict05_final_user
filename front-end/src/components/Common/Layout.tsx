@@ -19,7 +19,8 @@ import {
   BookOpen,
   Calendar,
   CircleDollarSign,
-  Clock
+  Clock,
+  ClipboardList
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useNavigate } from "react-router-dom";
@@ -73,7 +74,6 @@ const storeMenuItems: MenuItem[] = [
     label: '재고/발주', 
     icon: Package,
     children: [
-      { id: 'inventory-status', label: '재고 현황', icon: Package },
       { id: 'inventory-management', label: '재고 관리', icon: Package},
       { id: 'inventory-orders', label: '발주 관리', icon: Truck }
     ]
@@ -83,7 +83,8 @@ const storeMenuItems: MenuItem[] = [
     label: '정산', 
     icon: Calculator,
     children: [
-      { id: 'daily-closing', label: '일일 시재/마감', icon: CircleDollarSign }
+      { id: 'daily-closing', label: '일일 시재/마감', icon: CircleDollarSign },
+      { id: 'daily-closing-list', label: '일일 마감 내역', icon: ClipboardList }
     ]
   },
   { 

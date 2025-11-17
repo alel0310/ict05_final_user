@@ -7,10 +7,12 @@ import com.boot.ict05_final_user.domain.dailyClosing.entity.DailyClosingExpense;
 import com.boot.ict05_final_user.domain.dailyClosing.repository.DailyClosingRepository;
 import com.boot.ict05_final_user.domain.dailyClosing.repository.DailyClosingRepositoryCustom;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -202,32 +204,37 @@ public class DailyClosingService {
         }
 
         // 1. 기존 DailyClosing 조회 또는 신규 생성
-        DailyClosing closing = dailyClosingRepository
+        DailyClosing existing = dailyClosingRepository
                 .findByStoreIdAndClosingDate(storeId, closingDate)
-                .orElseGet(() -> {
-                    DailyClosing dc = new DailyClosing();
-                    dc.setStoreId(storeId);
-                    dc.setClosingDate(closingDate);
-                    // 숫자 필드는 전부 0 으로 초기화
-                    dc.setCashVisitSales(0L);
-                    dc.setCashTakeoutSales(0L);
-                    dc.setCashDeliverySales(0L);
-                    dc.setCardVisitSales(0L);
-                    dc.setCardTakeoutSales(0L);
-                    dc.setCardDeliverySales(0L);
-                    dc.setVoucherSales(0L);
-                    dc.setTotalDiscount(0L);
-                    dc.setTotalRefund(0L);
-                    dc.setStartingCash(0L);
-                    dc.setTotalExpense(0L);
-                    dc.setDepositAmount(0L);
-                    dc.setCalculatedCash(0L);
-                    dc.setActualCash(0L);
-                    dc.setCarryoverCash(0L);
-                    dc.setDifferenceAmount(0L);
-                    dc.setClosed(false);
-                    return dc;
-                });
+                .orElse(null);
+
+        DailyClosing closing;
+        if (existing == null) {
+            // 처음 저장하는 날
+            closing = DailyClosing.builder()
+                    .storeId(storeId)
+                    .closingDate(closingDate)
+                    .cashVisitSales(0L)
+                    .cashTakeoutSales(0L)
+                    .cashDeliverySales(0L)
+                    .cardVisitSales(0L)
+                    .cardTakeoutSales(0L)
+                    .cardDeliverySales(0L)
+                    .voucherSales(0L)
+                    .totalDiscount(0L)
+                    .totalRefund(0L)
+                    .startingCash(0L)
+                    .totalExpense(0L)
+                    .depositAmount(0L)
+                    .calculatedCash(0L)
+                    .actualCash(0L)
+                    .carryoverCash(0L)
+                    .differenceAmount(0L)
+                    .isClosed(false)
+                    .build();
+        } else {
+            closing = existing;
+        }
 
         // 2. 주문 기준 매출 합계 다시 계산
         DailyClosingRepositoryCustom.OrderDailySummary summary =
@@ -350,6 +357,32 @@ public class DailyClosingService {
 
             closing.addDenom(denom);
         }
+    }
+
+    /**
+     * 가맹점과 기간을 기준으로 일일 마감 요약 목록을 조회한다.
+     *
+     * <p>
+     * - 로그인한 가맹점의 storeId 를 기준으로<br>
+     * - closingDate 가 from 이상, to 이하인 DailyClosing 엔티티를 조회하고<br>
+     * - 리스트 화면에서 사용하기 좋은 요약 DTO(DailyClosingSummaryDto) 리스트로 변환한다.
+     * </p>
+     *
+     * @param storeId 조회할 가맹점 아이디
+     * @param from    조회 시작 일자(포함)
+     * @param to      조회 종료 일자(포함)
+     * @return 기간 내 일일 마감 요약 DTO 리스트 (내림차순 정렬)
+     */
+    public List<DailyClosingSummaryDto> getDailyClosingHistory(
+            Long storeId,
+            LocalDate from,
+            LocalDate to) {
+        List<DailyClosing> closings =
+                dailyClosingRepository.findDailyClosingHistory(storeId, from, to);
+
+        return closings.stream()
+                .map(DailyClosingSummaryDto::from)
+                .toList();
     }
 
 }

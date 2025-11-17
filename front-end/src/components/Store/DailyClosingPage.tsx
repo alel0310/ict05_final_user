@@ -64,6 +64,10 @@ type UiExpense = {
   amount: number;
 };
 
+type DailyClosingPageProps = {
+  onPageChange?: (page: string) => void;
+};
+
 // 권종별 화폐
 const denominations = [
   { value: 50000, name: "5만원권", type: "note", color: "text-yellow-600" },
@@ -76,7 +80,7 @@ const denominations = [
   { value: 10, name: "10원", type: "coin", color: "text-gray-300" },
 ];
 
-export function DailyClosingPage() {
+export function DailyClosingPage({ onPageChange }: DailyClosingPageProps) {
 
   const [loading, setLoading] = useState(false);
 
@@ -208,6 +212,11 @@ export function DailyClosingPage() {
   const handleOpen = async () => {
     if (isClosed) return;
 
+    const ok = window.confirm("오늘 일자의 오픈 시재를 저장하시겠습니까?");
+    if (!ok) {
+      return;
+    }
+
     try {
       setLoading(true);
       const payload = {
@@ -259,8 +268,17 @@ export function DailyClosingPage() {
       toast.error("차액이 있을 경우 사유 메모를 입력해야 마감할 수 있습니다.");
       return;
     }
+
+    const ok = window.confirm("오늘 일자를 마감 처리하시겠습니까?");
+    if (!ok) {
+      return;
+    }
+
     try {
       setLoading(true);
+
+      // 테스트용 로그
+      console.log("[DailyClosingPage] complete closing, go list");
 
       const payload = {
         closingDate: todayStr,
@@ -284,10 +302,16 @@ export function DailyClosingPage() {
           .filter((d) => d.count > 0), // 개수 0 인 것은 빼도 된다
       };
 
+      // 백엔드에 마감 저장 요청
       await api.post("/api/daily-closing/close", payload);
 
       setIsClosed(true);
       toast.success("일일 마감이 완료되었습니다.");
+
+      if (onPageChange) {
+        console.log("[DailyClosingPage] go list");
+        onPageChange("daily-closing-list");
+      }
     } catch (err) {
       console.error(err);
       toast.error("일일 마감 저장에 실패했습니다.");

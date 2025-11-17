@@ -4,6 +4,7 @@ import com.boot.ict05_final_user.config.security.principal.AppUser;
 import com.boot.ict05_final_user.domain.dailyClosing.dto.DailyClosingInitResponse;
 import com.boot.ict05_final_user.domain.dailyClosing.dto.DailyClosingOpenRequest;
 import com.boot.ict05_final_user.domain.dailyClosing.dto.DailyClosingSaveRequest;
+import com.boot.ict05_final_user.domain.dailyClosing.dto.DailyClosingSummaryDto;
 import com.boot.ict05_final_user.domain.dailyClosing.service.DailyClosingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -12,6 +13,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * 일일 시재 마감 화면에서 사용하는 조회용 REST 컨트롤러.
@@ -95,9 +97,38 @@ public class DailyClosingController {
     @PostMapping("/close")
     public void saveDailyClosing(
             @AuthenticationPrincipal AppUser user,
-            @RequestBody DailyClosingSaveRequest request
-    ) {
+            @RequestBody DailyClosingSaveRequest request) {
         Long storeId = extractStoreId(user);
         dailyClosingService.saveDailyClosing(storeId, request);
+    }
+
+    /**
+     * 특정 기간 동안의 일일 마감 요약 리스트를 조회한다.
+     *
+     * <p>
+     * - 로그인한 가맹점의 storeId 를 기준으로<br>
+     * - closingDate 가 from 이상, to 이하인 DailyClosing 엔티티를 조회하고<br>
+     * - 리스트 화면에서 사용하기 좋은 요약 DTO 리스트를 반환한다.
+     * </p>
+     *
+     * 예시 요청:
+     * <pre>
+     *   GET /api/daily-closing/history?from=2025-11-01&to=2025-11-17
+     * </pre>
+     *
+     * @param principal 현재 로그인 사용자 정보 (AppUser)
+     * @param from      조회 시작 일자(포함), 포맷: yyyy-MM-dd
+     * @param to        조회 종료 일자(포함), 포맷: yyyy-MM-dd
+     * @return 기간 내 일일 마감 요약 리스트
+     */
+    @GetMapping("/history")
+    public List<DailyClosingSummaryDto> getDailyClosingHistory(
+            @AuthenticationPrincipal AppUser principal,
+            @RequestParam("from")
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam("to")
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        Long storeId = principal.getStoreId();
+        return dailyClosingService.getDailyClosingHistory(storeId, from, to);
     }
 }

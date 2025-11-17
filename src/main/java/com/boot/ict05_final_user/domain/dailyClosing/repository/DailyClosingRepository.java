@@ -2,8 +2,11 @@ package com.boot.ict05_final_user.domain.dailyClosing.repository;
 
 import com.boot.ict05_final_user.domain.dailyClosing.entity.DailyClosing;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -21,4 +24,31 @@ public interface DailyClosingRepository
      * @return 일일 마감 정보
      */
     Optional<DailyClosing> findByStoreIdAndClosingDate(Long storeId, LocalDate closingDate);
+
+    /**
+     * 가맹점과 기간을 기준으로 일일 마감 엔티티 목록을 조회한다.
+     *
+     * <p>
+     * - closingDate 가 from 이상, to 이하인 데이터를 모두 조회한다.<br>
+     * - 결과는 closingDate 기준 내림차순으로 정렬된다.
+     * </p>
+     *
+     * @param storeId 가맹점 아이디
+     * @param from    조회 시작 일자(포함)
+     * @param to      조회 종료 일자(포함)
+     * @return 기간 내 일일 마감 엔티티 목록
+     */
+    @Query("""
+           select d
+           from DailyClosing d
+           where d.storeId = :storeId
+             and d.closingDate between :from and :to
+           order by d.closingDate desc
+           """)
+    List<DailyClosing> findDailyClosingHistory(
+            @Param("storeId") Long storeId,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to
+    );
+
 }
