@@ -874,6 +874,538 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 	}
 
 
+	// ============================================================
+	//                      ★ 시간/요일 분석 (신규) ★
+	// ============================================================
+
+	private NumberExpression<Integer> hourOfDay() {
+		return Expressions.numberTemplate(Integer.class, "HOUR({0})", co.orderedAt);
+	}
+
+	/**
+	 * 요일: 1~7, 월=1, …, 일=7 로 변환.
+	 * DAYOFWEEK() 결과(1=일, 7=토)를 보정.
+	 */
+	private NumberExpression<Integer> weekDayKorean() {
+		return Expressions.numberTemplate(
+				Integer.class,
+				"((DAYOFWEEK({0}) + 5) % 7) + 1",
+				co.orderedAt
+		);
+	}
+
+	private BooleanExpression businessHoursFilter(NumberExpression<Integer> hourExpr) {
+		return hourExpr.goe(7).and(hourExpr.loe(20));
+	}
+
+	// =========================
+	//  시간/요일 요약 카드
+	// =========================
+	@Override
+	@Transactional(readOnly = true)
+	public TimeDaySummaryDto fetchTimeDaySummary(Long storeId, LocalDate today) {
+
+		// 이번달 1일
+		LocalDate mtdStart = today.withDayOfMonth(1);
+		// 어제
+		LocalDate mtdEnd = today.minusDays(1);
+
+		// 만약 오늘이 1일이면 mtdEnd < mtdStart -> where 조건은 그대로지만 결과 0건 → 전부 0/ null 처리
+		LocalDateTime startDT = mtdStart.atStartOfDay();
+		LocalDateTime endExDT = today.atStartOfDay(); // 어제 24:00 == 오늘 00:00
+
+		BooleanExpression base = statusCompleted()
+				.and(eqStore(storeId))
+				.and(betweenClosedOpen(co.orderedAt, startDT, endExDT));
+
+		NumberExpression<Integer> hourExpr = hourOfDay();
+		NumberExpression<Integer> weekdayExpr = weekDayKorean();
+		BooleanExpression bizHours = businessHoursFilter(hourExpr);
+
+		NumberExpression<BigDecimal> salesSumExpr = co.totalPrice.sum();
+
+		// ---- 1) 시간대별 매출 ----
+		List<Tuple> hourlyRows = query
+				.select(hourExpr, salesSumExpr)
+				.from(co)
+				.join(co.store, s)
+				.where(base, bizHours)
+				.groupBy(hourExpr)
+				.setHint("org.hibernate.readOnly", true)
+				.setHint("org.hibernate.flushMode", "COMMIT")
+				.setHint("jakarta.persistence.query.timeout", 3000)
+				.fetch();
+
+		Integer peakHour = null;
+		long peakSales = 0L;
+		Integer offHour = null;
+		long offSales = 0L;
+
+		for (Tuple t : hourlyRows) {
+			Integer h = t.get(hourExpr);
+			if (h == null) continue;
+			BigDecimal salesBD = nvlBD(t.get(salesSumExpr));
+			long sales = salesBD.longValue();
+
+			// 피크 (최대 매출)
+			if (sales > peakSales) {
+				peakSales = sales;
+				peakHour = h;
+			}
+			// 비수 (매출>0 중 최소)
+			if (sales > 0L) {
+				if (offHour == null || sales < offSales) {
+					offSales = sales;
+					offHour = h;
+				}
+			}
+		}
+
+		// ---- 2) 요일별 매출 + 주중/주말 ----
+		List<Tuple> weekdayRows = query
+				.select(weekdayExpr, salesSumExpr)
+				.from(co)
+				.join(co.store, s)
+				.where(base, bizHours)
+				.groupBy(weekdayExpr)
+				.setHint("org.hibernate.readOnly", true)
+				.setHint("org.hibernate.flushMode", "COMMIT")
+				.setHint("jakarta.persistence.query.timeout", 3000)
+				.fetch();
+
+		Integer topWeekday = null;
+		long topWeekdaySales = 0L;
+		long weekdaySales = 0L;
+		long weekendSales = 0L;
+
+		for (Tuple t : weekdayRows) {
+			Integer wd = t.get(weekdayExpr);
+			if (wd == null) continue;
+			BigDecimal salesBD = nvlBD(t.get(salesSumExpr));
+			long sales = salesBD.longValue();
+
+			// 최고 매출 요일
+			if (sales > topWeekdaySales) {
+				topWeekdaySales = sales;
+				topWeekday = wd;
+			}
+
+			// 주중(월~금=1~5) / 주말(토,일=6,7)
+			if (wd == 6 || wd == 7) {
+				weekendSales += sales;
+			} else {
+				weekdaySales += sales;
+			}
+		}
+
+		return new TimeDaySummaryDto(
+				peakHour,
+				peakSales,
+				offHour,
+				offSales,
+				topWeekday,
+				topWeekdaySales,
+				weekdaySales,
+				weekendSales
+		);
+	}
+
+
+	// =========================
+	//  시간대별 차트
+	// =========================
+	@Override
+	@Transactional(readOnly = true)
+	public List<TimeHourlyPointDto> fetchTimeHourlyChart(Long storeId, LocalDate startDate, LocalDate endDate) {
+
+		LocalDateTime startDT = startDate.atStartOfDay();
+		LocalDateTime endExDT = endDate.plusDays(1).atStartOfDay();
+
+		BooleanExpression base = statusCompleted()
+				.and(eqStore(storeId))
+				.and(betweenClosedOpen(co.orderedAt, startDT, endExDT));
+
+		NumberExpression<Integer> hourExpr = hourOfDay();
+		BooleanExpression bizHours = businessHoursFilter(hourExpr);
+
+		NumberExpression<BigDecimal> salesSumExpr = co.totalPrice.sum();
+		NumberExpression<Long> orderCountExpr = co.id.countDistinct();
+
+		NumberExpression<Long> visitCountExpr = new CaseBuilder()
+				.when(co.orderType.eq(OrderType.VISIT))
+				.then(1L).otherwise(0L).sum();
+
+		NumberExpression<Long> takeoutCountExpr = new CaseBuilder()
+				.when(co.orderType.eq(OrderType.TAKEOUT))
+				.then(1L).otherwise(0L).sum();
+
+		NumberExpression<Long> deliveryCountExpr = new CaseBuilder()
+				.when(co.orderType.eq(OrderType.DELIVERY))
+				.then(1L).otherwise(0L).sum();
+
+		List<Tuple> rows = query
+				.select(
+						hourExpr,
+						salesSumExpr,
+						orderCountExpr,
+						visitCountExpr,
+						takeoutCountExpr,
+						deliveryCountExpr
+				)
+				.from(co)
+				.join(co.store, s)
+				.where(base, bizHours)
+				.groupBy(hourExpr)
+				.orderBy(hourExpr.asc())
+				.setHint("org.hibernate.readOnly", true)
+				.setHint("org.hibernate.flushMode", "COMMIT")
+				.setHint("jakarta.persistence.query.timeout", 3000)
+				.fetch();
+
+		Map<Integer, TimeHourlyPointDto> map = new HashMap<>();
+		for (Tuple t : rows) {
+			Integer h = t.get(hourExpr);
+			if (h == null) continue;
+
+			BigDecimal salesBD = nvlBD(t.get(salesSumExpr));
+			long sales = salesBD.longValue();
+			long orders = nvlLong(t.get(orderCountExpr));
+			long visit = nvlLong(t.get(visitCountExpr));
+			long takeout = nvlLong(t.get(takeoutCountExpr));
+			long delivery = nvlLong(t.get(deliveryCountExpr));
+
+			map.put(h, new TimeHourlyPointDto(h, sales, orders, visit, takeout, delivery));
+		}
+
+		// 07~20 모든 시간대를 채우되, 없는 시간대는 0으로 채움
+		List<TimeHourlyPointDto> result = new ArrayList<>();
+		for (int h = 7; h <= 20; h++) {
+			TimeHourlyPointDto p = map.get(h);
+			if (p == null) {
+				p = new TimeHourlyPointDto(h, 0L, 0L, 0L, 0L, 0L);
+			}
+			result.add(p);
+		}
+		return result;
+	}
+
+	// =========================
+	//  요일별 차트
+	// =========================
+	@Override
+	@Transactional(readOnly = true)
+	public List<WeekdaySalesPointDto> fetchWeekdayChart(Long storeId, LocalDate startDate, LocalDate endDate) {
+
+		LocalDateTime startDT = startDate.atStartOfDay();
+		LocalDateTime endExDT = endDate.plusDays(1).atStartOfDay();
+
+		BooleanExpression base = statusCompleted()
+				.and(eqStore(storeId))
+				.and(betweenClosedOpen(co.orderedAt, startDT, endExDT));
+
+		NumberExpression<Integer> weekdayExpr = weekDayKorean();
+		NumberExpression<Integer> hourExpr = hourOfDay();
+		BooleanExpression bizHours = businessHoursFilter(hourExpr);
+
+		NumberExpression<BigDecimal> salesSumExpr = co.totalPrice.sum();
+		NumberExpression<Long> orderCountExpr = co.id.countDistinct();
+
+		List<Tuple> rows = query
+				.select(weekdayExpr, salesSumExpr, orderCountExpr)
+				.from(co)
+				.join(co.store, s)
+				.where(base, bizHours)
+				.groupBy(weekdayExpr)
+				.orderBy(weekdayExpr.asc())
+				.setHint("org.hibernate.readOnly", true)
+				.setHint("org.hibernate.flushMode", "COMMIT")
+				.setHint("jakarta.persistence.query.timeout", 3000)
+				.fetch();
+
+		Map<Integer, WeekdaySalesPointDto> map = new HashMap<>();
+		for (Tuple t : rows) {
+			Integer wd = t.get(weekdayExpr);
+			if (wd == null) continue;
+			BigDecimal salesBD = nvlBD(t.get(salesSumExpr));
+			long sales = salesBD.longValue();
+			long orders = nvlLong(t.get(orderCountExpr));
+			map.put(wd, new WeekdaySalesPointDto(wd, sales, orders));
+		}
+
+		List<WeekdaySalesPointDto> result = new ArrayList<>();
+		for (int wd = 1; wd <= 7; wd++) {
+			WeekdaySalesPointDto p = map.get(wd);
+			if (p == null) {
+				p = new WeekdaySalesPointDto(wd, 0L, 0L);
+			}
+			result.add(p);
+		}
+		return result;
+	}
+
+	// =========================
+	//  일별 테이블 (날짜+요일+시간대)
+	// =========================
+	@Override
+	@Transactional(readOnly = true)
+	public CursorPage<TimeDayDailyRowDto> fetchTimeDayDailyRows(Long storeId, AnalyticsSearchDto cond) {
+
+		int size = (cond.size() == null ? 50 : cond.size());
+
+		LocalDateTime startDT = cond.startDate().atStartOfDay();
+		LocalDateTime endExDT = cond.endDate().plusDays(1).atStartOfDay();
+
+		BooleanExpression base = statusCompleted()
+				.and(eqStore(storeId))
+				.and(betweenClosedOpen(co.orderedAt, startDT, endExDT));
+
+		NumberExpression<Integer> hourExpr = hourOfDay();
+		NumberExpression<Integer> weekdayExpr = weekDayKorean();
+		BooleanExpression bizHours = businessHoursFilter(hourExpr);
+
+		StringTemplate dayLabel = Expressions.stringTemplate(
+				"DATE_FORMAT({0}, '%Y-%m-%d')", co.orderedAt
+		);
+
+		NumberExpression<BigDecimal> salesSumExpr = co.totalPrice.sum();
+		NumberExpression<Long> orderCntExpr = co.id.countDistinct();
+
+		NumberExpression<Long> visitCntExpr = new CaseBuilder()
+				.when(co.orderType.eq(OrderType.VISIT))
+				.then(1L).otherwise(0L).sum();
+
+		NumberExpression<Long> takeoutCntExpr = new CaseBuilder()
+				.when(co.orderType.eq(OrderType.TAKEOUT))
+				.then(1L).otherwise(0L).sum();
+
+		NumberExpression<Long> deliveryCntExpr = new CaseBuilder()
+				.when(co.orderType.eq(OrderType.DELIVERY))
+				.then(1L).otherwise(0L).sum();
+
+		// 커서: "YYYY-MM-DD|HH"
+		BooleanExpression cursorFilter = null;
+		String cursor = cond.cursor();
+		if (cursor != null && cursor.contains("|")) {
+			try {
+				String[] parts = cursor.split("\\|");
+				String cDate = parts[0];
+				int cHour = Integer.parseInt(parts[1]);
+
+				cursorFilter = dayLabel.lt(cDate)
+						.or(
+								dayLabel.eq(cDate)
+										.and(hourExpr.gt(cHour))
+						);
+			} catch (Exception ignore) {
+				cursorFilter = null;
+			}
+		}
+
+		List<Tuple> rows = query
+				.select(
+						dayLabel,
+						weekdayExpr,
+						hourExpr,
+						salesSumExpr,
+						orderCntExpr,
+						visitCntExpr,
+						takeoutCntExpr,
+						deliveryCntExpr
+				)
+				.from(co)
+				.join(co.store, s)
+				.where(base, bizHours, cursorFilter)
+				.groupBy(dayLabel, weekdayExpr, hourExpr)
+				.orderBy(dayLabel.desc(), hourExpr.asc())
+				.limit(size + 1)
+				.setHint("org.hibernate.readOnly", true)
+				.setHint("org.hibernate.flushMode", "COMMIT")
+				.setHint("jakarta.persistence.query.timeout", 3000)
+				.fetch();
+
+		List<TimeDayDailyRowDto> result = new ArrayList<>();
+		String nextCursor = null;
+
+		for (Tuple t : rows) {
+			if (result.size() == size) {
+				String d = t.get(dayLabel);
+				Integer h = t.get(hourExpr);
+				if (d != null && h != null) {
+					nextCursor = d + "|" + h;
+				}
+				break;
+			}
+
+			String d = t.get(dayLabel);
+			Integer wd = t.get(weekdayExpr);
+			Integer h = t.get(hourExpr);
+
+			BigDecimal salesBD = nvlBD(t.get(salesSumExpr));
+			long sales = salesBD.longValue();
+			long orderCnt = nvlLong(t.get(orderCntExpr));
+			long visit = nvlLong(t.get(visitCntExpr));
+			long takeout = nvlLong(t.get(takeoutCntExpr));
+			long delivery = nvlLong(t.get(deliveryCntExpr));
+
+			double visitRate = safeDiv(visit, orderCnt);
+			double takeoutRate = safeDiv(takeout, orderCnt);
+			double deliveryRate = safeDiv(delivery, orderCnt);
+
+			result.add(new TimeDayDailyRowDto(
+					d,
+					wd == null ? 0 : wd,
+					h == null ? 0 : h,
+					orderCnt,
+					sales,
+					visit,
+					takeout,
+					delivery,
+					visitRate,
+					takeoutRate,
+					deliveryRate
+			));
+		}
+
+		return new CursorPage<>(result, nextCursor);
+	}
+
+	// =========================
+	//  월별 테이블 (월+요일+시간대)
+	// =========================
+	@Override
+	@Transactional(readOnly = true)
+	public CursorPage<TimeDayMonthlyRowDto> fetchTimeDayMonthlyRows(Long storeId, AnalyticsSearchDto cond) {
+
+		int size = (cond.size() == null ? 50 : cond.size());
+
+		LocalDateTime startDT = cond.startDate().atStartOfDay();
+		LocalDateTime endExDT = cond.endDate().plusDays(1).atStartOfDay();
+
+		BooleanExpression base = statusCompleted()
+				.and(eqStore(storeId))
+				.and(betweenClosedOpen(co.orderedAt, startDT, endExDT));
+
+		NumberExpression<Integer> hourExpr = hourOfDay();
+		NumberExpression<Integer> weekdayExpr = weekDayKorean();
+		BooleanExpression bizHours = businessHoursFilter(hourExpr);
+
+		StringTemplate ymLabel = Expressions.stringTemplate(
+				"DATE_FORMAT({0}, '%Y-%m')", co.orderedAt
+		);
+
+		NumberExpression<BigDecimal> salesSumExpr = co.totalPrice.sum();
+		NumberExpression<Long> orderCntExpr = co.id.countDistinct();
+
+		NumberExpression<Long> visitCntExpr = new CaseBuilder()
+				.when(co.orderType.eq(OrderType.VISIT))
+				.then(1L).otherwise(0L).sum();
+
+		NumberExpression<Long> takeoutCntExpr = new CaseBuilder()
+				.when(co.orderType.eq(OrderType.TAKEOUT))
+				.then(1L).otherwise(0L).sum();
+
+		NumberExpression<Long> deliveryCntExpr = new CaseBuilder()
+				.when(co.orderType.eq(OrderType.DELIVERY))
+				.then(1L).otherwise(0L).sum();
+
+		// 커서: "YYYY-MM|weekday|hour"
+		BooleanExpression cursorFilter = null;
+		String cursor = cond.cursor();
+		if (cursor != null && !cursor.isBlank() && cursor.contains("|")) {
+			try {
+				String[] parts = cursor.split("\\|");
+				String cYm = parts[0];
+				int cWd = Integer.parseInt(parts[1]);
+				int cHour = Integer.parseInt(parts[2]);
+
+				BooleanExpression afterSameYm =
+						weekdayExpr.gt(cWd)
+								.or(
+										weekdayExpr.eq(cWd)
+												.and(hourExpr.gt(cHour))
+								);
+
+				cursorFilter = ymLabel.lt(cYm)
+						.or(
+								ymLabel.eq(cYm).and(afterSameYm)
+						);
+			} catch (Exception ignore) {
+				cursorFilter = null;
+			}
+		}
+
+		List<Tuple> rows = query
+				.select(
+						ymLabel,
+						weekdayExpr,
+						hourExpr,
+						salesSumExpr,
+						orderCntExpr,
+						visitCntExpr,
+						takeoutCntExpr,
+						deliveryCntExpr
+				)
+				.from(co)
+				.join(co.store, s)
+				.where(base, bizHours, cursorFilter)
+				.groupBy(ymLabel, weekdayExpr, hourExpr)
+				.orderBy(
+						ymLabel.desc(),
+						weekdayExpr.asc(),
+						hourExpr.asc()
+				)
+				.limit(size + 1)
+				.setHint("org.hibernate.readOnly", true)
+				.setHint("org.hibernate.flushMode", "COMMIT")
+				.setHint("jakarta.persistence.query.timeout", 3000)
+				.fetch();
+
+		List<TimeDayMonthlyRowDto> result = new ArrayList<>();
+		String nextCursor = null;
+
+		for (Tuple t : rows) {
+			if (result.size() == size) {
+				String ym = t.get(ymLabel);
+				Integer wd = t.get(weekdayExpr);
+				Integer h = t.get(hourExpr);
+				if (ym != null && wd != null && h != null) {
+					nextCursor = ym + "|" + wd + "|" + h;
+				}
+				break;
+			}
+
+			String ym = t.get(ymLabel);
+			Integer wd = t.get(weekdayExpr);
+			Integer h = t.get(hourExpr);
+
+			BigDecimal salesBD = nvlBD(t.get(salesSumExpr));
+			long sales = salesBD.longValue();
+			long orderCnt = nvlLong(t.get(orderCntExpr));
+			long visit = nvlLong(t.get(visitCntExpr));
+			long takeout = nvlLong(t.get(takeoutCntExpr));
+			long delivery = nvlLong(t.get(deliveryCntExpr));
+
+			double visitRate = safeDiv(visit, orderCnt);
+			double takeoutRate = safeDiv(takeout, orderCnt);
+			double deliveryRate = safeDiv(delivery, orderCnt);
+
+			result.add(new TimeDayMonthlyRowDto(
+					ym,
+					wd == null ? 0 : wd,
+					h == null ? 0 : h,
+					orderCnt,
+					sales,
+					visit,
+					takeout,
+					delivery,
+					visitRate,
+					takeoutRate,
+					deliveryRate
+			));
+		}
+
+		return new CursorPage<>(result, nextCursor);
+	}
 
 
 

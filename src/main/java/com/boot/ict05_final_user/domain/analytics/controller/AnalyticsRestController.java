@@ -188,4 +188,93 @@ public class AnalyticsRestController {
 		);
 		return ResponseEntity.ok(service.getMenuMonthlyRows(storeId, cond));
 	}
+
+	// ==================================================
+	//               ★ 시간/요일 분석 (신규) ★
+	// ==================================================
+
+	/**
+	 * 시간/요일 분석 상단 요약 카드
+	 */
+	@GetMapping("/api/analytics/time-day/summary")
+	public ResponseEntity<TimeDaySummaryDto> getTimeDaySummary(
+			@RequestParam(required = false) Long storeId
+	) {
+		if (storeId == null) storeId = 1L;
+		return ResponseEntity.ok(service.getTimeDaySummary(storeId));
+	}
+
+	/**
+	 * 시간대별 매출/주문수 차트
+	 */
+	@GetMapping("/api/analytics/time-day/hourly-chart")
+	public ResponseEntity<java.util.List<TimeHourlyPointDto>> getTimeDayHourlyChart(
+			@RequestParam String start,
+			@RequestParam String end,
+			@RequestParam(required = false) Long storeId
+	) {
+		if (storeId == null) storeId = 1L;
+		LocalDate startDate = LocalDate.parse(start);
+		LocalDate endDate = LocalDate.parse(end);
+		return ResponseEntity.ok(service.getTimeDayHourlyChart(storeId, startDate, endDate));
+	}
+
+	/**
+	 * 요일별 매출/주문수 차트
+	 */
+	@GetMapping("/api/analytics/time-day/weekday-chart")
+	public ResponseEntity<java.util.List<WeekdaySalesPointDto>> getWeekdayChart(
+			@RequestParam String start,
+			@RequestParam String end,
+			@RequestParam(required = false) Long storeId
+	) {
+		if (storeId == null) storeId = 1L;
+		LocalDate startDate = LocalDate.parse(start);
+		LocalDate endDate = LocalDate.parse(end);
+		return ResponseEntity.ok(service.getWeekdayChart(storeId, startDate, endDate));
+	}
+
+	/**
+	 * 시간/요일 분석 - 일별 테이블
+	 */
+	@GetMapping("/api/analytics/time-day/day-rows")
+	public ResponseEntity<CursorPage<TimeDayDailyRowDto>> getTimeDayDailyRows(
+			@RequestParam String start,
+			@RequestParam String end,
+			@RequestParam(defaultValue = "50") Integer size,
+			@RequestParam(required = false) String cursor,
+			@RequestParam(required = false) Long storeId
+	) {
+		if (storeId == null) storeId = 1L;
+		AnalyticsSearchDto cond = new AnalyticsSearchDto(
+				LocalDate.parse(start),
+				LocalDate.parse(end),
+				AnalyticsSearchDto.ViewBy.DAY,
+				size,
+				cursor
+		);
+		return ResponseEntity.ok(service.getTimeDayDailyRows(storeId, cond));
+	}
+
+	/**
+	 * 시간/요일 분석 - 월별 테이블
+	 */
+	@GetMapping("/api/analytics/time-day/month-rows")
+	public ResponseEntity<CursorPage<TimeDayMonthlyRowDto>> getTimeDayMonthlyRows(
+			@RequestParam String start,
+			@RequestParam String end,
+			@RequestParam(defaultValue = "50") Integer size,
+			@RequestParam(required = false) String cursor,
+			@RequestParam(required = false) Long storeId
+	) {
+		if (storeId == null) storeId = 1L;
+		AnalyticsSearchDto cond = new AnalyticsSearchDto(
+				LocalDate.parse(start),
+				LocalDate.parse(end),
+				AnalyticsSearchDto.ViewBy.MONTH,
+				size,
+				cursor
+		);
+		return ResponseEntity.ok(service.getTimeDayMonthlyRows(storeId, cond));
+	}
 }
