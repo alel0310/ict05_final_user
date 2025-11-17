@@ -1,14 +1,15 @@
 package com.boot.ict05_final_user.domain.dailyClosing.controller;
 
+import com.boot.ict05_final_user.config.security.principal.AppUser;
 import com.boot.ict05_final_user.domain.dailyClosing.dto.DailyClosingInitResponse;
+import com.boot.ict05_final_user.domain.dailyClosing.dto.DailyClosingOpenRequest;
+import com.boot.ict05_final_user.domain.dailyClosing.dto.DailyClosingSaveRequest;
 import com.boot.ict05_final_user.domain.dailyClosing.service.DailyClosingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 
@@ -23,18 +24,43 @@ public class DailyClosingController {
     private final DailyClosingService dailyClosingService;
 
     /**
+     * 일일 시재 오픈(시작 시재 등록) API.
+     *
+     * <p>아침에 점포를 오픈할 때 해당 일자의 시작 시재(준비금)를 등록하는 용도이다.</p>
+     *
+     * <p>동작 순서</p>
+     * <ol>
+     *     <li>인증 정보(AppUser)에서 현재 가맹점의 storeId 를 추출한다.</li>
+     *     <li>요청 본문으로 받은 closingDate, startingCash 를 서비스 계층에 전달한다.</li>
+     *     <li>이미 마감된 일자인 경우 서비스에서 IllegalStateException 을 발생시키고,
+     *         전역 예외 처리기에서 적절한 HTTP 상태 코드로 변환해 반환한다.</li>
+     * </ol>
+     *
+     * @param user 현재 로그인한 사용자(AppUser)
+     * @param request 오픈 요청 본문(일자, 시작 시재)
+     */
+    @PostMapping("/open")
+    public void openDailyClosing(
+            @AuthenticationPrincipal AppUser user,
+            @RequestBody DailyClosingOpenRequest request
+    ) {
+        Long storeId = user.getStoreId();
+        dailyClosingService.openDailyClosing(storeId, request);
+    }
+
+    /**
      * 일일 시재 마감 화면 진입 시 필요한 데이터를 조회한다.
      *
      * date 파라미터가 없으면 오늘 날짜를 기준으로 조회한다.
      * 실제 서비스에서는 로그인 정보에서 점포 아이디를 추출해 사용해야 한다.
      *
-     * @param principal 현재 로그인 사용자 정보
+     * @param user 현재 로그인 사용자 정보
      * @param date      조회 기준 일자 (선택)
      * @return 화면에서 사용할 초기 데이터
      */
     @GetMapping("/close")
     public DailyClosingInitResponse getDailyClosing(
-            @AuthenticationPrincipal Object principal,
+            @AuthenticationPrincipal AppUser user,
             @RequestParam(value = "date", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
     ) {
@@ -42,24 +68,36 @@ public class DailyClosingController {
             date = LocalDate.now();
         }
 
-        Long storeId = extractStoreId(principal);
+        Long storeId = extractStoreId(user);
 
         return dailyClosingService.getDailyClosing(storeId, date);
     }
 
     /**
      * 로그인 정보에서 점포 아이디를 꺼내는 헬퍼 메서드.
-     * 실제 프로젝트에서 사용하는 Principal 타입에 맞게 구현을 수정해야 한다.
      *
-     * 예시
-     *   if (principal instanceof StoreUserPrincipal user) {
-     *       return user.getStoreId();
-     *   }
-     *
-     * @param principal 인증 정보
+     * @param user 인증 정보
      * @return 점포 아이디
      */
-    private Long extractStoreId(Object principal) {
-        throw new IllegalStateException("storeId 추출 로직을 DailyClosingRestController.extractStoreId 에 구현해 주세요.");
+    private Long extractStoreId(AppUser user) {
+        if (user == null) {
+            throw new IllegalStateException("로그인 정보가 없습니다. storeId 를 추출할 수 없습니다.");
+        }
+        return user.getStoreId();
+    }
+
+    /**
+     * 일일 시재 마감 내용을 저장한다.
+     *
+     * 이미 해당 일자에 마감 데이터가 있으면 수정,
+     * 없으면 새로 생성하는 방식으로 처리한다.
+     */
+    @PostMapping("/close")
+    public void saveDailyClosing(
+            @AuthenticationPrincipal AppUser user,
+            @RequestBody DailyClosingSaveRequest request
+    ) {
+        Long storeId = extractStoreId(user);
+        dailyClosingService.saveDailyClosing(storeId, request);
     }
 }

@@ -13,5 +13,12 @@ import java.util.Optional;
 public interface DailyClosingRepository
         extends JpaRepository<DailyClosing, Long>, DailyClosingRepositoryCustom {
 
+    /**
+     * 점포와 마감일 기준으로 일일 마감 엔티티를 조회한다.
+     *
+     * @param storeId     가맹점 아이디
+     * @param closingDate 마감일
+     * @return 일일 마감 정보
+     */
     Optional<DailyClosing> findByStoreIdAndClosingDate(Long storeId, LocalDate closingDate);
 }

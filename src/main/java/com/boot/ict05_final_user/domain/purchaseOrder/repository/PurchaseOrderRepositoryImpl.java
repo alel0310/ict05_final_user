@@ -266,12 +266,12 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
                 throw new IllegalStateException("본사 재료와 매핑되지 않은 가맹점 재료입니다. id=" + storeMaterialId);
             }
 
-            BigDecimal itemTotal = sm.getSellingPrice().multiply(BigDecimal.valueOf(itemDTO.getCount()));
+            BigDecimal itemTotal = sm.getPurchasePrice().multiply(BigDecimal.valueOf(itemDTO.getCount()));
 
             queryFactory.insert(pod)
                     .set(pod.purchaseOrder.id, purchaseOrderId)
                     .set(pod.material.id, sm.getId())      // StoreMaterial FK
-                    .set(pod.unitPrice, sm.getSellingPrice())
+                    .set(pod.unitPrice, sm.getPurchasePrice())
                     .set(pod.count, itemDTO.getCount())
                     .set(pod.totalPrice, itemTotal)
                     .execute();
@@ -381,7 +381,7 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
                 throw new IllegalStateException("본사 재료와 매핑되지 않은 가맹점 재료입니다. id=" + storeMaterialId);
             }
 
-            BigDecimal unitPrice = sm.getSellingPrice();
+            BigDecimal unitPrice = sm.getPurchasePrice();
             BigDecimal totalPrice = unitPrice.multiply(BigDecimal.valueOf(count));
 
             Long detailId = queryFactory

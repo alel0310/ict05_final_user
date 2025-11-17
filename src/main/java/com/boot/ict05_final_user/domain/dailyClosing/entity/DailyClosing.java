@@ -7,6 +7,8 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 가맹점 일일 시재 및 마감 정보를 저장하는 엔티티.
@@ -116,6 +118,18 @@ public class DailyClosing {
     @Column(name = "difference_memo", length = 1000)
     private String differenceMemo;
 
+    /** 마감 여부 (true 이면 해당 일자는 이미 마감 완료) */
+    @Column(name = "is_closed", nullable = false)
+    private boolean isClosed;
+
+    /** 지출 항목 컬렉션 */
+    @OneToMany(mappedBy = "closing", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<DailyClosingExpense> expenses = new ArrayList<>();
+
+    /** 권종별 시재 컬렉션 */
+    @OneToMany(mappedBy = "closing", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<DailyClosingDenom> denoms = new ArrayList<>();
+
     /** 마감 처리한 직원(점주/알바 등) ID */
     @Column(name = "created_by_member_id")
     private Long createdByMemberId;
@@ -129,5 +143,45 @@ public class DailyClosing {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    /**
+     * 마감 여부를 boolean 타입으로 반환하는 헬퍼 메서드.
+     *
+     * @return true 이면 마감 완료, false 이면 미마감 상태
+     */
+    public boolean isClosed() {
+        return Boolean.TRUE.equals(isClosed);
+    }
+
+    /**
+     * 마감 여부를 설정한다.
+     *
+     * @param isClosed true 이면 마감 완료, false 이면 미마감 상태
+     */
+    public void setClosed(boolean isClosed) {
+        this.isClosed = isClosed;
+    }
+
+    // 지출 컬렉션 조작 편의 메서드
+    public void clearExpenses() {
+        this.expenses.clear();
+    }
+
+    public void addExpense(DailyClosingExpense expense) {
+        if (expense == null) return;
+        expense.setClosing(this);
+        this.expenses.add(expense);
+    }
+
+    // 권종 컬렉션 조작 편의 메서드
+    public void clearDenoms() {
+        this.denoms.clear();
+    }
+
+    public void addDenom(DailyClosingDenom denom) {
+        if (denom == null) return;
+        denom.setClosing(this);
+        this.denoms.add(denom);
+    }
 
 }
