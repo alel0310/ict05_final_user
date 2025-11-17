@@ -1,6 +1,6 @@
-package com.boot.ict05_final_user.domain.material.dto;
+package com.boot.ict05_final_user.domain.inventory.dto;
 
-import com.boot.ict05_final_user.domain.material.entity.MaterialStatus;
+import com.boot.ict05_final_user.domain.inventory.entity.MaterialStatus;
 import lombok.Data;
 
 /**

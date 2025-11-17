@@ -1,7 +1,7 @@
 package com.boot.ict05_final_user.domain.inventory.repository;
 
-import com.boot.ict05_final_user.domain.material.entity.Material;
-import com.boot.ict05_final_user.domain.material.entity.MaterialStatus;
+import com.boot.ict05_final_user.domain.inventory.entity.Material;
+import com.boot.ict05_final_user.domain.inventory.entity.MaterialStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

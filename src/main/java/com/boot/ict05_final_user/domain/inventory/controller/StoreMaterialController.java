@@ -1,6 +1,6 @@
-package com.boot.ict05_final_user.domain.material.controller;
+package com.boot.ict05_final_user.domain.inventory.controller;
 
-import com.boot.ict05_final_user.domain.material.service.StoreMaterialService;
+import com.boot.ict05_final_user.domain.inventory.service.StoreMaterialService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;

@@ -1,4 +1,4 @@
-package com.boot.ict05_final_user.domain.material.entity;
+package com.boot.ict05_final_user.domain.inventory.entity;
 
 /**
  * 재료 보관방법 Enum

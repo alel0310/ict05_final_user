@@ -1,4 +1,4 @@
-package com.boot.ict05_final_user.domain.material.entity;
+package com.boot.ict05_final_user.domain.inventory.entity;
 
 /**
  * 재료의 상태 Enum

@@ -1,6 +1,6 @@
 package com.boot.ict05_final_user.domain.purchaseOrder.entity;
 
-import com.boot.ict05_final_user.domain.material.entity.StoreMaterial;
+import com.boot.ict05_final_user.domain.inventory.entity.StoreMaterial;
 import jakarta.persistence.*;
 import lombok.*;
 

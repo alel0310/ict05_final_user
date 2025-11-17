@@ -2,7 +2,7 @@ package com.boot.ict05_final_user.domain.inventory.repository;
 
 import com.boot.ict05_final_user.domain.inventory.entity.StoreInventoryBatch;
 import com.boot.ict05_final_user.domain.inventory.entity.StoreInventory;
-import com.boot.ict05_final_user.domain.material.entity.StoreMaterial;
+import com.boot.ict05_final_user.domain.inventory.entity.StoreMaterial;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

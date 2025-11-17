@@ -1,8 +1,8 @@
-package com.boot.ict05_final_user.domain.material.dto;
+package com.boot.ict05_final_user.domain.inventory.dto;
 
-import com.boot.ict05_final_user.domain.material.entity.MaterialCategory;
-import com.boot.ict05_final_user.domain.material.entity.MaterialStatus;
-import com.boot.ict05_final_user.domain.material.entity.MaterialTemperature;
+import com.boot.ict05_final_user.domain.inventory.entity.MaterialCategory;
+import com.boot.ict05_final_user.domain.inventory.entity.MaterialStatus;
+import com.boot.ict05_final_user.domain.inventory.entity.MaterialTemperature;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;

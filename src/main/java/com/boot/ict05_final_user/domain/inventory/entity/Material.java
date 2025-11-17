@@ -1,6 +1,6 @@
-package com.boot.ict05_final_user.domain.material.entity;
+package com.boot.ict05_final_user.domain.inventory.entity;
 
-import com.boot.ict05_final_user.domain.material.dto.MaterialModifyFormDTO;
+import com.boot.ict05_final_user.domain.inventory.dto.MaterialModifyFormDTO;
 import jakarta.persistence.*;
 
 import lombok.Getter;

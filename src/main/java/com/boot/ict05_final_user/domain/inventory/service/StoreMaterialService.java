@@ -1,12 +1,12 @@
-package com.boot.ict05_final_user.domain.material.service;
+package com.boot.ict05_final_user.domain.inventory.service;
 
-import com.boot.ict05_final_user.domain.material.dto.StoreMaterialCreateDTO;
+import com.boot.ict05_final_user.domain.inventory.dto.StoreMaterialCreateDTO;
 import com.boot.ict05_final_user.domain.inventory.entity.InventoryStatus;
 import com.boot.ict05_final_user.domain.inventory.entity.StoreInventory;
 import com.boot.ict05_final_user.domain.inventory.repository.StoreInventoryRepository;
-import com.boot.ict05_final_user.domain.material.entity.Material;
-import com.boot.ict05_final_user.domain.material.entity.MaterialStatus;
-import com.boot.ict05_final_user.domain.material.entity.StoreMaterial;
+import com.boot.ict05_final_user.domain.inventory.entity.Material;
+import com.boot.ict05_final_user.domain.inventory.entity.MaterialStatus;
+import com.boot.ict05_final_user.domain.inventory.entity.StoreMaterial;
 import com.boot.ict05_final_user.domain.inventory.repository.MaterialRepository;
 import com.boot.ict05_final_user.domain.inventory.repository.StoreMaterialRepository;
 import com.boot.ict05_final_user.domain.store.entity.Store;
