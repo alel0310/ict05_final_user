@@ -1,4 +1,3 @@
-// src/main/java/com/boot/ict05_final_user/domain/kitchen/dto/KitchenOrderResponseDTO.java
 package com.boot.ict05_final_user.domain.kitchen.dto;
 
 import lombok.*;

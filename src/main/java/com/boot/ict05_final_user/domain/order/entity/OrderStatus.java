@@ -5,6 +5,7 @@ public enum OrderStatus {
     PENDING("대기"),
     PAID("결제완료"),
     PREPARING("준비중"),
+    COOKING("조리중"),
     COMPLETED("완료"),
     CANCELED("취소"),
     READY("픽업대기"),

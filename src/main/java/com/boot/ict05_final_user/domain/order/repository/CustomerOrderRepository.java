@@ -19,9 +19,10 @@ public interface CustomerOrderRepository extends JpaRepository<CustomerOrder, Lo
     Optional<CustomerOrder> findTopByOrderByIdDesc();
 
     // 주방에서 사용할 주문 목록 조회 (가맹점 기준 + 상태 in)
-    List<CustomerOrder> findByStore_IdAndStatusInOrderByCreatedAtAsc(
+    List<CustomerOrder> findByStore_IdAndStatusInOrderByOrderedAtAsc(
             Long storeId,
             List<OrderStatus> statuses
     );
+
 }
 

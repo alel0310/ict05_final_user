@@ -5,8 +5,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 
-public interface CustomerOrderDetailRepository extends JpaRepository<CustomerOrderDetail, Long> {
+public interface CustomerOrderDetailRepository
+        extends JpaRepository<CustomerOrderDetail, Long> {
 
-    List<CustomerOrderDetail> findByCustomerOrder_Id(Long orderId);
-
+    List<CustomerOrderDetail> findByOrder_Id(Long orderId);
 }

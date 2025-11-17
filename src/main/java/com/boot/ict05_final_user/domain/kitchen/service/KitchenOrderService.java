@@ -26,8 +26,7 @@ import java.util.stream.Collectors;
 public class KitchenOrderService {
 
     private final CustomerOrderRepository orderRepository;
-    private final CustomerOrderDetailRepository orderDetailRepository;  // 추가
-
+    private final CustomerOrderDetailRepository orderDetailRepository;
 
     /**
      * 주방 화면 주문 목록
@@ -37,12 +36,13 @@ public class KitchenOrderService {
     public List<KitchenOrderResponseDTO> getKitchenOrders(Long storeId) {
 
         List<OrderStatus> statuses = Arrays.asList(
-                OrderStatus.PREPARING,  // 준비중 (프론트: preparing / cooking)
-                OrderStatus.READY       // 픽업대기 (프론트: ready)
+                OrderStatus.PREPARING,  // 접수/준비 대기
+                OrderStatus.COOKING,    // 🔥 새로 추가된 조리중
+                OrderStatus.READY       // 픽업대기
         );
 
         List<CustomerOrder> orders = orderRepository
-                .findByStore_IdAndStatusInOrderByCreatedAtAsc(storeId, statuses);
+                .findByStore_IdAndStatusInOrderByOrderedAtAsc(storeId, statuses);
 
         return orders.stream()
                 .map(this::toDto)
@@ -66,10 +66,12 @@ public class KitchenOrderService {
         return toDto(order);
     }
 
+    // ===================== DTO 변환 ===================== //
+
     private KitchenOrderResponseDTO toDto(CustomerOrder order) {
 
         List<CustomerOrderDetail> details =
-                orderDetailRepository.findByCustomerOrder_Id(order.getId());
+                orderDetailRepository.findByOrder_Id(order.getId());
 
         List<KitchenOrderItemDTO> items = details.stream()
                 .map(this::toItemDto)
@@ -93,27 +95,25 @@ public class KitchenOrderService {
     }
 
     private KitchenOrderItemDTO toItemDto(CustomerOrderDetail detail) {
-        Menu menu = detail.getMenu();
+        Menu menu = detail.getMenuIdFk();
 
         return KitchenOrderItemDTO.builder()
-                .menuId(menu.getMenuId())
-                .name(menu.getMenuName())
-                .price(detail.getPrice())          // BigDecimal
-                .quantity(detail.getQuantity())
+                .menuId(menu.getMenuId())          // Menu 엔티티의 PK 게터 이름에 맞게 (보통 getMenuId)
+                .name(menu.getMenuName())          // 메뉴 이름 필드에 맞게
+                .price(detail.getUnitPrice())      // 단가 (BigDecimal)
+                .quantity(detail.getQuantity())    // 수량
                 .image("🍔")
                 .options(null)
                 .build();
     }
-}
-
-
 
     // ===================== 상태 매핑 ===================== //
 
     /** 백엔드 → 프론트 상태 변환 */
     private String toFrontStatus(OrderStatus status) {
         return switch (status) {
-            case PREPARING -> "preparing";   // 프론트는 preparing/cooking 둘 다 PREPARING
+            case PREPARING -> "preparing";
+            case COOKING   -> "cooking";
             case READY -> "ready";
             case COMPLETED -> "completed";
             default -> "preparing";
@@ -124,33 +124,31 @@ public class KitchenOrderService {
     private OrderStatus fromFrontStatus(String status) {
         return switch (status) {
             case "preparing" -> OrderStatus.PREPARING;
-            case "cooking" -> OrderStatus.PREPARING;   // cooking 도 PREPARING 으로 저장
-            case "ready" -> OrderStatus.READY;
+            case "cooking"   -> OrderStatus.COOKING;
+            case "ready"     -> OrderStatus.READY;
             case "completed" -> OrderStatus.COMPLETED;
             default -> throw new IllegalArgumentException("Unknown status: " + status);
         };
     }
-
-
 
     // ===================== 한글 매핑 ===================== //
 
     private String toKorOrderType(OrderType type) {
         if (type == null) return "방문";
         return switch (type) {
-            case VISIT -> "방문";
+            case VISIT   -> "방문";
             case TAKEOUT -> "포장";
-            case DELIVERY -> "배달";
+            case DELIVERY-> "배달";
         };
     }
 
     private String toKorPayment(PaymentType type) {
         if (type == null) return "기타";
         return switch (type) {
-            case CARD -> "카드";
-            case CASH -> "현금";
+            case CARD    -> "카드";
+            case CASH    -> "현금";
             case VOUCHER -> "상품권";
-            case EXTERNAL -> "외부결제";
+            case EXTERNAL-> "외부결제";
         };
     }
 }
