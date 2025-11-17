@@ -1,16 +1,14 @@
 package com.boot.ict05_final_user.domain.purchaseOrder.repository;
 
-import com.boot.ict05_final_user.domain.inventory.entity.QMaterial;
-import com.boot.ict05_final_user.domain.inventory.entity.QStoreMaterial;
-import com.boot.ict05_final_user.domain.inventory.entity.StoreMaterial;
+import com.boot.ict05_final_user.domain.material.entity.QMaterial;
+import com.boot.ict05_final_user.domain.material.entity.QStoreMaterial;
+import com.boot.ict05_final_user.domain.material.entity.StoreMaterial;
 import com.boot.ict05_final_user.domain.purchaseOrder.dto.*;
 import com.boot.ict05_final_user.domain.purchaseOrder.entity.*;
 import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

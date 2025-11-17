@@ -1,8 +1,12 @@
-package com.boot.ict05_final_user.domain.inventory.service;
+package com.boot.ict05_final_user.domain.material.service;
 
-import com.boot.ict05_final_user.domain.inventory.dto.StoreMaterialCreateDTO;
-import com.boot.ict05_final_user.domain.inventory.entity.Material;
-import com.boot.ict05_final_user.domain.inventory.entity.StoreMaterial;
+import com.boot.ict05_final_user.domain.material.dto.StoreMaterialCreateDTO;
+import com.boot.ict05_final_user.domain.inventory.entity.InventoryStatus;
+import com.boot.ict05_final_user.domain.inventory.entity.StoreInventory;
+import com.boot.ict05_final_user.domain.inventory.repository.StoreInventoryRepository;
+import com.boot.ict05_final_user.domain.material.entity.Material;
+import com.boot.ict05_final_user.domain.material.entity.MaterialStatus;
+import com.boot.ict05_final_user.domain.material.entity.StoreMaterial;
 import com.boot.ict05_final_user.domain.inventory.repository.MaterialRepository;
 import com.boot.ict05_final_user.domain.inventory.repository.StoreMaterialRepository;
 import com.boot.ict05_final_user.domain.store.entity.Store;
@@ -13,14 +17,77 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class StoreMaterialService {
 
-    private final StoreMaterialRepository storeMaterialRepository;
     private final StoreRepository storeRepository;
     private final MaterialRepository materialRepository;
+    private final StoreMaterialRepository storeMaterialRepository;
+    private final StoreInventoryRepository storeInventoryRepository;
+
+    /**
+     * 선택 가맹점에 대해 본사 재료를 일괄 매핑한다.
+     *
+     * - 이미 StoreMaterial 이 있는 본사 재료는 건너뜀
+     * - 새로 생성되는 StoreMaterial 은 status=STOP, hqMaterial=true
+     * - StoreInventory 도 함께 생성(수량 0)
+     *
+     * @return 새로 생성된 StoreMaterial 개수
+     */
+    public int mapAllHqMaterialsToStore(Long storeId) {
+        Store store = storeRepository.findById(storeId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 매장: " + storeId));
+
+        // 본사에서 실제 사용 중인 재료만 매핑하고 싶으면 USE 로 필터
+        List<Material> hqMaterials = materialRepository.findByMaterialStatus(MaterialStatus.USE);
+
+        int created = 0;
+
+        for (Material material : hqMaterials) {
+            if (storeMaterialRepository.existsByStoreAndMaterial(store, material)) {
+                continue;   // 이미 매핑된 재료는 스킵
+            }
+
+            // 코드/이름/단위/카테고리는 본사 재료에서 기본값 복사
+            StoreMaterial storeMaterial = StoreMaterial.builder()
+                    .store(store)
+                    .material(material)
+                    .code(material.getCode())                  // 필요하면 점포 prefix 끼워넣기
+                    .name(material.getName())
+                    .category(material.getMaterialCategory().name())
+                    .baseUnit(material.getBaseUnit())          // 본사 엔티티에 맞게
+                    .salesUnit(material.getSalesUnit())
+                    .conversionRate(material.getConversionRate())
+                    .supplier(null)                            // 가맹점에서 별도 입력
+                    .temperature(material.getMaterialTemperature())
+                    .status(MaterialStatus.STOP)               // 기본: 미사용
+                    .optimalQuantity(null)                     // 가맹점이 나중에 입력
+                    .purchasePrice(null)                       // 가맹점 최근 단가
+                    .isHqMaterial(true)
+                    .build();
+
+            storeMaterialRepository.save(storeMaterial);
+
+            // 가맹점 재고도 같이 0으로 생성
+            StoreInventory inventory = StoreInventory.builder()
+                    .store(store)
+                    .storeMaterial(storeMaterial)
+                    .quantity(BigDecimal.ZERO)
+                    .optimalQuantity(null)
+                    .status(InventoryStatus.SUFFICIENT)        // 수량 0이지만 적정수량도 없으니 일단 SUFFICIENT
+                    .build();
+
+            inventory.touchAfterQuantityChange();               // updateDate, status 정합성 유지
+            storeInventoryRepository.save(inventory);
+
+            created++;
+        }
+
+        return created;
+    }
 
     /**
      * 가맹점 재료 등록

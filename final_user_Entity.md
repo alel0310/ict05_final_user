@@ -800,7 +800,7 @@ public enum InventoryStatus {
 
 package com.boot.ict05_final_user.domain.inventory.entity;
 
-import com.boot.ict05_final_user.domain.inventory.dto.MaterialModifyFormDTO;
+import com.boot.ict05_final_user.domain.material.dto.MaterialModifyFormDTO;
 import jakarta.persistence.*;
 
 import lombok.Getter;
@@ -1423,7 +1423,7 @@ public class MenuCategory {
 
 package com.boot.ict05_final_user.domain.menu.entity;
 
-import com.boot.ict05_final_user.domain.inventory.entity.Material;
+import com.boot.ict05_final_user.domain.material.entity.Material;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -1517,7 +1517,7 @@ public enum MenuShow {
 
 package com.boot.ict05_final_user.domain.menu.entity;
 
-import com.boot.ict05_final_user.domain.inventory.entity.StoreMaterial;
+import com.boot.ict05_final_user.domain.material.entity.StoreMaterial;
 import com.boot.ict05_final_user.domain.order.entity.CustomerOrder;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -2086,7 +2086,7 @@ public class PurchaseOrder {
 
 package com.boot.ict05_final_user.domain.purchaseOrder.entity;
 
-import com.boot.ict05_final_user.domain.inventory.entity.StoreMaterial;
+import com.boot.ict05_final_user.domain.material.entity.StoreMaterial;
 import jakarta.persistence.*;
 import lombok.*;
 

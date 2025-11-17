@@ -1,4 +1,4 @@
-package com.boot.ict05_final_user.domain.inventory.entity;
+package com.boot.ict05_final_user.domain.material.entity;
 
 /**
  * 재료 카테고리 Enum

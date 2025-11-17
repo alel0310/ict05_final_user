@@ -1,5 +1,6 @@
 package com.boot.ict05_final_user.domain.inventory.entity;
 
+import com.boot.ict05_final_user.domain.material.entity.Material;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;

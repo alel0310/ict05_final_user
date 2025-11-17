@@ -1,7 +1,7 @@
 package com.boot.ict05_final_user.domain.inventory.controller;
 
-import com.boot.ict05_final_user.domain.inventory.dto.StoreMaterialCreateDTO;
-import com.boot.ict05_final_user.domain.inventory.service.StoreMaterialService;
+import com.boot.ict05_final_user.domain.material.dto.StoreMaterialCreateDTO;
+import com.boot.ict05_final_user.domain.material.service.StoreMaterialService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

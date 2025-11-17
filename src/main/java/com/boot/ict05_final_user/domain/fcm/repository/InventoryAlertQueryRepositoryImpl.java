@@ -3,7 +3,7 @@ package com.boot.ict05_final_user.domain.fcm.repository;
 import com.boot.ict05_final_user.domain.fcm.repository.InventoryAlertQueryRepository;
 import com.boot.ict05_final_user.domain.inventory.entity.InventoryStatus;
 import com.boot.ict05_final_user.domain.inventory.entity.QStoreInventory;
-import com.boot.ict05_final_user.domain.inventory.entity.QStoreMaterial;
+import com.boot.ict05_final_user.domain.material.entity.QStoreMaterial;
 import com.boot.ict05_final_user.domain.inventory.entity.QStoreInventoryBatch;
 import com.querydsl.core.types.Order;
 import com.querydsl.core.types.OrderSpecifier;

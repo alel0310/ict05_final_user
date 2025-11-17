@@ -8,7 +8,7 @@ import com.boot.ict05_final_user.domain.menu.entity.QMenu;
 import com.boot.ict05_final_user.domain.menu.entity.QMenuCategory;
 import com.boot.ict05_final_user.domain.menu.entity.QMenuRecipe;
 import com.boot.ict05_final_user.domain.menu.entity.QStoreMenu;
-import com.boot.ict05_final_user.domain.inventory.entity.QMaterial;
+import com.boot.ict05_final_user.domain.material.entity.QMaterial;
 import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;

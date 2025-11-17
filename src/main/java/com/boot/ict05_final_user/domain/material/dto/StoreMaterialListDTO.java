@@ -1,7 +1,7 @@
-package com.boot.ict05_final_user.domain.inventory.dto;
+package com.boot.ict05_final_user.domain.material.dto;
 
-import com.boot.ict05_final_user.domain.inventory.entity.MaterialStatus;
-import com.boot.ict05_final_user.domain.inventory.entity.MaterialTemperature;
+import com.boot.ict05_final_user.domain.material.entity.MaterialStatus;
+import com.boot.ict05_final_user.domain.material.entity.MaterialTemperature;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
