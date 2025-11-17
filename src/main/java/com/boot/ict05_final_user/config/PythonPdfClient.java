@@ -1,5 +1,8 @@
 package com.boot.ict05_final_user.config;
 
+import com.boot.ict05_final_user.domain.analytics.dto.KpiPdfPayload;
+import com.boot.ict05_final_user.domain.analytics.dto.MenuPdfPayload;
+import com.boot.ict05_final_user.domain.analytics.dto.OrdersPdfPayload;
 import com.boot.ict05_final_user.domain.analytics.dto.TimeDayReportPayload;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -65,5 +68,73 @@ public class PythonPdfClient {
         }
     }
 
-    // TODO: KPI / Orders / Menus 리포트도 완성되면 여기에 메서드 추가
+    /**
+     * KPI 분석 리포트 PDF 생성 요청.
+     */
+    public byte[] requestKpiReport(KpiPdfPayload payload) {
+        try {
+            return webClient.post()
+                    .uri("/pdf/kpi-report")
+                    .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                    .accept(MediaType.APPLICATION_PDF)
+                    .body(BodyInserters.fromValue(payload))
+                    .retrieve()
+                    .bodyToMono(byte[].class)
+                    .block();
+        } catch (WebClientResponseException e) {
+            log.error("[PythonPdfClient] kpi report 실패 status={} body={}",
+                    e.getRawStatusCode(), e.getResponseBodyAsString(), e);
+            throw new IllegalStateException("KPI PDF 생성 실패: " + e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("[PythonPdfClient] kpi report 호출 중 예외", e);
+            throw new IllegalStateException("KPI PDF 호출 중 예외 발생", e);
+        }
+    }
+
+    /**
+     * 주문 분석 리포트 PDF 생성 요청.
+     */
+    public byte[] requestOrdersReport(OrdersPdfPayload payload) {
+        try {
+            return webClient.post()
+                    .uri("/pdf/orders")
+                    .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                    .accept(MediaType.APPLICATION_PDF)
+                    .body(BodyInserters.fromValue(payload))
+                    .retrieve()
+                    .bodyToMono(byte[].class)
+                    .block();
+        } catch (WebClientResponseException e) {
+            log.error("[PythonPdfClient] orders report 실패 status={} body={}",
+                    e.getRawStatusCode(), e.getResponseBodyAsString(), e);
+            throw new IllegalStateException("주문 분석 PDF 생성 실패: " + e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("[PythonPdfClient] orders report 호출 중 예외", e);
+            throw new IllegalStateException("주문 분석 PDF 호출 중 예외 발생", e);
+        }
+    }
+
+    /**
+     * 메뉴 분석 리포트 PDF 생성 요청.
+     */
+    public byte[] requestMenusReport(MenuPdfPayload payload) {
+        try {
+            return webClient.post()
+                    .uri("/pdf/menus")
+                    .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                    .accept(MediaType.APPLICATION_PDF)
+                    .body(BodyInserters.fromValue(payload))
+                    .retrieve()
+                    .bodyToMono(byte[].class)
+                    .block();
+        } catch (WebClientResponseException e) {
+            log.error("[PythonPdfClient] menus report 실패 status={} body={}",
+                    e.getRawStatusCode(), e.getResponseBodyAsString(), e);
+            throw new IllegalStateException("메뉴 분석 PDF 생성 실패: " + e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("[PythonPdfClient] menus report 호출 중 예외", e);
+            throw new IllegalStateException("메뉴 분석 PDF 호출 중 예외 발생", e);
+        }
+    }
+
 }

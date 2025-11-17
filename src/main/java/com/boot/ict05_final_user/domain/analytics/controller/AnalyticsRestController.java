@@ -273,6 +273,100 @@ public class AnalyticsRestController {
 	}
 
 	/**
+	 * KPI 분석 PDF 다운로드
+	 */
+	@GetMapping("/api/analytics/kpi/report")
+	public ResponseEntity<byte[]> downloadKpiReport(
+			@AuthenticationPrincipal AppUser appUser,
+			@RequestParam String start,
+			@RequestParam String end,
+			@RequestParam(defaultValue = "DAY") AnalyticsSearchDto.ViewBy viewBy
+	) {
+		Long storeId = appUser.getStoreId();
+		LocalDate startDate = LocalDate.parse(start);
+		LocalDate endDate = LocalDate.parse(end);
+
+		byte[] pdfBytes = analyticsReportService.generateKpiReport(
+				storeId, startDate, endDate, viewBy
+		);
+
+		String filename = "kpi-report_" + viewBy.name().toLowerCase() + "_" + start + "_" + end + ".pdf";
+
+		HttpHeaders headers = new HttpHeaders();
+		headers.setContentType(MediaType.APPLICATION_PDF);
+		headers.setContentDisposition(
+				ContentDisposition.attachment()
+						.filename(filename, StandardCharsets.UTF_8)
+						.build()
+		);
+
+		return new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK);
+	}
+
+	/**
+	 * 주문 분석 PDF 다운로드
+	 */
+	@GetMapping("/api/analytics/orders/report")
+	public ResponseEntity<byte[]> downloadOrdersReport(
+			@AuthenticationPrincipal AppUser appUser,
+			@RequestParam String start,
+			@RequestParam String end,
+			@RequestParam(defaultValue = "DAY") AnalyticsSearchDto.ViewBy viewBy
+	) {
+		Long storeId = appUser.getStoreId();
+		LocalDate startDate = LocalDate.parse(start);
+		LocalDate endDate = LocalDate.parse(end);
+
+		byte[] pdfBytes = analyticsReportService.generateOrdersReport(
+				storeId, startDate, endDate, viewBy
+		);
+
+		String filename = "orders-report_" + viewBy.name().toLowerCase() + "_" + start + "_" + end + ".pdf";
+
+		HttpHeaders headers = new HttpHeaders();
+		headers.setContentType(MediaType.APPLICATION_PDF);
+		headers.setContentDisposition(
+				ContentDisposition.attachment()
+						.filename(filename, StandardCharsets.UTF_8)
+						.build()
+		);
+
+		return new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK);
+	}
+
+	/**
+	 * 메뉴 분석 PDF 다운로드
+	 */
+	@GetMapping("/api/analytics/menus/report")
+	public ResponseEntity<byte[]> downloadMenuReport(
+			@AuthenticationPrincipal AppUser appUser,
+			@RequestParam String start,
+			@RequestParam String end,
+			@RequestParam(defaultValue = "DAY") AnalyticsSearchDto.ViewBy viewBy
+	) {
+		Long storeId = appUser.getStoreId();
+		LocalDate startDate = LocalDate.parse(start);
+		LocalDate endDate = LocalDate.parse(end);
+
+		byte[] pdfBytes = analyticsReportService.generateMenuReport(
+				storeId, startDate, endDate, viewBy
+		);
+
+		String filename = "menu-report_" + viewBy.name().toLowerCase() + "_" + start + "_" + end + ".pdf";
+
+		HttpHeaders headers = new HttpHeaders();
+		headers.setContentType(MediaType.APPLICATION_PDF);
+		headers.setContentDisposition(
+				ContentDisposition.attachment()
+						.filename(filename, StandardCharsets.UTF_8)
+						.build()
+		);
+
+		return new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK);
+	}
+
+
+	/**
 	 * 시간/요일 분석 PDF 다운로드
 	 *
 	 * 예:

@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 import logging
 
-from component import kpi_analytics, order_analytics, time_day_report
+from component import kpi_analytics, order_analytics, time_day_report, menu_analytics
 
 app = FastAPI(title="PDF Generation Service")
 logger = logging.getLogger("pdf-service")
@@ -30,8 +30,9 @@ class KpiRow(BaseModel):
     ratioDelivery: Optional[float] = None
 
 class KpiPayload(BaseModel):
-    criteria: Dict[str, Any] = Field(default_factory=dict)
-    data: List[KpiRow] = Field(default_factory=list)
+    criteria: Dict[str, Any]
+    data: List[KpiRow]
+
 
 @app.post("/pdf/kpi-report", summary="KPI 분석 리포트 PDF 생성")
 def create_kpi_report(payload: KpiPayload):
@@ -58,8 +59,9 @@ class OrdersRow(BaseModel):
     orderType: Optional[str] = None
 
 class OrdersPayload(BaseModel):
-    criteria: Dict[str, Any] = Field(default_factory=dict)
-    data: List[OrdersRow] = Field(default_factory=list)
+    criteria: Dict[str, Any]
+    data: List[OrdersRow]
+
 
 @app.post("/pdf/orders", summary="주문 분석 리포트 PDF 생성")
 def create_orders_report(payload: OrdersPayload):
@@ -153,4 +155,30 @@ def create_time_report(payload: TimeDayReportPayload):
     if not pdf_bytes:
         raise HTTPException(status_code=500, detail="Empty Time-Day PDF generated")
 
+    return Response(content=pdf_bytes, media_type="application/pdf")
+
+# =====================================================
+#                   Menus (본사/가맹점 공통)
+# =====================================================
+
+class MenuRow(BaseModel):
+    date: Optional[str] = None
+    storeName: Optional[str] = None
+    category: Optional[str] = None
+    menu: Optional[str] = None
+    quantity: Optional[int] = 0
+    sales: Optional[float] = 0
+    orderCount: Optional[int] = 0
+
+class MenuPayload(BaseModel):
+    criteria: Dict[str, Any]
+    data: List[MenuRow]
+
+
+
+@app.post("/pdf/menus", summary="메뉴 분석 리포트 PDF 생성")
+def create_menus_report(payload: MenuPayload):
+    pdf_bytes = menu_analytics.generate_menus_pdf(payload.dict())
+    if not pdf_bytes:
+        raise HTTPException(status_code=500, detail="Empty Menus PDF generated")
     return Response(content=pdf_bytes, media_type="application/pdf")
