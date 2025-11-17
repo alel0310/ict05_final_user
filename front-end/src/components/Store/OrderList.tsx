@@ -233,6 +233,13 @@ export function OrderList() {
           },
         });
 
+        // 👉 응답이 배열인 경우와 Page 형태인 경우 둘 다 처리
+      const raw = Array.isArray(res.data)
+        ? res.data
+        : Array.isArray(res.data?.content)
+        ? res.data.content
+        : [];
+
         const mapped = (res.data || []).map(mapBackendOrderToOrder);
 
         // 주문번호(문자열) 기준 내림차순 정렬

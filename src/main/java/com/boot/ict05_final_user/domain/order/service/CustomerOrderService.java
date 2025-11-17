@@ -17,6 +17,7 @@ import com.boot.ict05_final_user.domain.store.repository.StoreRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -42,9 +43,11 @@ public class CustomerOrderService {
         Store store = storeRepository.findById(req.getStoreId())
                 .orElseThrow(() -> new IllegalArgumentException("Store not found: " + req.getStoreId()));
 
+        String orderCode = generateOrderCode();
+
         CustomerOrder order = CustomerOrder.builder()
                 .store(store)
-                .orderCode(req.getOrderCode())
+                .orderCode(orderCode)
                 .orderType(OrderType.from(req.getOrderType()))                 // "VISIT"
                 .paymentType(resolvePaymentType(req.getPaymentType()))        // "card" / "CARD" / "카드"
                 .totalPrice(req.getTotalPrice())
@@ -89,8 +92,8 @@ public class CustomerOrderService {
     }
 
     // ─────────────────────
-    // 주문 리스트 검색/필터 (새로 추가)
-    // ─────────────────────
+// 주문 리스트 검색/필터 (임시: 전체 조회만)
+// ─────────────────────
     public List<CustomerOrderListDTO> searchOrderList(
             String keyword,
             String statusText,
@@ -98,94 +101,23 @@ public class CustomerOrderService {
             String orderTypeText,
             String period // all / today / week / month
     ) {
-
-        // 1) 일단 전체 주문을 최신순으로 가져온다
-        //    (나중에 필요하면 storeId 조건 추가 가능)
+        // 1) 일단 전체 주문을 id 내림차순으로 가져온다
         List<CustomerOrder> orders =
-                orderRepository.findAllByOrderByOrderedAtDesc();
+                orderRepository.findAll(Sort.by(Sort.Direction.DESC, "id"));
 
-        // 2) 자바 스트림으로 조건별 필터링
+        // 2) DTO 로 변환만 한다 (필터링 X)
         return orders.stream()
-                // 키워드: 주문코드 or 메모(고객명) 에 포함
-                .filter(order -> {
-                    if (keyword == null || keyword.isBlank()) return true;
-                    String kw = keyword.trim().toLowerCase();
-                    String code = safeLower(order.getOrderCode());
-                    String memo = safeLower(order.getMemo());
-                    return (code != null && code.contains(kw))
-                            || (memo != null && memo.contains(kw));
-                })
-                // 상태 필터
-                .filter(order -> {
-                    if (statusText == null || statusText.isBlank()
-                            || "all".equalsIgnoreCase(statusText)) {
-                        return true;
-                    }
-                    if (order.getStatus() == null) return false;
-
-                    // 프론트에서 pending/preparing/... 으로 오니까 enum name 기준
-                    String target = statusText.trim().toUpperCase();
-                    return order.getStatus().name().equalsIgnoreCase(target);
-                })
-                // 결제 방법 필터
-                .filter(order -> {
-                    if (paymentTypeText == null || paymentTypeText.isBlank()
-                            || "all".equalsIgnoreCase(paymentTypeText)) {
-                        return true;
-                    }
-                    if (order.getPaymentType() == null) return false;
-
-                    String target = paymentTypeText.trim().toUpperCase();
-                    // 프론트는 "카드결제/현금결제/상품권결제" 이런 한글도 쓰니까 라벨도 같이 비교
-                    String label = order.getPaymentType().getLabel(); // "카드", "현금"...
-                    String labelWithSuffix = label + "결제";
-
-                    return order.getPaymentType().name().equalsIgnoreCase(target)
-                            || label.equals(paymentTypeText.trim())
-                            || labelWithSuffix.equals(paymentTypeText.trim());
-                })
-                // 주문 유형 필터 (VISIT / TAKEOUT / DELIVERY)
-                .filter(order -> {
-                    if (orderTypeText == null || orderTypeText.isBlank()
-                            || "all".equalsIgnoreCase(orderTypeText)) {
-                        return true;
-                    }
-                    if (order.getOrderType() == null) return false;
-
-                    // 프론트는 "방문/포장/배달" → Enum 은 VISIT/TAKEOUT/DELIVERY
-                    String t = orderTypeText.trim();
-                    String enumName = order.getOrderType().name(); // VISIT...
-
-                    if (t.equals("방문")) return enumName.equals("VISIT");
-                    if (t.equals("포장")) return enumName.equals("TAKEOUT");
-                    if (t.equals("배달")) return enumName.equals("DELIVERY");
-
-                    // 그냥 enum name 으로 온 경우도 허용
-                    return enumName.equalsIgnoreCase(t);
-                })
-                // 기간 필터 (오늘/일주일/한 달)
-                .filter(order -> {
-                    if (period == null || "all".equalsIgnoreCase(period)) return true;
-
-                    LocalDateTime orderedAt = order.getOrderedAt();
-                    if (orderedAt == null) return false;
-
-                    LocalDateTime now = LocalDateTime.now();
-                    LocalDateTime start;
-
-                    switch (period.toLowerCase()) {
-                        case "today" -> start = now.toLocalDate().atStartOfDay();
-                        case "week" -> start = now.minusDays(7).toLocalDate().atStartOfDay();
-                        case "month" -> start = now.minusDays(30).toLocalDate().atStartOfDay();
-                        default -> {
-                            return true;
-                        }
-                    }
-                    return !orderedAt.isBefore(start);
-                })
-                // DTO 로 변환
                 .map(CustomerOrderListDTO::from)
                 .toList();
+    }
+
+    private String generateOrderCode() {
+        Long lastId = orderRepository.findTopByOrderByIdDesc()
+                .map(CustomerOrder::getId)
+                .orElse(0L);
+
+        long next = lastId + 1;
+        return String.format("#%04d", next);   // #0001, #0002 ...
     }
 
     // ─────────────────────
@@ -195,13 +127,20 @@ public class CustomerOrderService {
         if (value == null) {
             throw new IllegalArgumentException("paymentType is null");
         }
+
         String v = value.trim();
 
-        try {
-            return PaymentType.valueOf(v.toUpperCase());
-        } catch (Exception ignore) {
+        // 0) "카드결제", "현금결제" 처럼 뒤에 "결제" 붙은 경우 잘라내기
+        if (v.endsWith("결제")) {
+            v = v.substring(0, v.length() - 2); // "카드결제" -> "카드"
         }
 
+        // 1) enum name / 코드 형식: "CARD", "card"
+        try {
+            return PaymentType.valueOf(v.toUpperCase());
+        } catch (Exception ignore) { }
+
+        // 2) 한글 라벨: "카드", "현금", "상품권", "외부 결제"
         for (PaymentType type : PaymentType.values()) {
             if (type.getLabel().equals(v)) {
                 return type;
@@ -210,6 +149,7 @@ public class CustomerOrderService {
 
         throw new IllegalArgumentException("Unknown paymentType: " + value);
     }
+
 
     private String safeLower(String s) {
         return s == null ? null : s.toLowerCase();
