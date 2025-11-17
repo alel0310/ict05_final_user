@@ -4,9 +4,10 @@ import { Button } from '../../../components/ui/button';
 import { CalendarIcon, Download } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../components/ui/popover';
 import { Calendar } from '../../../components/ui/calendar';
-import { fmtMoneyInt, tz } from '../../../lib/format';
+import { fmtMoneyInt, fmtPercent1, tz } from '../../../lib/format';
 import api from '../../../lib/authApi';
 
+// ====== 로컬 타입(파일 단독 사용 가능) ======
 type ViewBy = 'DAY' | 'MONTH';
 
 type PageResp<T> = {
@@ -14,50 +15,63 @@ type PageResp<T> = {
   nextCursor: string | null;
 };
 
-type OrderSummary = {
-  deliverySalesMtd: number;
-  takeoutSalesMtd: number;
-  visitSalesMtd: number;
-  orderCountMtd: number;
+// 상단 요약 카드용
+type MenuTopMenu = {
+  menuId: number;
+  menuName: string;
+  quantity: number;
 };
 
-type OrderDailyRow = {
-  orderDate: string;
-  orderId: number;
-  orderCode: string;
-  orderType: string;    // VISIT/TAKEOUT/DELIVERY
-  totalPrice: number;
-  menuCount: number;
-  paymentType: string;  // CARD/CASH/VOUCHER/EXTERNAL
-  channelMemo?: string | null;
+type MenuCategoryRank = {
+  categoryId: number;
+  categoryName: string;
+  sales: number;
 };
 
-type OrderMonthlyRow = {
-  yearMonth: string;
-  totalSales: number;
+type MenuSalesContribution = {
+  menuId: number;
+  menuName: string;
+  sales: number;
+  contributionRate: number; // %
+};
+
+type MenuLowPerform = {
+  menuId: number;
+  menuName: string;
+  sales: number;
+  quantity: number;
+};
+
+type MenuSummary = {
+  topMenusByQty: MenuTopMenu[];
+  topCategoriesBySales: MenuCategoryRank[];
+  topMenusBySalesContribution: MenuSalesContribution[];
+  lowPerformMenus: MenuLowPerform[];
+};
+
+// 테이블 행 (일별)
+type MenuDailyRow = {
+  orderDate: string;    // YYYY-MM-DD
+  categoryName: string;
+  menuName: string;
+  quantity: number;
+  sales: number;
   orderCount: number;
-  avgOrderAmount: number;
-  deliverySales: number;
-  takeoutSales: number;
-  visitSales: number;
 };
 
-type OrderRow = OrderDailyRow | OrderMonthlyRow;
+// 테이블 행 (월별)
+type MenuMonthlyRow = {
+  yearMonth: string;    // YYYY-MM
+  menuName: string;
+  categoryName: string;
+  quantity: number;
+  sales: number;
+  orderCount: number;
+};
+
+type MenuRow = MenuDailyRow | MenuMonthlyRow;
 
 const PAGE_SIZE_OPTIONS = [20, 40, 60, 80, 100];
-
-const orderTypeLabel: Record<string, string> = {
-  DELIVERY: '배달',
-  TAKEOUT: '포장',
-  VISIT: '매장',
-};
-
-const paymentTypeLabel: Record<string, string> = {
-  CARD: '카드',
-  CASH: '현금',
-  VOUCHER: '상품권',
-  EXTERNAL: '외부 결제',
-};
 
 function formatDateLocal(date: Date): string {
   const year = date.getFullYear();
@@ -66,8 +80,8 @@ function formatDateLocal(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-export default function OrderReport() {
-  const [storeId] = useState<number>(1);
+export default function MenuReport() {
+  const [storeId] = useState<number>(1); // TODO: 상단 스토어 필터 연동
 
   const today = new Date();
   const [end, setEnd] = useState<Date>(() => today);
@@ -80,19 +94,21 @@ export default function OrderReport() {
   const [viewBy, setViewBy] = useState<ViewBy>('DAY');
   const [pageSize, setPageSize] = useState<number>(20);
 
-  const [summary, setSummary] = useState<OrderSummary | null>(null);
-  const [rows, setRows] = useState<OrderRow[]>([]);
+  const [summary, setSummary] = useState<MenuSummary | null>(null);
+  const [rows, setRows] = useState<MenuRow[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const startStr = useMemo(() => formatDateLocal(start), [start]);
   const endStr   = useMemo(() => formatDateLocal(end),   [end]);
 
-  // 상단 카드만 따로 로드
+  // ==========================
+  // 상단 카드 요약 로드
+  // ==========================
   async function loadSummary() {
     try {
-      const { data } = await api.get<OrderSummary>('/api/analytics/orders/summary', {
-        params: { storeId },
+      const { data } = await api.get<MenuSummary>('/api/analytics/menus/summary', {
+        params: { storeId, start: startStr, end: endStr },
       });
       setSummary(data);
     } catch {
@@ -100,16 +116,18 @@ export default function OrderReport() {
     }
   }
 
-  // 테이블 조회 (일별/월별 공용)
+  // ==========================
+  // 테이블 첫 페이지 로드
+  // ==========================
   async function loadFirst() {
     setLoading(true);
     try {
       const url =
         viewBy === 'DAY'
-          ? '/api/analytics/orders/day-rows'
-          : '/api/analytics/orders/month-rows';
+          ? '/api/analytics/menus/day-rows'
+          : '/api/analytics/menus/month-rows';
 
-      const { data } = await api.get<PageResp<OrderRow>>(url, {
+      const { data } = await api.get<PageResp<MenuRow>>(url, {
         params: {
           storeId,
           start: startStr,
@@ -125,20 +143,23 @@ export default function OrderReport() {
       setLoading(false);
     }
 
-    // 카드 동시 갱신
+    // 상단 카드도 같이 갱신
     loadSummary();
   }
 
+  // ==========================
+  // 테이블 추가 로드(더보기)
+  // ==========================
   async function loadMore() {
     if (!cursor) return;
     setLoading(true);
     try {
       const url =
         viewBy === 'DAY'
-          ? '/api/analytics/orders/day-rows'
-          : '/api/analytics/orders/month-rows';
+          ? '/api/analytics/menus/day-rows'
+          : '/api/analytics/menus/month-rows';
 
-      const { data } = await api.get<PageResp<OrderRow>>(url, {
+      const { data } = await api.get<PageResp<MenuRow>>(url, {
         params: {
           storeId,
           start: startStr,
@@ -155,25 +176,20 @@ export default function OrderReport() {
     }
   }
 
-  // 최초 1회 + store 변경 시 자동 조회
+  // 최초 1회 + storeId 변경 시 자동 조회
   useEffect(() => {
     loadFirst();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeId]);
-
-  const deliveryMtd = summary?.deliverySalesMtd ?? 0;
-  const takeoutMtd  = summary?.takeoutSalesMtd ?? 0;
-  const visitMtd    = summary?.visitSalesMtd ?? 0;
-  const orderCountMtd = summary?.orderCountMtd ?? 0;
 
   return (
     <div className="space-y-6">
       {/* 헤더 + 필터 */}
       <div className="flex flex-wrap gap-2 items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">주문 분석</h1>
+          <h1 className="text-2xl font-semibold">메뉴 분석</h1>
           <p className="text-sm text-gray-600">
-            타임존: {tz} / 상단 카드는 이번달 1일 ~ 어제 기준(MTD)
+            타임존: {tz} / 상단 카드와 테이블 모두 선택한 기간 기준
           </p>
         </div>
         <div className="flex flex-wrap gap-2 items-center justify-end">
@@ -216,39 +232,38 @@ export default function OrderReport() {
           {/* 일별/월별 토글 */}
           <div className="flex rounded-md border bg-gray-50 overflow-hidden">
             <button
-                className={`px-3 py-2 text-sm font-medium ${
+              className={`px-3 py-2 text-sm font-medium ${
                 viewBy === 'DAY'
-                    ? 'bg-kpi-red text-white'
-                    : 'text-gray-700 hover:bg-white'
-                }`}
-                onClick={() => {
+                  ? 'bg-kpi-red text-white'
+                  : 'text-gray-700 hover:bg-white'
+              }`}
+              onClick={() => {
                 if (viewBy !== 'DAY') {
-                    setViewBy('DAY');
-                    setRows([]);     // 🔹 rows 초기화
-                    setCursor(null); // 🔹 cursor 초기화
+                  setViewBy('DAY');
+                  setRows([]);
+                  setCursor(null);
                 }
-                }}
+              }}
             >
-                일별
+              일별
             </button>
             <button
-                className={`px-3 py-2 text-sm font-medium ${
+              className={`px-3 py-2 text-sm font-medium ${
                 viewBy === 'MONTH'
-                    ? 'bg-kpi-red text-white'
-                    : 'text-gray-700 hover:bg-white'
-                }`}
-                onClick={() => {
+                  ? 'bg-kpi-red text-white'
+                  : 'text-gray-700 hover:bg-white'
+              }`}
+              onClick={() => {
                 if (viewBy !== 'MONTH') {
-                    setViewBy('MONTH');
-                    setRows([]);     // 🔹 rows 초기화
-                    setCursor(null); // 🔹 cursor 초기화
+                  setViewBy('MONTH');
+                  setRows([]);
+                  setCursor(null);
                 }
-                }}
+              }}
             >
-                월별
+              월별
             </button>
           </div>
-
 
           {/* 출력개수 */}
           <div className="flex items-center gap-2">
@@ -272,49 +287,93 @@ export default function OrderReport() {
           </Button>
 
           {/* 리포트 다운로드(향후 PDF/엑셀) */}
-          <Button onClick={() => { /* TODO: PDF/엑셀 다운로드 */ }}>
+          <Button onClick={() => { /* TODO: PDF/엑셀 다운로드 구현 */ }}>
             <Download className="w-4 h-4 mr-2" />
             리포트 다운로드
           </Button>
         </div>
       </div>
 
-      {/* 상단 카드 4개 */}
+      {/* 상단 요약 카드 4개 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* 1) 판매수량 TOP3 메뉴 */}
         <Card className="bg-white rounded-xl shadow-sm">
-          <CardHeader><CardTitle>배달 매출(MTD)</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            ₩{fmtMoneyInt(deliveryMtd)}
+          <CardHeader><CardTitle>판매수량 TOP3 메뉴</CardTitle></CardHeader>
+          <CardContent className="text-sm space-y-1">
+            {summary?.topMenusByQty?.length
+              ? summary.topMenusByQty.map((m) => (
+                  <div key={m.menuId} className="flex justify-between">
+                    <span className="text-gray-700">{m.menuName}</span>
+                    <span className="font-semibold">{m.quantity.toLocaleString()}개</span>
+                  </div>
+                ))
+              : <div className="text-gray-400">데이터 없음</div>
+            }
           </CardContent>
         </Card>
 
+        {/* 2) 매출 TOP3 카테고리 */}
         <Card className="bg-white rounded-xl shadow-sm">
-          <CardHeader><CardTitle>포장 매출(MTD)</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            ₩{fmtMoneyInt(takeoutMtd)}
+          <CardHeader><CardTitle>매출 TOP3 카테고리</CardTitle></CardHeader>
+          <CardContent className="text-sm space-y-1">
+            {summary?.topCategoriesBySales?.length
+              ? summary.topCategoriesBySales.map((c) => (
+                  <div key={c.categoryId} className="flex justify-between">
+                    <span className="text-gray-700">{c.categoryName}</span>
+                    <span className="font-semibold">
+                      ₩{fmtMoneyInt(c.sales)}
+                    </span>
+                  </div>
+                ))
+              : <div className="text-gray-400">데이터 없음</div>
+            }
           </CardContent>
         </Card>
 
+        {/* 3) 매출기여도 TOP3 메뉴 */}
         <Card className="bg-white rounded-xl shadow-sm">
-          <CardHeader><CardTitle>매장 매출(MTD)</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            ₩{fmtMoneyInt(visitMtd)}
+          <CardHeader><CardTitle>매출기여도 TOP3 메뉴</CardTitle></CardHeader>
+          <CardContent className="text-sm space-y-1">
+            {summary?.topMenusBySalesContribution?.length
+              ? summary.topMenusBySalesContribution.map((m) => (
+                  <div key={m.menuId} className="flex justify-between">
+                    <span className="text-gray-700">{m.menuName}</span>
+                    <span className="font-semibold">
+                      {fmtPercent1(m.contributionRate)}
+                    </span>
+                  </div>
+                ))
+              : <div className="text-gray-400">데이터 없음</div>
+            }
           </CardContent>
         </Card>
 
+        {/* 4) 저성과 메뉴 */}
         <Card className="bg-white rounded-xl shadow-sm">
-          <CardHeader><CardTitle>주문수(MTD)</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            {orderCountMtd.toLocaleString()}건
+          <CardHeader><CardTitle>저성과 메뉴</CardTitle></CardHeader>
+          <CardContent className="text-sm space-y-1">
+            {summary?.lowPerformMenus?.length
+              ? summary.lowPerformMenus.map((m) => (
+                  <div key={m.menuId} className="flex justify-between">
+                    <span className="text-gray-700">{m.menuName}</span>
+                    <span className="font-semibold">
+                      ₩{fmtMoneyInt(m.sales)} / {m.quantity.toLocaleString()}개
+                    </span>
+                  </div>
+                ))
+              : <div className="text-gray-400">데이터 없음</div>
+            }
           </CardContent>
         </Card>
       </div>
 
-      {/* 테이블 */}
+      {/* ===== 테이블 영역 ===== */}
       <Card className="bg-white rounded-xl shadow-sm overflow-hidden">
         <CardHeader className="px-6 py-4 border-b bg-light-gray">
           <CardTitle className="text-base font-semibold text-gray-900">
-            {viewBy === 'DAY' ? '주문 분석 (일별 / 주문 단위)' : '주문 분석 (월별 집계)'}
+            {viewBy === 'DAY'
+              ? '메뉴 분석 (일별 / 메뉴 단위)'
+              : '메뉴 분석 (월별 집계 / 메뉴 단위)'}
             {' '}({startStr} ~ {endStr})
           </CardTitle>
         </CardHeader>
@@ -326,40 +385,34 @@ export default function OrderReport() {
                   <thead className="bg-light-gray border-b">
                     <tr>
                       <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">날짜</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">주문ID</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">주문유형</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">총금액</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">메뉴수</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">결제수단</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">채널메모</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">카테고리</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">메뉴</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">판매수량</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">매출액</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">주문수</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {(rows as OrderDailyRow[]).map((r, i) => (
+                    {(rows as MenuDailyRow[]).map((r, i) => (
                       <tr key={i} className="hover:bg-gray-50">
                         <td className="px-6 py-3 text-center text-sm text-gray-900">{r.orderDate}</td>
-                        <td className="px-6 py-3 text-right text-sm text-gray-900">{r.orderId}</td>
-                        <td className="px-6 py-3 text-right text-sm text-gray-900">
-                          {orderTypeLabel[r.orderType] ?? r.orderType}
+                        <td className="px-6 py-3 text-sm text-gray-900 text-left">{r.categoryName}</td>
+                        <td className="px-6 py-3 text-sm text-gray-900 text-left">{r.menuName}</td>
+                        <td className="px-6 py-3 text-sm text-gray-900 text-right">
+                          {r.quantity.toLocaleString()}
                         </td>
                         <td className="px-6 py-3 text-sm text-gray-900 text-right">
-                          ₩{fmtMoneyInt(r.totalPrice)}
+                          ₩{fmtMoneyInt(r.sales)}
                         </td>
                         <td className="px-6 py-3 text-sm text-gray-900 text-right">
-                          {(r.menuCount ?? 0).toLocaleString()}
-                        </td>
-                        <td className="px-6 py-3 text-right text-sm text-gray-900">
-                          {paymentTypeLabel[r.paymentType] ?? r.paymentType}
-                        </td>
-                        <td className="px-6 py-3 text-right text-sm text-gray-900">
-                          {r.channelMemo || '-'}
+                          {r.orderCount.toLocaleString()}
                         </td>
                       </tr>
                     ))}
 
                     {rows.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="px-6 py-8 text-center text-sm text-dark-gray">
+                        <td colSpan={6} className="px-6 py-8 text-center text-sm text-dark-gray">
                           데이터가 없습니다.
                         </td>
                       </tr>
@@ -371,35 +424,27 @@ export default function OrderReport() {
                   <thead className="bg-light-gray border-b">
                     <tr>
                       <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">월</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">총매출</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">메뉴</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">카테고리</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">판매수량</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">매출액</th>
                       <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">주문수</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">평균주문금액</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">배달매출</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">포장매출</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">매장매출</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {(rows as OrderMonthlyRow[]).map((r, i) => (
+                    {(rows as MenuMonthlyRow[]).map((r, i) => (
                       <tr key={i} className="hover:bg-gray-50">
                         <td className="px-6 py-3 text-center text-sm text-gray-900">{r.yearMonth}</td>
+                        <td className="px-6 py-3 text-sm text-gray-900 text-center">{r.menuName}</td>
+                        <td className="px-6 py-3 text-sm text-gray-900 text-center">{r.categoryName}</td>
                         <td className="px-6 py-3 text-sm text-gray-900 text-right">
-                          ₩{fmtMoneyInt(r.totalSales)}
+                          {r.quantity.toLocaleString()}
                         </td>
                         <td className="px-6 py-3 text-sm text-gray-900 text-right">
-                          {(r.orderCount ?? 0).toLocaleString()}
+                          ₩{fmtMoneyInt(r.sales)}
                         </td>
                         <td className="px-6 py-3 text-sm text-gray-900 text-right">
-                          ₩{fmtMoneyInt(r.avgOrderAmount)}
-                        </td>
-                        <td className="px-6 py-3 text-sm text-gray-900 text-right">
-                          ₩{fmtMoneyInt(r.deliverySales)}
-                        </td>
-                        <td className="px-6 py-3 text-sm text-gray-900 text-right">
-                          ₩{fmtMoneyInt(r.takeoutSales)}
-                        </td>
-                        <td className="px-6 py-3 text-sm text-gray-900 text-right">
-                          ₩{fmtMoneyInt(r.visitSales)}
+                          {r.orderCount.toLocaleString()}
                         </td>
                       </tr>
                     ))}
