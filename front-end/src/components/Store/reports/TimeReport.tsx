@@ -127,6 +127,7 @@ export default function TimeReport() {
   const [rows, setRows] = useState<TimeRow[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   const startStr = useMemo(() => formatDateLocal(start), [start]);
   const endStr   = useMemo(() => formatDateLocal(end),   [end]);
@@ -240,6 +241,46 @@ export default function TimeReport() {
       setLoading(false);
     }
   }
+
+  // ==========================
+// PDF 다운로드
+// ==========================
+async function handleDownloadReport() {
+  try {
+    setDownloading(true);
+
+    const { data } = await api.get<Blob>(
+      '/api/analytics/time-day/report',
+      {
+        params: {
+          // storeId는 어차피 백엔드에서 로그인 사용자 기준으로 사용하니까 안 보내도 됨
+          start: startStr,
+          end: endStr,
+          viewBy,             // ✅ 일별/월별 상태 같이 전달
+        },
+        responseType: 'blob',
+      } as any
+    );
+
+    const blob = new Blob([data], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    const viewLabel = viewBy === 'DAY' ? 'day' : 'month';
+    link.href = url;
+    link.download = `time-day-report_${viewLabel}_${startStr}_${endStr}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error(e);
+    alert('리포트 다운로드 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+  } finally {
+    setDownloading(false);
+  }
+}
+
 
   // 최초 1회 + storeId 변경시 기본 조회
   useEffect(() => {
@@ -360,10 +401,10 @@ export default function TimeReport() {
             {loading ? '조회 중…' : '조회'}
           </Button>
 
-          {/* 리포트 다운로드 (TODO) */}
-          <Button onClick={() => { /* TODO: PDF/엑셀 다운로드 */ }}>
+          {/* 리포트 다운로드 (PDF) */}
+          <Button onClick={handleDownloadReport} disabled={downloading}>
             <Download className="w-4 h-4 mr-2" />
-            리포트 다운로드
+            {downloading ? '다운로드 중…' : '리포트 다운로드'}
           </Button>
         </div>
       </div>
