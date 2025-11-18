@@ -1,17 +1,22 @@
 package com.boot.ict05_final_user.domain.inventory.controller;
 
 import com.boot.ict05_final_user.domain.inventory.dto.StoreMaterialCreateDTO;
+import com.boot.ict05_final_user.domain.inventory.dto.StoreMaterialResponse;
 import com.boot.ict05_final_user.domain.inventory.service.StoreMaterialService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 /**
  * 가맹점 재료 REST 컨트롤러
  *
  * <p>React 프런트엔드용 API</p>
  */
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/API/store/material")
@@ -45,5 +50,16 @@ public class StoreMaterialRestController {
     public ResponseEntity<Long> createStoreMaterial(@Valid @RequestBody StoreMaterialCreateDTO dto) {
         Long id = storeMaterialService.create(dto);
         return ResponseEntity.ok(id);
+    }
+
+
+
+    /**
+     * 가맹점 재료 목록 조회
+     * GET /API/store/material/list?storeId=2
+     */
+    @GetMapping("/list")
+    public List<StoreMaterialResponse> list(@RequestParam Long storeId) {
+        return storeMaterialService.getStoreMaterials(storeId);
     }
 }

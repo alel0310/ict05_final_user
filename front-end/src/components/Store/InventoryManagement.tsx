@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { DataTable, Column } from '../Common/DataTable';
 import { FormModal } from '../Common/FormModal';
 import { ConfirmDialog, useConfirmDialog } from '../Common/ConfirmDialog';
@@ -23,11 +23,19 @@ import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
 import type { CheckedState } from '@radix-ui/react-checkbox';
 import { toast } from 'sonner';
-import { createStoreMaterial } from '../../services/storeMaterialApi';
-import type { StoreMaterialCreateRequest, MaterialTemperature, MaterialStatus, } from '../../types/storeMaterial';
+import { 
+  createStoreMaterial, 
+  fetchStoreMaterials 
+} from '../../services/storeMaterialApi';
+import type { 
+  StoreMaterialCreateRequest,
+  StoreMaterialResponse,
+  MaterialTemperature,
+  MaterialStatus,
+} from '../../types/storeMaterial';
 
 /* =======================
-   타입 정의
+   type / interface / 유틸 함수
 ======================= */
 
 type StockStatus = 'sufficient' | 'low' | 'critical' | 'out';
@@ -84,13 +92,13 @@ type CartItem = InventoryItem & { orderQuantity: number; totalPrice: number };
    샘플 데이터
 ======================= */
 
-const sampleInventory: InventoryItem[] = [
-  { id: 1, name: '치킨패티', category: '주재료', currentStock: 45, minStock: 20, maxStock: 100, unit: '개', unitPrice: 1200, lastRestocked: '2024-12-28', expiryDate: '2025-01-15', supplier: 'ABC 식자재', status: 'sufficient', weeklyUsage: 35, location: '냉동고 A-1' },
-  { id: 2, name: '감자', category: '주재료', currentStock: 8, minStock: 15, maxStock: 50, unit: 'kg', unitPrice: 2500, lastRestocked: '2024-12-25', expiryDate: '2025-01-10', supplier: 'XYZ 농산', status: 'low', weeklyUsage: 25, location: '냉장고 B-2' },
-  { id: 3, name: '콜라시럽', category: '음료', currentStock: 2, minStock: 5, maxStock: 20, unit: '통', unitPrice: 15000, lastRestocked: '2024-12-20', expiryDate: '2025-06-20', supplier: '음료 공급업체', status: 'critical', weeklyUsage: 4, location: '저장고 C-1' },
-  { id: 4, name: '치즈', category: '주재료', currentStock: 12, minStock: 10, maxStock: 30, unit: 'kg', unitPrice: 8000, lastRestocked: '2024-12-29', expiryDate: '2025-01-12', supplier: '유제품 공급업체', status: 'sufficient', weeklyUsage: 8, location: '냉장고 A-3' },
-  { id: 5, name: '양상추', category: '채소', currentStock: 0, minStock: 5, maxStock: 15, unit: 'kg', unitPrice: 3500, lastRestocked: '2024-12-26', expiryDate: '2025-01-03', supplier: '신선 채소', status: 'out', weeklyUsage: 6, location: '냉장고 B-1' }
-];
+// const sampleInventory: InventoryItem[] = [
+//   { id: 1, name: '치킨패티', category: '주재료', currentStock: 45, minStock: 20, maxStock: 100, unit: '개', unitPrice: 1200, lastRestocked: '2024-12-28', expiryDate: '2025-01-15', supplier: 'ABC 식자재', status: 'sufficient', weeklyUsage: 35, location: '냉동고 A-1' },
+//   { id: 2, name: '감자', category: '주재료', currentStock: 8, minStock: 15, maxStock: 50, unit: 'kg', unitPrice: 2500, lastRestocked: '2024-12-25', expiryDate: '2025-01-10', supplier: 'XYZ 농산', status: 'low', weeklyUsage: 25, location: '냉장고 B-2' },
+//   { id: 3, name: '콜라시럽', category: '음료', currentStock: 2, minStock: 5, maxStock: 20, unit: '통', unitPrice: 15000, lastRestocked: '2024-12-20', expiryDate: '2025-06-20', supplier: '음료 공급업체', status: 'critical', weeklyUsage: 4, location: '저장고 C-1' },
+//   { id: 4, name: '치즈', category: '주재료', currentStock: 12, minStock: 10, maxStock: 30, unit: 'kg', unitPrice: 8000, lastRestocked: '2024-12-29', expiryDate: '2025-01-12', supplier: '유제품 공급업체', status: 'sufficient', weeklyUsage: 8, location: '냉장고 A-3' },
+//   { id: 5, name: '양상추', category: '채소', currentStock: 0, minStock: 5, maxStock: 15, unit: 'kg', unitPrice: 3500, lastRestocked: '2024-12-26', expiryDate: '2025-01-03', supplier: '신선 채소', status: 'out', weeklyUsage: 6, location: '냉장고 B-1' }
+// ];
 
 const sampleOrders: Order[] = [
   {
@@ -116,12 +124,71 @@ const sampleOrders: Order[] = [
   }
 ];
 
+// src/components/Store/InventoryManagement.tsx
+
+function mapCategoryLabel(cat?: string | null): string {
+  switch (cat) {
+    case 'BASE':     return '주재료(BASE)';
+    case 'TOPPING':  return '토핑/부재료(TOPPING)';
+    case 'SIDE':     return '사이드(SIDE)';
+    case 'SAUCE':    return '소스/조미료(SAUCE)';
+    case 'BEVERAGE': return '음료(BEVERAGE)';
+    case 'PACKAGE':  return '포장재(PACKAGE)';
+    case 'ETC':      return '기타(ETC)';
+    default:         return '미분류';
+  }
+}
+
+function mapStatus(smStatus: MaterialStatus): StockStatus {
+  // 재료 상태와 재고 상태를 단순 매핑
+  // STOP 이면 화면에서 '품절' 느낌으로
+  if (smStatus === 'STOP') return 'out';
+  return 'sufficient';
+}
+
+function mapStoreMaterialToInventoryItem(
+  sm: StoreMaterialResponse,
+): InventoryItem {
+  const optimal = sm.optimalQuantity ?? 0;
+  const minStock = optimal;
+  const maxStock = optimal > 0 ? optimal * 2 : 0;
+
+  // maxStock 이 0이면 Progress 계산에서 NaN 방지
+  const safeMaxStock = maxStock > 0 ? maxStock : 1;
+
+  const unit = sm.baseUnit || sm.salesUnit || '개';
+
+  return {
+    id: sm.id,
+    name: sm.name,
+    category: mapCategoryLabel(sm.category ?? null),
+
+    // 아직 가맹점 재고 테이블과 연동 전이므로 0으로 시작
+    currentStock: 0,          // 실제 재고 연동 전이라 0
+    minStock: optimal,        // 적정 재고 = minStock 로 사용
+    maxStock: optimal,        // 그래프 기준값을 적정으로 통일
+    unit,
+    unitPrice: sm.purchasePrice ?? 0,
+
+    // TODO: 나중에 입고 이력/유통기한 연동
+    lastRestocked: '',
+    expiryDate: new Date().toISOString().split('T')[0],
+    supplier: sm.supplier ?? '',
+    status: 'sufficient',
+    weeklyUsage: 0,
+    location: '',
+  };
+}
+
+// src/components/Store/InventoryManagement.tsx
+
+
 /* =======================
    컴포넌트
 ======================= */
 
 export function InventoryManagement() {
-  const [inventory, setInventory] = useState<InventoryItem[]>(sampleInventory);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [orders, setOrders] = useState<Order[]>(sampleOrders);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -146,6 +213,25 @@ export function InventoryManagement() {
     { label: '배송중', value: 'shipping', count: orders.filter(o => o.status === 'shipping').length },
     { label: '완료', value: 'delivered', count: orders.filter(o => o.status === 'delivered').length }
   ];
+
+  // TODO: 실제 로그인 정보에서 매장 ID 읽어오는 쪽으로 교체
+  const STORE_ID = 2;
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const list = await fetchStoreMaterials(STORE_ID);
+        const mapped = list.map(mapStoreMaterialToInventoryItem);
+        setInventory(mapped);
+      } catch (e: any) {
+        console.error(e);
+        toast.error('가맹점 재료 목록을 불러오지 못했습니다.');
+      }
+    }
+
+    load();
+  }, []);
+
 
   /* ---------- 선택/전체선택 핸들러 (선언문으로 호이스팅) ---------- */
   function handleItemSelect(itemId: number, checked: boolean) {
@@ -190,7 +276,6 @@ export function InventoryManagement() {
             {value}
           </div>
           <div className="text-sm text-dark-gray">{row.category}</div>
-          <div className="text-xs text-dark-gray">위치: {row.location}</div>
         </div>
       )
     },
@@ -199,8 +284,10 @@ export function InventoryManagement() {
       label: '재고현황',
       sortable: true,
       render: (value, row) => {
-        const percentage = (value / row.maxStock) * 100;
-        const isLow = value <= row.minStock;
+        const optimal = row.minStock;             // 적정 재고를 minStock에 담아둠
+        const base = optimal > 0 ? optimal : 1;   // 0 나누기 방지
+        const percentage = (value / base) * 100;
+        const isLow = value < optimal && optimal > 0;
 
         return (
           <div>
@@ -218,7 +305,7 @@ export function InventoryManagement() {
               }`}
             />
             <div className="text-xs text-dark-gray mt-1">
-              최소: {row.minStock} / 최대: {row.maxStock}
+              적정: {optimal}{row.unit}
             </div>
           </div>
         );
@@ -229,13 +316,19 @@ export function InventoryManagement() {
       label: '주간사용량',
       sortable: true,
       render: (value, row) => {
-        const daysLeft = Math.floor(row.currentStock / (value / 7));
+        const daysLeft =
+          value > 0
+            ? Math.floor(row.currentStock / (value / 7))
+            : 0;
+
         return (
           <div>
             <div className="font-medium text-gray-900">
               {value} {row.unit}
             </div>
-            <div className={`text-xs ${daysLeft <= 2 ? 'text-kpi-red' : 'text-dark-gray'}`}>약 {daysLeft}일분</div>
+            <div className={`text-xs ${daysLeft <= 2 && value > 0 ? 'text-kpi-red' : 'text-dark-gray'}`}>
+              {value > 0 ? `약 ${daysLeft}일분` : '-'}
+            </div>
           </div>
         );
       }
@@ -431,58 +524,31 @@ export function InventoryManagement() {
       } else if (modalType === 'register') {
         // 가맹점 재료 등록 API 연동
         
-
-        // 1) 본사 재료 사용 여부 파싱
-        const useHqMaterial =
-          data.hqMaterial === true ||
-          data.hqMaterial === 'true' ||
-          data.hqMaterial === 'HQ';
-
-        // 2) (임시) 가맹점 ID
-        //    나중에 로그인 세션/전역 상태에서 storeId 끌어오면 여기만 교체하면 됨.
+        // storeId는 필요하면 여기서 세션/전역 상태에서 꺼내서 넣기
+        // storeId: currentStoreId,
+        // 나중에 로그인 세션/전역 상태에서 storeId 끌어오면 여기만 교체하면 됨.
         const storeId = 2;
 
         // 3) payload 구성 – StoreMaterialCreateRequest와 1:1 매핑
         const payload: StoreMaterialCreateRequest = {
-          storeId,
-
-          code: data.code,
+          storeId, 
           name: data.itemName,
-
           category: data.category ?? null,
-
           baseUnit: data.baseUnit,
           salesUnit: data.salesUnit,
-
-          conversionRate: data.conversionRate
-            ? Number(data.conversionRate)
-            : 1,
-
-          supplier: data.supplier || null,
-
-          temperature: (data.temperature || null) as
-            | MaterialTemperature
-            | null,
-
-          status: (data.status || 'USE') as MaterialStatus,
-
           optimalQuantity: data.optimalQuantity
             ? Number(data.optimalQuantity)
             : null,
-
           purchasePrice: data.purchasePrice
             ? Number(data.purchasePrice)
             : null,
-
-          // 본사 재료 연결이면 materialId, 아니면 null
-          hqMaterialId:
-            useHqMaterial && data.materialId
-              ? Number(data.materialId)
-              : null,
+          supplier: data.supplier || null,
+          temperature: (data.temperature || null) as
+            | MaterialTemperature
+            | null,
         };
-
+        
         const newId = await createStoreMaterial(payload);
-
         toast.success(`'${payload.name}' 재료가 등록되었습니다. (#${newId})`);
           
         // 필요하면 로컬 목록 즉시 반영
@@ -533,30 +599,6 @@ export function InventoryManagement() {
     // register
     return [
       {
-        name: 'hqMaterial',
-        label: '본사 재료 사용 여부',
-        type: 'select' as const,
-        required: true,
-        options: [
-          { value: 'false', label: '가맹점 자체 재료' },
-          { value: 'true', label: '본사 재료와 연결' },
-        ],
-      },
-      {
-        name: 'materialId',
-        label: '본사 재료 ID (임시)',
-        type: 'number' as const,
-        required: false,
-        placeholder: '본사 재료와 연결 시 materialId 입력',
-      },
-      {
-        name: 'code',
-        label: '가맹점 재료 코드',
-        type: 'text' as const,
-        required: true,
-        placeholder: '점포 내 고유 코드',
-      },
-      {
         name: 'itemName',
         label: '품목명',
         type: 'text' as const,
@@ -568,12 +610,13 @@ export function InventoryManagement() {
         type: 'select' as const,
         required: true,
         options: [
-          { value: 'MAIN', label: '주재료' },
-          { value: 'SUB', label: '부재료' },
-          { value: 'SAUCE', label: '소스/조미료' },
-          { value: 'BEVERAGE', label: '음료' },
-          { value: 'VEGETABLE', label: '채소' },
-          { value: 'ETC', label: '기타' },
+          { value: 'BASE',     label: '주재료(BASE)' },
+          { value: 'TOPPING',  label: '토핑/부재료(TOPPING)' },
+          { value: 'SIDE',     label: '사이드(SIDE)' },
+          { value: 'SAUCE',    label: '소스/조미료(SAUCE)' },
+          { value: 'BEVERAGE', label: '음료(BEVERAGE)' },
+          { value: 'PACKAGE',  label: '포장재(PACKAGE)' },
+          { value: 'ETC',      label: '기타(ETC)' },
         ],
       },
       {
@@ -589,13 +632,6 @@ export function InventoryManagement() {
         type: 'text' as const,
         required: true,
         placeholder: '박스, 봉, kg 등',
-      },
-      {
-        name: 'conversionRate',
-        label: '변환비율 (입고 → 소진)',
-        type: 'number' as const,
-        required: true,
-        placeholder: '예: 1박스=1000g → 1000',
       },
       {
         name: 'optimalQuantity',
@@ -627,16 +663,6 @@ export function InventoryManagement() {
           { value: 'TEMPERATURE', label: '상온' },
           { value: 'REFRIGERATE', label: '냉장' },
           { value: 'FREEZE', label: '냉동' },
-        ],
-      },
-      {
-        name: 'status',
-        label: '재료 상태',
-        type: 'select' as const,
-        required: true,
-        options: [
-          { value: 'USE', label: '사용' },
-          { value: 'STOP', label: '미사용' },
         ],
       },
     ];
@@ -894,7 +920,6 @@ export function InventoryManagement() {
 /* =======================
    상세 / 장바구니 하위 컴포넌트
 ======================= */
-
 function ItemDetailContent({
   item,
   onUpdateMinStock,

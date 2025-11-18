@@ -8,6 +8,8 @@ import com.boot.ict05_final_user.domain.store.entity.Store;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
+
 @Repository
 public interface StoreMaterialRepository extends JpaRepository<StoreMaterial, Long> {
 
@@ -16,4 +18,8 @@ public interface StoreMaterialRepository extends JpaRepository<StoreMaterial, Lo
 
     // 필요하면: 가맹점 한 개 기준 목록 조회
     // Page<StoreMaterial> findByStore(Store store, Pageable pageable);
+    
+    // 가맹점 재료 조회
+    List<StoreMaterial> findByStore(Store store);
+
 }
