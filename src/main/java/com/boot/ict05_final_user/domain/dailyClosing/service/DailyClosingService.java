@@ -385,4 +385,26 @@ public class DailyClosingService {
                 .toList();
     }
 
+    /**
+     * 일일 마감 상세 한 건을 조회한다.
+     *
+     * - storeId + closingDate 로 DailyClosing 한 건을 찾고
+     * - 연결된 권종, 지출 목록을 함께 조회해서 DTO 로 변환한다.
+     *
+     * @param storeId 가맹점 아이디
+     * @param date    마감 일자
+     * @return 상세 조회 응답 DTO
+     */
+    public DailyClosingDetailResponse getDailyClosingDetail(Long storeId, LocalDate date) {
+
+        DailyClosing closing = dailyClosingRepository
+                .findByStoreIdAndClosingDate(storeId, date)
+                .orElseThrow(() -> new IllegalStateException("해당 일자의 시재 마감 데이터가 없습니다."));
+
+        List<DailyClosingExpense> expenses = dailyClosingRepository.findExpensesByClosing(closing);
+        List<DailyClosingDenom> denoms = dailyClosingRepository.findDenomsByClosing(closing);
+
+        return DailyClosingDetailResponse.from(closing, denoms, expenses);
+    }
+
 }

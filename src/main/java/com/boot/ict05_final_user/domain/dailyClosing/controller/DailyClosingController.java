@@ -1,10 +1,7 @@
 package com.boot.ict05_final_user.domain.dailyClosing.controller;
 
 import com.boot.ict05_final_user.config.security.principal.AppUser;
-import com.boot.ict05_final_user.domain.dailyClosing.dto.DailyClosingInitResponse;
-import com.boot.ict05_final_user.domain.dailyClosing.dto.DailyClosingOpenRequest;
-import com.boot.ict05_final_user.domain.dailyClosing.dto.DailyClosingSaveRequest;
-import com.boot.ict05_final_user.domain.dailyClosing.dto.DailyClosingSummaryDto;
+import com.boot.ict05_final_user.domain.dailyClosing.dto.*;
 import com.boot.ict05_final_user.domain.dailyClosing.service.DailyClosingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -130,5 +127,25 @@ public class DailyClosingController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         Long storeId = principal.getStoreId();
         return dailyClosingService.getDailyClosingHistory(storeId, from, to);
+    }
+
+    /**
+     * 일일 시재 마감 상세를 조회한다.
+     *
+     * 예시:
+     *  GET /api/daily-closing/detail?date=2025-11-18
+     *
+     * @param user 현재 로그인 사용자
+     * @param date 조회할 마감 일자
+     * @return 일일 시재 마감 상세 응답 DTO
+     */
+    @GetMapping("/detail")
+    public DailyClosingDetailResponse getDailyClosingDetail(
+            @AuthenticationPrincipal AppUser user,
+            @RequestParam("date")
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
+    ) {
+        Long storeId = extractStoreId(user);
+        return dailyClosingService.getDailyClosingDetail(storeId, date);
     }
 }

@@ -48,19 +48,27 @@ function formatWon(value: number | null | undefined): string {
 }
 
 type Props = {
-  // 리스트에서 한 줄 클릭 시 상세 페이지로 넘기고 싶을 때 사용 (선택)
   onSelectDate?: (date: string) => void;
+
+   // 🔹 App에서 기억해 줄 기간 값
+  initialFromDate?: string;
+  initialToDate?: string;
+
+  // 🔹 input이 바뀔 때 App에 알려줄 콜백
+  onDateRangeChange?: (from: string, to: string) => void;
 };
 
-export function DailyClosingList({ onSelectDate }: Props) {
+export function DailyClosingList({ onSelectDate, initialFromDate, initialToDate, onDateRangeChange}: Props) {
   const today = new Date();
   const weekAgo = new Date();
-  weekAgo.setDate(today.getDate() - 7);
+  weekAgo.setDate(today.getDate() - 31);
 
   const [fromDate, setFromDate] = useState<string>(
-    formatDateInputValue(weekAgo)
+    initialFromDate ?? formatDateInputValue(weekAgo)
   );
-  const [toDate, setToDate] = useState<string>(formatDateInputValue(today));
+  const [toDate, setToDate] = useState<string>(
+    initialToDate ?? formatDateInputValue(today)
+  );
 
   const [items, setItems] = useState<DailyClosingSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -98,7 +106,7 @@ export function DailyClosingList({ onSelectDate }: Props) {
     if (onSelectDate) {
       onSelectDate(date); // 부모에서 Date 넘겨서 DailyClosingPage 로 전환
     } else {
-      console.log("선택한 마감 일자:", date);
+      console.log("선택한 마감 일자 : ", date);
     }
   };
 
@@ -129,7 +137,11 @@ export function DailyClosingList({ onSelectDate }: Props) {
               type="date"
               className="w-40"
               value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                setFromDate(next);
+                onDateRangeChange?.(next, toDate);   
+              }}
             />
           </div>
           <span className="text-gray-400">~</span>
@@ -139,7 +151,11 @@ export function DailyClosingList({ onSelectDate }: Props) {
               type="date"
               className="w-40"
               value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                setToDate(next);
+                onDateRangeChange?.(fromDate, next);  // 🔹 부모에 전달
+              }}
             />
           </div>
 
@@ -194,8 +210,7 @@ export function DailyClosingList({ onSelectDate }: Props) {
                   return (
                     <TableRow
                       key={item.id}
-                      className="cursor-pointer hover:bg-gray-50"
-                      onClick={() => handleRowClick(item.closingDate)}
+                      className="hover:bg-gray-50"
                     >
                       <TableCell className="text-sm">
                         {item.closingDate}
@@ -253,10 +268,7 @@ export function DailyClosingList({ onSelectDate }: Props) {
                             size="sm"
                             variant="outline"
                             className="text-xs"
-                            onClick={(e) => {
-                                e.stopPropagation(); // 행 클릭과 분리
-                                handleRowClick(item.closingDate);
-                            }}
+                            onClick={() => handleRowClick(item.closingDate)}
                             >
                             상세보기
                             </Button>

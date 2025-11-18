@@ -38,10 +38,19 @@ public class DailyClosingRepositoryImpl implements DailyClosingRepositoryCustom 
         LocalDateTime end = date.plusDays(1).atStartOfDay();
 
         // 공통 where 조건: 점포, 상태, 날짜
-        BooleanExpression baseCond = order.store.id.eq(storeId)
-                .and(order.status.eq(OrderStatus.COMPLETED))
-                .and(order.orderedAt.goe(start))
-                .and(order.orderedAt.lt(end));
+        Long countAll = queryFactory
+                .select(order.id.count())
+                .from(order)
+                .where(
+                        order.store.id.eq(storeId),
+                        order.orderedAt.goe(start),
+                        order.orderedAt.lt(end)
+                )
+                .fetchOne();
+
+        System.out.println("[DailyClosing] storeId=" + storeId
+                + ", date=" + date
+                + ", ordersToday=" + countAll);
 
         // 매출 합계는 결제완료 상태 기준으로 집계
         long cashVisit   = sumOrderTotal(storeId, start, end, OrderType.VISIT,   PaymentType.CASH,   OrderStatus.COMPLETED);
@@ -83,11 +92,11 @@ public class DailyClosingRepositoryImpl implements DailyClosingRepositoryCustom 
             LocalDateTime end,
             OrderType orderType,
             PaymentType paymentType,
-            OrderStatus status) {
+            OrderStatus ignoredStatus) {
         QCustomerOrder order = QCustomerOrder.customerOrder;
 
         BooleanExpression cond = order.store.id.eq(storeId)
-                .and(order.status.eq(status))
+                .and(order.status.notIn(OrderStatus.CANCELED, OrderStatus.REFUNDED))
                 .and(order.paymentType.eq(paymentType))
                 .and(order.orderedAt.goe(start))
                 .and(order.orderedAt.lt(end));
