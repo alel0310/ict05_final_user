@@ -6,9 +6,7 @@ services:
     container_name: ict05-user-app
     environment:
       - SPRING_PROFILES_ACTIVE=prod,receive
-      - SPRING_DATASOURCE_URL=jdbc:mariadb://db:3306/ict05final
-      - SPRING_DATASOURCE_USERNAME=ictuser
-      - SPRING_DATASOURCE_PASSWORD=ictpass123
+      - DB_PASSWORD=ictpass123
     expose:
       - "8082"
     networks:
@@ -18,15 +16,26 @@ services:
     image: nginx:1.27
     container_name: ict05-user-nginx
     ports:
-      - "8086:80"
+      - "80:80"
+      - "443:443"  # HTTPS 포트 추가
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./front-end/build:/usr/share/nginx/html/user:ro
+      - ./certbot/conf:/etc/letsencrypt:ro  # SSL 인증서
+      - ./certbot/www:/var/www/certbot:ro   # 인증 파일
     depends_on:
       - user-app
     networks:
       - toastlab-net
 
+  certbot:
+    image: certbot/certbot
+    container_name: ict05-certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
 networks:
   toastlab-net:
-    external: true    # admin-compose 가 만든 네트워크에 붙겠다는 의미
+    external: true
