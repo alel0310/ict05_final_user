@@ -5,7 +5,7 @@ import com.boot.ict05_final_user.domain.staff.dto.StaffListDTO;
 import com.boot.ict05_final_user.domain.staff.dto.StaffModifyFormDTO;
 import com.boot.ict05_final_user.domain.staff.dto.StaffWriteFormDTO;
 import com.boot.ict05_final_user.domain.staff.entity.StaffProfile;
-import com.boot.ict05_final_user.domain.staff.repository.AttendanceRepository;
+import com.boot.ict05_final_user.domain.attendance.repository.AttendanceRepository;
 import com.boot.ict05_final_user.domain.staff.repository.StaffRepository;
 import com.boot.ict05_final_user.domain.staff.service.StaffService;
 import com.boot.ict05_final_user.domain.store.entity.Store;
@@ -20,8 +20,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 
 /**
@@ -94,6 +92,7 @@ public class StaffRestController {
                 .build();
 
         staffRepository.save(staff);
+
         log.info("직원 등록 완료 id={}", staff.getId());
 
         // 👇 근태 생성 없음 (attendance는 나중에 다른 기능에서 따로 처리)
@@ -137,33 +136,29 @@ public class StaffRestController {
         return ResponseEntity.noContent().build();
     }
 
-    /**
-     * 직원 삭제 API
-     * 직원 데이터를 삭제한다.
-     */
-    @DeleteMapping("/delete/{id}")
-    public ResponseEntity<Void> deleteStaff(
-            @PathVariable Long id,
-            @AuthenticationPrincipal AppUser user
-    ) {
-        log.info("DELETE /api/staff/delete/{} storeId={}", id, user.getStoreId());
-
-        // 1) 직원 조회
-        StaffProfile staff = staffRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("직원이 존재하지 않습니다."));
-
-        // 2) 로그인한 매장의 직원인지 확인
-        if (!staff.getStore().getId().equals(user.getStoreId())) {
-            return ResponseEntity.status(403).build();
-        }
-
-        // 3) 삭제
-        staffRepository.delete(staff);
-
-        return ResponseEntity.noContent().build();
-    }
-
-
-
-
+//    /**
+//     * 직원 삭제 API
+//     * 직원 데이터를 삭제한다.
+//     */
+//    @DeleteMapping("/delete/{id}")
+//    public ResponseEntity<Void> deleteStaff(
+//            @PathVariable Long id,
+//            @AuthenticationPrincipal AppUser user
+//    ) {
+//        log.info("DELETE /api/staff/delete/{} storeId={}", id, user.getStoreId());
+//
+//        // 1) 직원 조회
+//        StaffProfile staff = staffRepository.findById(id)
+//                .orElseThrow(() -> new IllegalArgumentException("직원이 존재하지 않습니다."));
+//
+//        // 2) 로그인한 매장의 직원인지 확인
+//        if (!staff.getStore().getId().equals(user.getStoreId())) {
+//            return ResponseEntity.status(403).build();
+//        }
+//
+//        // 3) 삭제
+//        staffRepository.delete(staff);
+//
+//        return ResponseEntity.noContent().build();
+//    }
 }

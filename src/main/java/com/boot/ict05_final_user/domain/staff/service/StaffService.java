@@ -3,6 +3,7 @@ package com.boot.ict05_final_user.domain.staff.service;
 import com.boot.ict05_final_user.config.security.auth.CustomUserDetails;
 import com.boot.ict05_final_user.domain.staff.dto.StaffListDTO;
 import com.boot.ict05_final_user.domain.staff.dto.StaffSearchDTO;
+import com.boot.ict05_final_user.domain.attendance.repository.AttendanceRepository;
 import com.boot.ict05_final_user.domain.staff.repository.StaffRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -15,9 +16,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.*;
-import java.util.stream.Collectors;
-
 @RequiredArgsConstructor
 @Service
 @Transactional
@@ -25,6 +23,7 @@ import java.util.stream.Collectors;
 public class StaffService {
 
     private final StaffRepository staffRepository;
+    private final AttendanceRepository attendanceRepository;
 
     // EM으로 최신 근태상태 한 번에 조회
     @PersistenceContext
@@ -79,7 +78,5 @@ public class StaffService {
         log.warn("예상치 못한 principal 타입: {}", principal.getClass());
         return null;
     }
-
-
 
 }

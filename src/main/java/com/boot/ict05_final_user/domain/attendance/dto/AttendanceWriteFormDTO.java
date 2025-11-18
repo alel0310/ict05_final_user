@@ -1,4 +1,4 @@
-package com.boot.ict05_final_user.domain.staff.dto;
+package com.boot.ict05_final_user.domain.attendance.dto;
 
 import com.boot.ict05_final_user.domain.staff.entity.AttendanceStatus;
 import com.boot.ict05_final_user.domain.staff.entity.StaffEmploymentType;
@@ -13,9 +13,17 @@ import java.time.LocalDateTime;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class AttendanceListDTO {
+public class AttendanceWriteFormDTO {
 
-    // attendance 테이블
+/**
+ * 직원 근태 등록 폼 DTO
+ *
+ * 직원 근태 등록 시 클라이언트에서 전달하는 값들을 담는다.
+ * 수정 대상 식별자, 소속 매장, 이름, 근무 형태, 연락처, 주소, 급여,
+ * 생년월일, 입사일자, 퇴사일자를 포함한다.
+ *
+ */
+
     /** 근무 시퀀스 */
     private Long attendanceId;
 
@@ -33,6 +41,9 @@ public class AttendanceListDTO {
 
     /** 실제 근무 시간 */
     private BigDecimal attendanceWorkHours;
+
+    /** 근태 비고/사유 */
+    private String attendanceMemo;
 
     // === StaffProfile JOIN 해서 가져올 정보 ===
     /** 직원 시퀀스 */

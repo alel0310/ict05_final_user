@@ -1,4 +1,4 @@
-package com.boot.ict05_final_user.domain.staff.repository;
+package com.boot.ict05_final_user.domain.attendance.repository;
 
 import com.boot.ict05_final_user.domain.staff.entity.Attendance;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -15,4 +15,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface AttendanceRepository
         extends JpaRepository<Attendance, Long>, AttendanceRepositoryCustom {
+
 }

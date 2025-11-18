@@ -192,13 +192,19 @@ export function StaffSchedule() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
   const [selectedStaff, setSelectedStaff] = useState<string>('all');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(''); // 스케줄용 검색
 
-  // 🔽 추가: 하루 근태 리스트 + 페이징 상태
+  // 🔽 하루 근태 리스트 + 페이징 상태
   const [attendanceList, setAttendanceList] = useState<AttendanceItem[]>([]);
   const [attendancePage, setAttendancePage] = useState(0);
   const [attendanceTotalPages, setAttendanceTotalPages] = useState(0);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
+
+  // 🔽 근태 검색 상태
+  const [attendanceKeyword, setAttendanceKeyword] = useState('');
+  const [attendanceSearchType, setAttendanceSearchType] =
+    useState<'name' | 'id' | 'all'>('name');
+  const [attendanceStatusFilter, setAttendanceStatusFilter] = useState<string>('ALL');
 
   // 모달
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
@@ -208,8 +214,9 @@ export function StaffSchedule() {
   );
 
   useEffect(() => {
-    // TODO: 직원 목록, 템플릿, 휴일 등은 나중에 로딩
+    // 날짜 바뀔 때마다 현재 검색 조건으로 다시 조회
     loadAttendance(currentDate, 0);
+    setAttendancePage(0);
   }, [currentDate]);
 
   // 휴일 체크
@@ -289,7 +296,6 @@ export function StaffSchedule() {
     return dateTime.substring(11, 16);
   };
 
-  // ===== Attendance Helpers =====
   const getAttendanceStatusBadge = (status: string) => {
     switch (status) {
       case 'NORMAL':
@@ -328,18 +334,29 @@ export function StaffSchedule() {
 
       const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
       const token = localStorage.getItem('accessToken');
-      const dateStr = formatDateLocal(targetDate);  // ✅ toISOString() 대신
+      const dateStr = formatDateLocal(targetDate);
 
       const res = await axios.get<PageResponse<AttendanceItem>>(
         `${baseUrl}/api/attendance/daily`,
         {
           headers: { Authorization: `Bearer ${token}` },
-          params: { date: dateStr, page, size: 20 },
+          params: {
+            date: dateStr,
+            page,
+            size: 20,
+            keyword: attendanceKeyword || undefined,
+            type: attendanceSearchType,
+            // "ALL" 은 필터 없음 → 파라미터 안 보냄
+            attendanceStatus:
+              attendanceStatusFilter === 'ALL'
+                ? undefined
+                : attendanceStatusFilter,
+          },
         }
       );
 
       const data = res.data;
-      console.log('📌 근태 응답', data);   // ← 이 줄 추가
+      console.log('📌 근태 응답', data);
 
       setAttendanceList(data.content || []);
       setAttendancePage(data.number ?? 0);
@@ -351,8 +368,6 @@ export function StaffSchedule() {
       setAttendanceLoading(false);
     }
   };
-
-
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -541,7 +556,6 @@ export function StaffSchedule() {
     const newDate = new Date(currentDate);
     newDate.setDate(currentDate.getDate() + (dir === 'next' ? 1 : -1));
     setCurrentDate(newDate);
-    setAttendancePage(0); // 날짜 바뀌면 0페이지부터
   };
 
   const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
@@ -572,43 +586,101 @@ export function StaffSchedule() {
 
       {/* 검색/필터 */}
       <Card>
-        <CardContent className="p-4">
+        <CardContent className="p-4 space-y-3">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
               <div className="relative">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <Input
-                  placeholder="직원명으로 검색..."
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
+                  placeholder="직원명 / ID로 검색..."
+                  value={attendanceKeyword}
+                  onChange={e => {
+                    setAttendanceKeyword(e.target.value);
+                    setSearchTerm(e.target.value); // 스케줄 리스트 필터도 같이 사용
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      setAttendancePage(0);
+                      loadAttendance(currentDate, 0);
+                    }
+                  }}
                   className="pl-10"
                 />
               </div>
             </div>
-            <div className="flex gap-2">
-              <Select value={selectedStaff} onValueChange={setSelectedStaff}>
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="직원 선택" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">전체 직원</SelectItem>
-                  {staffList.map(st => (
-                    <SelectItem key={st.id} value={st.id}>
-                      {st.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={viewMode} onValueChange={(v: any) => setViewMode(v)}>
-                <SelectTrigger className="w-32">
+            <div className="flex gap-2 items-center flex-wrap">
+              {/* 검색 타입 */}
+              <Select
+                value={attendanceSearchType}
+                onValueChange={v =>
+                  setAttendanceSearchType(v as 'name' | 'id' | 'all')
+                }
+              >
+                <SelectTrigger className="w-28">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="week">주간</SelectItem>
-                  <SelectItem value="month">월간</SelectItem>
+                  <SelectItem value="name">이름</SelectItem>
+                  <SelectItem value="id">직원ID</SelectItem>
+                  <SelectItem value="all">전체</SelectItem>
                 </SelectContent>
               </Select>
+
+              {/* 근태 상태 필터 */}
+              <Select
+                value={attendanceStatusFilter}
+                onValueChange={v => setAttendanceStatusFilter(v)}
+              >
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="근태 상태" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">전체</SelectItem>
+                  <SelectItem value="NORMAL">정상출근</SelectItem>
+                  <SelectItem value="WORKING">근무중</SelectItem>
+                  <SelectItem value="COMPLETED">완료</SelectItem>
+                  <SelectItem value="LATE">지각</SelectItem>
+                  <SelectItem value="ABSENT">결근</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* 검색 버튼 */}
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setAttendancePage(0);
+                  loadAttendance(currentDate, 0);
+                }}
+              >
+                검색
+              </Button>
             </div>
+          </div>
+
+          {/* 기존 스케줄용 직원/뷰 모드 필터 */}
+          <div className="flex gap-2">
+            <Select value={selectedStaff} onValueChange={setSelectedStaff}>
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="직원 선택" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">전체 직원</SelectItem>
+                {staffList.map(st => (
+                  <SelectItem key={st.id} value={st.id}>
+                    {st.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={viewMode} onValueChange={(v: any) => setViewMode(v)}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="week">주간</SelectItem>
+                <SelectItem value="month">월간</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
@@ -647,7 +719,6 @@ export function StaffSchedule() {
                   <div className="text-left">퇴근</div>
                   <div className="text-left">근태 상태</div>
                   <div className="text-left">실제 근무시간(h)</div>
-                  {/* <div className="text-right">관리</div>  // 나중에 수정/삭제 붙일 때 사용 */}
                 </div>
 
                 {/* 데이터 rows */}
@@ -675,20 +746,6 @@ export function StaffSchedule() {
 
                     {/* 실제 근무시간 */}
                     <div>{item.attendanceWorkHours?.toFixed(2)}</div>
-
-                    {/* 관리 버튼 (나중에 구현) */}
-                    {/* <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="p-1 h-7 w-7"
-                        onClick={() => {
-                          toast.info('근태 수정 기능은 아직 준비 중입니다.');
-                        }}
-                      >
-                        <Edit className="w-3 h-3" />
-                      </Button>
-                    </div> */}
                   </div>
                 ))}
               </div>
@@ -770,13 +827,13 @@ export function StaffSchedule() {
             schedules.map(s =>
               s.id === editingSchedule?.id
                 ? {
-                  ...s,
-                  ...data,
-                  startTime,
-                  endTime,
-                  breakTime,
-                  staffName: staff?.name || s.staffName
-                }
+                    ...s,
+                    ...data,
+                    startTime,
+                    endTime,
+                    breakTime,
+                    staffName: staff?.name || s.staffName
+                  }
                 : s
             )
           );

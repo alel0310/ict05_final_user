@@ -1,8 +1,11 @@
-package com.boot.ict05_final_user.domain.staff.repository;
+package com.boot.ict05_final_user.domain.attendance.repository;
 
-import com.boot.ict05_final_user.domain.staff.dto.AttendanceListDTO;
+import com.boot.ict05_final_user.domain.attendance.dto.AttendanceListDTO;
+import com.boot.ict05_final_user.domain.attendance.dto.AttendanceSearchDTO;
+import com.boot.ict05_final_user.domain.staff.entity.AttendanceStatus;
 import com.boot.ict05_final_user.domain.staff.entity.QAttendance;
 import com.boot.ict05_final_user.domain.staff.entity.QStaffProfile;
+import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.types.Projections;
 import com.querydsl.jpa.impl.JPAQuery;
 import com.querydsl.jpa.impl.JPAQueryFactory;
@@ -25,11 +28,49 @@ public class AttendanceRepositoryImpl implements AttendanceRepositoryCustom {
     public Page<AttendanceListDTO> findDailyAttendanceByStore(
             Long storeId,
             LocalDate workDate,
-            Pageable pageable
+            Pageable pageable,
+            AttendanceSearchDTO dto
     ) {
 
         QAttendance attendance = QAttendance.attendance;
         QStaffProfile staff = QStaffProfile.staffProfile;
+
+        BooleanBuilder condition = new BooleanBuilder();
+
+        // 기본 조건: 날짜 + 점포
+        condition.and(attendance.workDate.eq(workDate));
+        if (storeId != null) {
+            condition.and(staff.store.id.eq(storeId));
+        }
+
+        // ===== 검색어 / 타입 처리 =====
+        if (dto != null) {
+            String keyword = dto.getKeyword();
+            String type = dto.getType();
+            AttendanceStatus statusFilter = dto.getAttendanceStatus();
+
+            // 🔍 키워드 검색
+            if (keyword != null && !keyword.isBlank()) {
+
+                // type 에 따라 분기
+                if ("name".equalsIgnoreCase(type)) {
+                    condition.and(staff.staffName.containsIgnoreCase(keyword));
+                } else if ("id".equalsIgnoreCase(type)) {
+                    condition.and(staff.id.stringValue().containsIgnoreCase(keyword));
+                } else { // all 또는 null
+                    condition.and(
+                            staff.staffName.containsIgnoreCase(keyword)
+                                    .or(staff.id.stringValue().containsIgnoreCase(keyword))
+                    );
+                }
+            }
+
+            // 🔍 근태 상태 필터 (LATE, NORMAL, ABSENT 등)
+            if (statusFilter != null) {
+                condition.and(attendance.status.eq(statusFilter));
+            }
+        }
+
 
         // 1) 내용 쿼리
         JPAQuery<AttendanceListDTO> contentQuery = queryFactory
@@ -47,10 +88,7 @@ public class AttendanceRepositoryImpl implements AttendanceRepositoryCustom {
                 ))
                 .from(attendance)
                 .join(attendance.staffProfile, staff)
-                .where(
-                        attendance.workDate.eq(workDate)
-                                .and(staff.store.id.eq(storeId))
-                )
+                .where(condition)
                 .orderBy(
                         staff.staffName.asc(),
                         attendance.checkIn.asc()
@@ -70,10 +108,7 @@ public class AttendanceRepositoryImpl implements AttendanceRepositoryCustom {
                 .select(attendance.count())
                 .from(attendance)
                 .join(attendance.staffProfile, staff)
-                .where(
-                        attendance.workDate.eq(workDate)
-                                .and(staff.store.id.eq(storeId))
-                )
+                .where(condition)
                 .fetchOne();
 
         return new PageImpl<>(content, pageable, total == null ? 0 : total);

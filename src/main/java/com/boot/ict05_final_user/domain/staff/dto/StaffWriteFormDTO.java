@@ -14,13 +14,6 @@ import java.time.LocalDateTime;
  * 수정 대상 식별자, 소속 매장, 이름, 근무 형태, 연락처, 주소, 급여,
  * 생년월일, 입사일자, 퇴사일자를 포함한다.
  *
- * 검증 규칙 요약
- * - storeIdFk, staffName, staffEmploymentType는 필수
- * - staffEmail은 입력 시 이메일 형식이어야 함
- * - staffPhone은 숫자와 하이픈만 허용
- * - staffSalary는 0 이상
- * - staffBirth는 과거, staffStartDate는 과거 또는 현재, staffEndDate는 과거 또는 현재
- * </ul>
  */
 @Data
 public class StaffWriteFormDTO {

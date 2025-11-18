@@ -1,9 +1,10 @@
-package com.boot.ict05_final_user.domain.staff.dto;
+package com.boot.ict05_final_user.domain.attendance.dto;
 
+import com.boot.ict05_final_user.domain.staff.entity.AttendanceStatus;
 import lombok.Data;
 
 @Data
-public class StaffSearchDTO {
+public class AttendanceSearchDTO {
 
     /** 검색어 (직원명, 직원 ID 등) */
     private String keyword;
@@ -16,4 +17,7 @@ public class StaffSearchDTO {
 
     /** 가맹점 ID */
     private Long storeId;
+
+    /** 근태 상태 (LATE, NORMAL, ABSENT 등) */
+    private AttendanceStatus attendanceStatus;
 }

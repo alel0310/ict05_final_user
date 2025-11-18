@@ -27,9 +27,9 @@ public class Attendance {
     private Long id; // INT UNSIGNED → Long 매핑
 
     /** 직원 프로필 (근태는 직원에 종속됨) */
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL) // CascadeType.ALL 추가
     @JoinColumn(name = "staff_id_fk", nullable = false)
-    private StaffProfile staffProfile;
+    private StaffProfile staffProfile;  // 직원 삭제 시 관련된 출석 데이터도 삭제되도록 설정
 
     /** 근무 일자 */
     @Column(name = "attendance_work_date", nullable = false)

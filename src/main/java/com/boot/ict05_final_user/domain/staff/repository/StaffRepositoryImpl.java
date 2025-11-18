@@ -46,6 +46,7 @@ public class StaffRepositoryImpl implements StaffRepositoryCustom {
                         staff.staffEmail,
                         staff.staffEmploymentType,
                         staff.staffStartDate,
+                        staff.staffEndDate,
                         attendance.status.as("attendanceStatus")   // DTO 필드명과 동일
                 ))
                 .from(staff)

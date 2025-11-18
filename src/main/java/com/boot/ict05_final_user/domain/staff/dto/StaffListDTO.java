@@ -39,6 +39,10 @@ public class StaffListDTO {
     @Schema(type="string", format="date-time")
     private LocalDateTime staffStartDate;
 
+    /** 사원 퇴사일자 */
+    @Schema(type="string", format="date-time")
+    private LocalDateTime staffEndDate;
+
     /** 근태 상태 */
     private AttendanceStatus attendanceStatus;
 

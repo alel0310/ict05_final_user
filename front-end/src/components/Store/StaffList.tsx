@@ -29,14 +29,14 @@ type BaseField = {
 
 type ModalField =
   | (BaseField & {
-      type: Exclude<UIFieldType, 'select'>;
-      placeholder?: string;
-      options?: never;
-    })
+    type: Exclude<UIFieldType, 'select'>;
+    placeholder?: string;
+    options?: never;
+  })
   | (BaseField & {
-      type: 'select';
-      options: { value: string; label: string }[];
-    });
+    type: 'select';
+    options: { value: string; label: string }[];
+  });
 
 /* ---------- Staff & Page 인터페이스 ---------- */
 interface Staff {
@@ -45,8 +45,8 @@ interface Staff {
   staffBirth: string;
   staffEmploymentType: string;
   staffStartDate: string;
-  staffEndDate?: string;
-  attendanceStatus: string;
+  staffEndDate?: string | null;
+  attendanceStatus?: string | null;
   staffPhone: string;
   staffEmail: string;
 }
@@ -61,6 +61,8 @@ interface PageResponse<T> {
 
 /* ---------- 컴포넌트 ---------- */
 export function StaffList() {
+  console.log('### StaffList 렌더링됨');
+
   const [staff, setStaff] = useState<Staff[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterAttendance, setFilterAttendance] = useState<string>('all');
@@ -79,6 +81,7 @@ export function StaffList() {
 
   /* ✅ 직원 목록 불러오기 (page/size 포함) */
   const fetchStaffList = async (pageParam = page, sizeParam = size) => {
+     console.log('### fetchStaffList 실행됨', pageParam, sizeParam);
     try {
       const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
       const token = localStorage.getItem('accessToken');
@@ -90,6 +93,8 @@ export function StaffList() {
           params: { page: pageParam, size: sizeParam },
         }
       );
+
+      console.log("<<백엔드에서 받은 직원 데이터>>", res.data.content);
 
       setStaff(res.data.content);
       setTotalPages(res.data.totalPages);
@@ -174,57 +179,99 @@ export function StaffList() {
     }
   };
 
-  /* 삭제 처리 */
-  const handleDeleteStaff = async (id: number) => {
-    const confirmed = window.confirm('해당 직원을 정말 삭제하시겠습니까?');
+  /* 퇴사 처리 */
+  const handleResignStaff = async (target: Staff) => {
+    const confirmed = window.confirm(
+      `${target.staffName} 직원을 퇴사 처리하시겠습니까?`
+    );
     if (!confirmed) return;
 
     try {
       const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
       const token = localStorage.getItem('accessToken');
 
-      await axios.delete(`${baseUrl}/api/staff/delete/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      // 오늘 날짜를 yyyy-MM-dd 로
+      const todayDate = new Date().toISOString().slice(0, 10); // "2025-11-18"
 
-      // 삭제 후 현재 페이지 재조회
+      const payload = {
+        // 문자열로 들어있는 기존값들 → 앞 10자리만 잘라서 다시 LocalDateTime 형태로
+        staffName: target.staffName,
+        staffEmploymentType: target.staffEmploymentType,
+        staffEmail: target.staffEmail,
+        staffPhone: target.staffPhone,
+        staffBirth: toDateTime(target.staffBirth.slice(0, 10)),
+        staffStartDate: toDateTime(target.staffStartDate.slice(0, 10)),
+
+        // ✅ 퇴사일도 "2025-11-18T00:00:00" 형태로 보내기
+        staffEndDate: toDateTime(todayDate),
+      };
+
+      await axios.put(
+        `${baseUrl}/api/staff/modify/${target.id}`,
+        payload,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      // 다시 목록 재조회
       await fetchStaffList(page, size);
 
-      toast.success('직원이 삭제되었습니다.');
+      toast.success(`${target.staffName}님이 퇴사 처리되었습니다.`);
     } catch (err: any) {
       console.error(err?.response?.data ?? err);
-      toast.error('직원 삭제에 실패했습니다.');
+      toast.error('퇴사 처리에 실패했습니다.');
     }
+  };
+
+  /* ✅ 근무/퇴사 카테고리 매핑 */
+  const getWorkCategoryFromStaff = (s: Staff): 'active' | 'resigned' => {
+    // 1) 퇴사일이 있으면 무조건 퇴사
+    if (s.staffEndDate) {
+      console.log('카테고리 계산:', s.staffName, '퇴사일=', s.staffEndDate, '→ resigned');
+    return 'resigned';
+    }
+
+    // 2) (옵션) 근태 상태 enum도 같이 체크
+    if (s.attendanceStatus) {
+      const raw = s.attendanceStatus.toString().trim();
+      const upper = raw.toUpperCase();
+      console.log('카테고리 계산:', s.staffName, 'status=', upper, '→ active/resign 체크');
+
+      if (upper === 'RESIGN' || raw === '퇴사') {
+        return 'resigned';
+      }
+    }
+
+    console.log('카테고리 계산:', s.staffName, '퇴사일 없음 → active');
+    // 3) 나머지는 근무중
+    return 'active';
   };
 
   /* ✅ 필터링 (현재 페이지 기준에서만 필터) */
   const filteredStaff = staff.filter(staffMember => {
     const matchesSearch =
       staffMember.staffName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      staffMember.staffEmploymentType.toLowerCase().includes(searchTerm.toLowerCase());
+      staffMember.staffEmploymentType
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase());
 
     const matchesAttendance =
       filterAttendance === 'all' ||
-      staffMember.attendanceStatus === filterAttendance;
+      getWorkCategoryFromStaff(staffMember) === filterAttendance;
 
     return matchesSearch && matchesAttendance;
   });
 
-  /* ✅ 근태 상태 뱃지 */
-  const getAttendanceBadge = (attendanceStatus?: string | null) => {
-    if (!attendanceStatus) return null;
 
-    const status = attendanceStatus.toUpperCase();
-    switch (status) {
-      case 'ACTIVE':
-      case 'WORKING':
-        return <Badge className="bg-green-100 text-green-800">근무중</Badge>;
-      case 'RESIGNED':
-      case 'QUIT':
-        return <Badge className="bg-red-100 text-red-800">퇴사</Badge>;
-      default:
-        return <Badge>{attendanceStatus}</Badge>;
+  /* ✅ 근태 상태 뱃지 */
+  const getAttendanceBadge = (s: Staff) => {
+    const category = getWorkCategoryFromStaff(s);
+
+    if (category === 'resigned') {
+      return <Badge className="bg-red-100 text-red-800">퇴사</Badge>;
     }
+    return <Badge className="bg-green-100 text-green-800">근무중</Badge>;
   };
 
   /* 등록 모달 필드 */
@@ -302,7 +349,7 @@ export function StaffList() {
             <div>
               <p className="text-sm text-dark-gray">근무중</p>
               <p className="text-2xl font-semibold">
-                {filteredStaff.filter(s => s.attendanceStatus === 'active').length}
+                {staff.filter(s => getWorkCategoryFromStaff(s) === 'active').length}
               </p>
             </div>
           </div>
@@ -313,7 +360,7 @@ export function StaffList() {
             <div>
               <p className="text-sm text-dark-gray">퇴사</p>
               <p className="text-2xl font-semibold">
-                {filteredStaff.filter(s => s.attendanceStatus === 'resigned').length}
+                {staff.filter(s => getWorkCategoryFromStaff(s) === 'resigned').length}
               </p>
             </div>
           </div>
@@ -365,7 +412,7 @@ export function StaffList() {
                           {staff.staffEmploymentType}
                         </p>
                       </div>
-                      {getAttendanceBadge(staff.attendanceStatus)}
+                      {getAttendanceBadge(staff)}
                     </div>
                     <div className="mt-3 space-y-1 text-sm text-dark-gray">
                       <div>생년월일: {staff.staffBirth}</div>
@@ -390,11 +437,12 @@ export function StaffList() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleDeleteStaff(staff.id)}
-                        className="gap-1"
+                        onClick={() => handleResignStaff(staff)}
+                        className="gap-1 text-kpi-red"
                       >
-                        삭제
+                        퇴사 처리
                       </Button>
+
                     </div>
                   </div>
                 </div>
@@ -452,13 +500,13 @@ export function StaffList() {
         initialData={
           editingStaff
             ? {
-                ...editingStaff,
-                staffBirth: editingStaff.staffBirth?.slice(0, 10),
-                staffStartDate: editingStaff.staffStartDate?.slice(0, 10),
-                staffEndDate: editingStaff.staffEndDate
-                  ? editingStaff.staffEndDate.slice(0, 10)
-                  : undefined,
-              }
+              ...editingStaff,
+              staffBirth: editingStaff.staffBirth?.slice(0, 10),
+              staffStartDate: editingStaff.staffStartDate?.slice(0, 10),
+              staffEndDate: editingStaff.staffEndDate
+                ? editingStaff.staffEndDate.slice(0, 10)
+                : undefined,
+            }
             : undefined
         }
       />
