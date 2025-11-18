@@ -47,16 +47,29 @@ def create_kpi_report(payload: KpiPayload):
 # =====================================================
 
 class OrdersRow(BaseModel):
-    date: Optional[str] = None
-    orderDate: Optional[str] = None
-    storeName: Optional[str] = None
-    category: Optional[str] = None
-    menu: Optional[str] = None
+    # 공통/메타
+    date: Optional[str] = None   # DAY: orderDate, MONTH: yearMonth
+    yearMonth: Optional[str] = None  # 월별용 (백엔드에서 안 써도 혹시 대비)
+
+    # DAY 뷰 (주문 단위)
+    orderId: Optional[int] = None
+    orderType: Optional[str] = None         # VISIT/TAKEOUT/DELIVERY
+    orderCount: Optional[int] = 0           # 일별은 항상 1로 들어옴
+    totalPrice: Optional[float] = 0         # 총금액
     menuCount: Optional[int] = 0
-    menuSales: Optional[float] = 0
-    orderCount: Optional[int] = 0
-    orderSales: Optional[float] = 0
-    orderType: Optional[str] = None
+    paymentType: Optional[str] = None       # CARD/CASH/VOUCHER/EXTERNAL
+    channelMemo: Optional[str] = None
+
+    # MONTH 뷰 (월별 집계)
+    totalSales: Optional[float] = 0         # 총매출
+    orderCountMonth: Optional[int] = None   # 필요 없으면 사용 안 해도 됨
+    avgOrderAmount: Optional[float] = 0
+    deliverySales: Optional[float] = 0
+    takeoutSales: Optional[float] = 0
+    visitSales: Optional[float] = 0
+
+    class Config:
+        extra = "ignore"
 
 class OrdersPayload(BaseModel):
     criteria: Dict[str, Any]
