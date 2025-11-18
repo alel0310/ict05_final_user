@@ -336,6 +336,71 @@ public class AnalyticsReportService {
         return pythonPdfClient.requestTimeDayReport(payload);
     }
 
+    /**
+     * 재료 분석 보고서 PDF 생성.
+     *
+     * @param storeId   점포 ID
+     * @param startDate 조회 시작일 (YYYY-MM-DD)
+     * @param endDate   조회 종료일 (YYYY-MM-DD)
+     * @param viewBy    DAY or MONTH
+     * @return PDF 바이트 배열
+     */
+    public byte[] generateMaterialReport(
+            Long storeId,
+            LocalDate startDate,
+            LocalDate endDate,
+            AnalyticsSearchDto.ViewBy viewBy
+    ) {
+        // 1) 상단 요약
+        MaterialSummaryDto summary = analyticsService.getMaterialSummary(storeId);
+
+        // 2) 테이블 데이터 (일별 or 월별)
+        List<MaterialDailyRowDto> dailyRows = List.of();
+        List<MaterialMonthlyRowDto> monthlyRows = List.of();
+
+        if (viewBy == AnalyticsSearchDto.ViewBy.DAY) {
+            AnalyticsSearchDto cond = new AnalyticsSearchDto(
+                    startDate, endDate,
+                    AnalyticsSearchDto.ViewBy.DAY,
+                    500,
+                    null
+            );
+            CursorPage<MaterialDailyRowDto> page = analyticsService.getMaterialDailyRows(storeId, cond);
+            dailyRows = page.items();
+        } else {
+            AnalyticsSearchDto cond = new AnalyticsSearchDto(
+                    startDate, endDate,
+                    AnalyticsSearchDto.ViewBy.MONTH,
+                    500,
+                    null
+            );
+            CursorPage<MaterialMonthlyRowDto> page = analyticsService.getMaterialMonthlyRows(storeId, cond);
+            monthlyRows = page.items();
+        }
+
+        // 3) 점포명 조회
+        String storeName = resolveStoreName(storeId);
+        String periodLabel = startDate + " ~ " + endDate;
+        String generatedAt = LocalDateTime.now(KST).toString();
+
+        // 4) Payload 구성
+        MaterialReportPayload payload = new MaterialReportPayload(
+                storeId,
+                storeName,
+                periodLabel,
+                summary,
+                viewBy.name(),   // "DAY" / "MONTH"
+                dailyRows,
+                monthlyRows,
+                generatedAt
+        );
+
+        log.info("[Material-Report] storeId={}, viewBy={}, rowsDaily={}, rowsMonthly={}",
+                storeId, viewBy, dailyRows.size(), monthlyRows.size());
+
+        return pythonPdfClient.requestMaterialReport(payload);
+    }
+
     // =========================================
     // null 방어용 helper
     // =========================================

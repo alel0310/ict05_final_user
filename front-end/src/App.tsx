@@ -30,6 +30,7 @@ import OrderReport from "./components/Store/reports/OrderReport";
 import NotificationSettings from "./components/Store/NotificationSettings";
 import MenuReport from "./components/Store/reports/MenuReport";
 import TimeReport from "./components/Store/reports/TimeReport";
+import MaterialReport from "./components/Store/reports/MaterialReport";
  // ✅ 인터셉터/강제로그아웃 핸들러
 
 type HeaderInfo = {
@@ -118,6 +119,7 @@ export default function App() {
       case "kpi-report": return <ErrorBoundary><KpiReport /></ErrorBoundary>;
       case "order-report": return <ErrorBoundary><OrderReport /></ErrorBoundary>;
       case "menu-report": return <ErrorBoundary><MenuReport /></ErrorBoundary>;
+      case "material-report": return <ErrorBoundary><MaterialReport /></ErrorBoundary>;
       case "daytime-report": return <ErrorBoundary><TimeReport /></ErrorBoundary>;
       
       case "settings-notifications": return (<ErrorBoundary><NotificationSettings /></ErrorBoundary>);

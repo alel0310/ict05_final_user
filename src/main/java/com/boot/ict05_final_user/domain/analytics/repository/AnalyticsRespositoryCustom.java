@@ -31,4 +31,23 @@ public interface AnalyticsRespositoryCustom {
 	CursorPage<TimeDayDailyRowDto> fetchTimeDayDailyRows(Long storeId, AnalyticsSearchDto cond);
 
 	CursorPage<TimeDayMonthlyRowDto> fetchTimeDayMonthlyRows(Long storeId, AnalyticsSearchDto cond);
+
+	/**
+	 * 재료 분석 상단 카드 요약을 조회한다.
+	 *
+	 * <p>기간 규칙은 AnalyticsService에서 today 기준으로 계산:
+	 * 이번달 1일 ~ 어제까지(MTD) + 전월 동일기간 비교.</p>
+	 */
+	MaterialSummaryDto fetchMaterialSummary(Long storeId, LocalDate today);
+
+	/**
+	 * 재료 분석 일별 테이블 (커서 기반 페이징).
+	 */
+	CursorPage<MaterialDailyRowDto> fetchMaterialDailyRows(Long storeId, AnalyticsSearchDto cond);
+
+	/**
+	 * 재료 분석 월별 테이블 (커서 기반 페이징).
+	 */
+	CursorPage<MaterialMonthlyRowDto> fetchMaterialMonthlyRows(Long storeId, AnalyticsSearchDto cond);
+
 }

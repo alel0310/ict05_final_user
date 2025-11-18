@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
-import { AlertTriangle, CalendarIcon, Download, Package, PartyPopper, Star, ThumbsUp, TrendingUp } from 'lucide-react';
+import { AlertTriangle, CalendarIcon, Clock, Download, Package, TrendingDown, TrendingUp } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../components/ui/popover';
 import { Calendar } from '../../../components/ui/calendar';
 import { fmtMoneyInt, fmtPercent1, tz } from '../../../lib/format';
 import api from '../../../lib/authApi';
 import { KPICard } from '../../Common/KPICard';
 
-// ====== 로컬 타입(파일 단독 사용 가능) ======
+// ====== 로컬 타입 ======
 type ViewBy = 'DAY' | 'MONTH';
 
 type PageResp<T> = {
@@ -17,60 +17,46 @@ type PageResp<T> = {
 };
 
 // 상단 요약 카드용
-type MenuTopMenu = {
-  menuId: number;
-  menuName: string;
-  quantity: number;
+type MaterialTopItem = {
+  materialId: number;
+  materialName: string;
+  unitName: string;
+  usedQuantity: number;
+  cost: number;
 };
 
-type MenuCategoryRank = {
-  categoryId: number;
-  categoryName: string;
-  sales: number;
-};
-
-type MenuSalesContribution = {
-  menuId: number;
-  menuName: string;
-  sales: number;
-  contributionRate: number; // %
-};
-
-type MenuLowPerform = {
-  menuId: number;
-  menuName: string;
-  sales: number;
-  quantity: number;
-};
-
-type MenuSummary = {
-  topMenusByQty: MenuTopMenu[];
-  topCategoriesBySales: MenuCategoryRank[];
-  topMenusBySalesContribution: MenuSalesContribution[];
-  lowPerformMenus: MenuLowPerform[];
+type MaterialSummary = {
+  topByUsage: MaterialTopItem[];
+  topByCost: MaterialTopItem[];
+  currentCostRate: number;
+  prevCostRate: number;
+  costRateDiff: number;
+  lowStockCount: number;
+  expireSoonCount: number;
 };
 
 // 테이블 행 (일별)
-type MenuDailyRow = {
-  orderDate: string;    // YYYY-MM-DD
-  categoryName: string;
-  menuName: string;
-  quantity: number;
-  sales: number;
-  orderCount: number;
+type MaterialDailyRow = {
+  useDate: string;        // YYYY-MM-DD
+  materialName: string;
+  usedQuantity: number;
+  unitName: string;
+  cost: number;
+  salesShare: number;     // %
+  lastInboundDate?: string | null;
 };
 
 // 테이블 행 (월별)
-type MenuMonthlyRow = {
-  yearMonth: string;    // YYYY-MM
-  menuName: string;
-  categoryName: string;
-  quantity: number;
-  sales: number;
-  orderCount: number;
+type MaterialMonthlyRow = {
+  yearMonth: string;      // YYYY-MM
+  materialName: string;
+  usedQuantity: number;
+  cost: number;
+  costRate: number;       // %
+  lastInboundMonth?: string | null;
 };
 
-type MenuRow = MenuDailyRow | MenuMonthlyRow;
+type MaterialRow = MaterialDailyRow | MaterialMonthlyRow;
 
 const PAGE_SIZE_OPTIONS = [20, 40, 60, 80, 100];
 
@@ -81,8 +67,8 @@ function formatDateLocal(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-export default function MenuReport() {
-  const [storeId] = useState<number>(1); // TODO: 상단 스토어 필터 연동
+export default function MaterialReport() {
+  const [storeId] = useState<number>(1);
 
   const today = new Date();
   const [end, setEnd] = useState<Date>(() => today);
@@ -95,8 +81,8 @@ export default function MenuReport() {
   const [viewBy, setViewBy] = useState<ViewBy>('DAY');
   const [pageSize, setPageSize] = useState<number>(20);
 
-  const [summary, setSummary] = useState<MenuSummary | null>(null);
-  const [rows, setRows] = useState<MenuRow[]>([]);
+  const [summary, setSummary] = useState<MaterialSummary | null>(null);
+  const [rows, setRows] = useState<MaterialRow[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -109,8 +95,8 @@ export default function MenuReport() {
   // ==========================
   async function loadSummary() {
     try {
-      const { data } = await api.get<MenuSummary>('/api/analytics/menus/summary', {
-        params: { storeId, start: startStr, end: endStr },
+      const { data } = await api.get<MaterialSummary>('/api/analytics/materials/summary', {
+        params: { storeId },
       });
       setSummary(data);
     } catch {
@@ -126,10 +112,10 @@ export default function MenuReport() {
     try {
       const url =
         viewBy === 'DAY'
-          ? '/api/analytics/menus/day-rows'
-          : '/api/analytics/menus/month-rows';
+          ? '/api/analytics/materials/day-rows'
+          : '/api/analytics/materials/month-rows';
 
-      const { data } = await api.get<PageResp<MenuRow>>(url, {
+      const { data } = await api.get<PageResp<MaterialRow>>(url, {
         params: {
           storeId,
           start: startStr,
@@ -158,10 +144,10 @@ export default function MenuReport() {
     try {
       const url =
         viewBy === 'DAY'
-          ? '/api/analytics/menus/day-rows'
-          : '/api/analytics/menus/month-rows';
+          ? '/api/analytics/materials/day-rows'
+          : '/api/analytics/materials/month-rows';
 
-      const { data } = await api.get<PageResp<MenuRow>>(url, {
+      const { data } = await api.get<PageResp<MaterialRow>>(url, {
         params: {
           storeId,
           start: startStr,
@@ -185,7 +171,7 @@ export default function MenuReport() {
     try {
       setDownloading(true);
       const { data } = await api.get<Blob>(
-        '/api/analytics/menus/report',
+        '/api/analytics/materials/report',
         {
           params: {
             start: startStr,
@@ -202,19 +188,18 @@ export default function MenuReport() {
       const link = document.createElement('a');
       const viewLabel = viewBy === 'DAY' ? 'day' : 'month';
       link.href = url;
-      link.download = `menu-report_${viewLabel}_${startStr}_${endStr}.pdf`;
+      link.download = `material-report_${viewLabel}_${startStr}_${endStr}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (e) {
       console.error(e);
-      alert('메뉴 분석 리포트 다운로드 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+      alert('재료 분석 리포트 다운로드 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
     } finally {
       setDownloading(false);
     }
   }
-
 
   // 최초 1회 + storeId 변경 시 자동 조회
   useEffect(() => {
@@ -227,9 +212,9 @@ export default function MenuReport() {
       {/* 헤더 + 필터 */}
       <div className="flex flex-wrap gap-2 items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">메뉴 분석</h1>
+          <h1 className="text-2xl font-semibold">재료 분석</h1>
           <p className="text-sm text-gray-600">
-            타임존: {tz} / 상단 카드와 테이블 모두 선택한 기간 기준
+            타임존: {tz} / 상단 카드는 이번달 1일 ~ 어제 기준(MTD)
           </p>
         </div>
         <div className="flex flex-wrap gap-2 items-center justify-end">
@@ -326,7 +311,7 @@ export default function MenuReport() {
             {loading ? '조회 중…' : '조회'}
           </Button>
 
-          {/* 리포트 다운로드(향후 PDF/엑셀) */}
+          {/* 리포트 다운로드 */}
           <Button onClick={handleDownloadReport} disabled={downloading}>
             <Download className="w-4 h-4 mr-2" />
             {downloading ? '다운로드 중…' : '리포트 다운로드'}
@@ -336,81 +321,94 @@ export default function MenuReport() {
 
       {/* 상단 요약 카드 4개 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* 1. 사용량/원가 TOP5 통합 카드 */}
         <KPICard
-          title="판매수량 TOP3 메뉴"
-          value={
-            <div className="text-sm space-y-1">
-              {summary?.topMenusByQty?.length
-                ? summary.topMenusByQty.map((m) => (
-                    <div key={m.menuId} className="flex justify-between">
-                      <span className="text-gray-700">{m.menuName}</span>
-                      <span className="font-semibold">{m.quantity.toLocaleString()}개</span>
-                    </div>
-                  ))
-                : <div className="text-white-400">데이터 없음</div>
-              }
+        title="재료 TOP5"
+        value={
+            <div className="text-xs space-y-2">
+            <div className="font-semibold text-gray-600">사용량 기준</div>
+
+            {summary && summary.topByUsage && summary.topByUsage.length > 0 ? (
+                summary.topByUsage.slice(0, 3).map((m) => (
+                <div key={m.materialId} className="flex justify-between">
+                    <span className="text-gray-700 truncate">{m.materialName}</span>
+                    <span className="font-semibold">
+                    {m.usedQuantity.toFixed(1)}
+                    {m.unitName}
+                    </span>
+                </div>
+                ))
+            ) : (
+                <div className="text-gray-400">데이터 없음</div>
+            )}
             </div>
-          }
-          icon={ThumbsUp}
-          color="orange"
+        }
+        icon={Package}
+        color="orange"
         />
 
+        {/* 2. 원가율 */}
         <KPICard
-          title="매출 TOP3 카테고리"
+          title="재료 원가율"
           value={
-            <div className="text-sm space-y-1">
-              {summary?.topCategoriesBySales?.length
-                ? summary.topCategoriesBySales.map((c) => (
-                    <div key={c.categoryId} className="flex justify-between">
-                      <span className="text-gray-700">{c.categoryName}</span>
-                      <span className="font-semibold">₩{fmtMoneyInt(c.sales)}</span>
-                    </div>
-                  ))
-                : <div className="text-white-400">데이터 없음</div>
-              }
+            <div className="space-y-1">
+              <div className="text-2xl font-bold">
+                {fmtPercent1(summary?.currentCostRate ?? 0)}
+              </div>
+              <div className="text-sm text-white-600">
+                전월: {fmtPercent1(summary?.prevCostRate ?? 0)}
+              </div>
+              <div className={`text-sm flex items-center gap-1 ${
+                (summary?.costRateDiff ?? 0) >= 0 
+                  ? 'text-red-400' 
+                  : 'text-green-400'
+              }`}>
+                {(summary?.costRateDiff ?? 0) >= 0 ? (
+                  <TrendingUp className="w-4 h-4" />
+                ) : (
+                  <TrendingDown className="w-4 h-4" />
+                )}
+                {summary?.costRateDiff != null 
+                  ? `${Math.abs(summary.costRateDiff).toFixed(1)}%p` 
+                  : '—'}
+              </div>
             </div>
           }
           icon={TrendingUp}
           color="red"
         />
 
+        {/* 3. 재고 부족 위험 */}
         <KPICard
-          title="매출기여도 TOP3 메뉴"
+          title="재고 부족 위험"
           value={
-            <div className="text-sm space-y-1">
-              {summary?.topMenusBySalesContribution?.length
-                ? summary.topMenusBySalesContribution.map((m) => (
-                    <div key={m.menuId} className="flex justify-between">
-                      <span className="text-gray-700">{m.menuName}</span>
-                      <span className="font-semibold">{fmtPercent1(m.contributionRate)}</span>
-                    </div>
-                  ))
-                : <div className="text-white-400">데이터 없음</div>
-              }
-            </div>
-          }
-          icon={Star}
-          color="green"
-        />
-
-        <KPICard
-          title="저성과 메뉴"
-          value={
-            <div className="text-sm space-y-1">
-              {summary?.lowPerformMenus?.length
-                ? summary.lowPerformMenus.map((m) => (
-                    <div key={m.menuId} className="flex justify-between">
-                      <span className="text-gray-700">{m.menuName}</span>
-                      <span className="font-semibold">
-                        ₩{fmtMoneyInt(m.sales)} / {m.quantity.toLocaleString()}개
-                      </span>
-                    </div>
-                  ))
-                : <div className="text-white-400">데이터 없음</div>
-              }
+            <div className="space-y-1">
+              <div className="text-2xl font-bold text-orange-400">
+                {summary?.lowStockCount ?? 0}개
+              </div>
+              <div className="text-sm text-white-600">
+                재고 부족 또는 품절 상태
+              </div>
             </div>
           }
           icon={AlertTriangle}
+          color="green"
+        />
+
+        {/* 4. 유통기한 임박 */}
+        <KPICard
+          title="유통기한 임박"
+          value={
+            <div className="space-y-1">
+              <div className="text-2xl font-bold text-red-400">
+                {summary?.expireSoonCount ?? 0}개
+              </div>
+              <div className="text-sm text-white-600">
+                7일 이내 유통기한 도래
+              </div>
+            </div>
+          }
+          icon={Clock}
           color="purple"
         />
       </div>
@@ -420,8 +418,8 @@ export default function MenuReport() {
         <CardHeader className="px-6 py-4 border-b bg-light-gray">
           <CardTitle className="text-base font-semibold text-gray-900">
             {viewBy === 'DAY'
-              ? '메뉴 분석 (일별 / 메뉴 단위)'
-              : '메뉴 분석 (월별 집계 / 메뉴 단위)'}
+              ? '재료 분석 (일별 / 재료 단위)'
+              : '재료 분석 (월별 집계 / 재료 단위)'}
             {' '}({startStr} ~ {endStr})
           </CardTitle>
         </CardHeader>
@@ -433,27 +431,29 @@ export default function MenuReport() {
                   <thead className="bg-light-gray border-b">
                     <tr>
                       <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">날짜</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">카테고리</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">메뉴</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">판매수량</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">매출액</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">주문수</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">재료명</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">사용량</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">원가</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">매출대비</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">최근입고일</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {(rows as MenuDailyRow[]).map((r, i) => (
+                    {(rows as MaterialDailyRow[]).map((r, i) => (
                       <tr key={i} className="hover:bg-gray-50">
-                        <td className="px-6 py-3 text-center text-sm text-gray-900">{r.orderDate}</td>
-                        <td className="px-6 py-3 text-sm text-gray-900 text-left">{r.categoryName}</td>
-                        <td className="px-6 py-3 text-sm text-gray-900 text-left">{r.menuName}</td>
+                        <td className="px-6 py-3 text-center text-sm text-gray-900">{r.useDate}</td>
+                        <td className="px-6 py-3 text-sm text-gray-900 text-left">{r.materialName}</td>
                         <td className="px-6 py-3 text-sm text-gray-900 text-right">
-                          {r.quantity.toLocaleString()}
+                          {r.usedQuantity.toFixed(1)} {r.unitName}
                         </td>
                         <td className="px-6 py-3 text-sm text-gray-900 text-right">
-                          ₩{fmtMoneyInt(r.sales)}
+                          ₩{fmtMoneyInt(r.cost)}
                         </td>
                         <td className="px-6 py-3 text-sm text-gray-900 text-right">
-                          {r.orderCount.toLocaleString()}
+                          {fmtPercent1(r.salesShare)}
+                        </td>
+                        <td className="px-6 py-3 text-sm text-gray-900 text-center">
+                          {r.lastInboundDate || '-'}
                         </td>
                       </tr>
                     ))}
@@ -472,34 +472,36 @@ export default function MenuReport() {
                   <thead className="bg-light-gray border-b">
                     <tr>
                       <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">월</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">메뉴</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">카테고리</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">판매수량</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">매출액</th>
-                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">주문수</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">재료명</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">사용량</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">원가</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">원가율</th>
+                      <th className="px-6 py-3 text-center text-sm font-semibold text-gray-900">최근입고월</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {(rows as MenuMonthlyRow[]).map((r, i) => (
+                    {(rows as MaterialMonthlyRow[]).map((r, i) => (
                       <tr key={i} className="hover:bg-gray-50">
                         <td className="px-6 py-3 text-center text-sm text-gray-900">{r.yearMonth}</td>
-                        <td className="px-6 py-3 text-sm text-gray-900 text-center">{r.menuName}</td>
-                        <td className="px-6 py-3 text-sm text-gray-900 text-center">{r.categoryName}</td>
+                        <td className="px-6 py-3 text-sm text-gray-900 text-left">{r.materialName}</td>
                         <td className="px-6 py-3 text-sm text-gray-900 text-right">
-                          {r.quantity.toLocaleString()}
+                          {r.usedQuantity.toFixed(1)}
                         </td>
                         <td className="px-6 py-3 text-sm text-gray-900 text-right">
-                          ₩{fmtMoneyInt(r.sales)}
+                          ₩{fmtMoneyInt(r.cost)}
                         </td>
                         <td className="px-6 py-3 text-sm text-gray-900 text-right">
-                          {r.orderCount.toLocaleString()}
+                          {fmtPercent1(r.costRate)}
+                        </td>
+                        <td className="px-6 py-3 text-sm text-gray-900 text-center">
+                          {r.lastInboundMonth || '-'}
                         </td>
                       </tr>
                     ))}
 
                     {rows.length === 0 && (
                       <tr>
-                        <td colSpan={7} className="px-6 py-8 text-center text-sm text-dark-gray">
+                        <td colSpan={6} className="px-6 py-8 text-center text-sm text-dark-gray">
                           데이터가 없습니다.
                         </td>
                       </tr>

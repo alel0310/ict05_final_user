@@ -7,7 +7,7 @@ type KPIColor = "red" | "orange" | "green" | "purple";
 interface KPICardProps {
   id?: string;                      // ← key 대신 사용 (테스트/추적용)
   title: string;
-  value: string | number;
+  value: string | number | React.ReactNode;
   change?: string;
   changeType?: ChangeTypeAny;       // ← 양쪽 케이스 허용
   icon: React.ComponentType<{ className?: string }>;

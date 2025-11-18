@@ -104,4 +104,30 @@ public class AnalyticsService {
 		return repo.fetchTimeDayMonthlyRows(storeId, cond);
 	}
 
+	/**
+	 * 재료 분석 상단 요약 카드 조회.
+	 *
+	 * <p>today 기준:
+	 * - MTD: 이번달 1일 ~ 어제까지
+	 * - 전월 동일기간: 지난달 1일 ~ 지난달의 "어제와 같은 일자"까지 (말일 기준 캡)</p>
+	 */
+	public MaterialSummaryDto getMaterialSummary(Long storeId) {
+		LocalDate today = LocalDate.now(KST);
+		return repo.fetchMaterialSummary(storeId, today);
+	}
+
+	/**
+	 * 재료 분석 일별 테이블 조회.
+	 */
+	public CursorPage<MaterialDailyRowDto> getMaterialDailyRows(Long storeId, AnalyticsSearchDto cond) {
+		return repo.fetchMaterialDailyRows(storeId, cond);
+	}
+
+	/**
+	 * 재료 분석 월별 테이블 조회.
+	 */
+	public CursorPage<MaterialMonthlyRowDto> getMaterialMonthlyRows(Long storeId, AnalyticsSearchDto cond) {
+		return repo.fetchMaterialMonthlyRows(storeId, cond);
+	}
+
 }

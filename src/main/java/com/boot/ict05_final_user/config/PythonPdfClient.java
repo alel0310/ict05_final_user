@@ -1,9 +1,6 @@
 package com.boot.ict05_final_user.config;
 
-import com.boot.ict05_final_user.domain.analytics.dto.KpiPdfPayload;
-import com.boot.ict05_final_user.domain.analytics.dto.MenuPdfPayload;
-import com.boot.ict05_final_user.domain.analytics.dto.OrdersPdfPayload;
-import com.boot.ict05_final_user.domain.analytics.dto.TimeDayReportPayload;
+import com.boot.ict05_final_user.domain.analytics.dto.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -134,6 +131,32 @@ public class PythonPdfClient {
         } catch (Exception e) {
             log.error("[PythonPdfClient] menus report 호출 중 예외", e);
             throw new IllegalStateException("메뉴 분석 PDF 호출 중 예외 발생", e);
+        }
+    }
+
+    /**
+     * 재료 분석 리포트 PDF 생성 요청.
+     *
+     * @param payload 재료 분석 데이터
+     * @return PDF 바이트 배열
+     */
+    public byte[] requestMaterialReport(MaterialReportPayload payload) {
+        try {
+            return webClient.post()
+                    .uri("/pdf/material")  // ⚠️ "/api/pdf/material" 아님!
+                    .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                    .accept(MediaType.APPLICATION_PDF)
+                    .body(BodyInserters.fromValue(payload))
+                    .retrieve()
+                    .bodyToMono(byte[].class)
+                    .block();
+        } catch (WebClientResponseException e) {
+            log.error("[PythonPdfClient] material report 실패 status={} body={}",
+                    e.getRawStatusCode(), e.getResponseBodyAsString(), e);
+            throw new IllegalStateException("재료 분석 PDF 생성 실패: " + e.getMessage(), e);
+        } catch (Exception e) {
+            log.error("[PythonPdfClient] material report 호출 중 예외", e);
+            throw new IllegalStateException("재료 분석 PDF 호출 중 예외 발생", e);
         }
     }
 

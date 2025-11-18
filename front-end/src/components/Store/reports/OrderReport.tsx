@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
-import { CalendarIcon, Download } from 'lucide-react';
+import { Bike, CalendarIcon, Download, Package, ShoppingCart, Store, Truck, Users } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../components/ui/popover';
 import { Calendar } from '../../../components/ui/calendar';
 import { fmtMoneyInt, tz } from '../../../lib/format';
 import api from '../../../lib/authApi';
+import { KPICard } from '../../Common/KPICard';
 
 type ViewBy = 'DAY' | 'MONTH';
 
@@ -320,33 +321,33 @@ export default function OrderReport() {
 
       {/* 상단 카드 4개 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-white rounded-xl shadow-sm">
-          <CardHeader><CardTitle>배달 매출(MTD)</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            ₩{fmtMoneyInt(deliveryMtd)}
-          </CardContent>
-        </Card>
+        <KPICard
+          title="배달 매출(MTD)"
+          value={`₩${fmtMoneyInt(deliveryMtd)}`}
+          icon={Bike}
+          color="red"
+        />
 
-        <Card className="bg-white rounded-xl shadow-sm">
-          <CardHeader><CardTitle>포장 매출(MTD)</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            ₩{fmtMoneyInt(takeoutMtd)}
-          </CardContent>
-        </Card>
+        <KPICard
+          title="포장 매출(MTD)"
+          value={`₩${fmtMoneyInt(takeoutMtd)}`}
+          icon={Package}
+          color="orange"
+        />
 
-        <Card className="bg-white rounded-xl shadow-sm">
-          <CardHeader><CardTitle>매장 매출(MTD)</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            ₩{fmtMoneyInt(visitMtd)}
-          </CardContent>
-        </Card>
+        <KPICard
+          title="매장 매출(MTD)"
+          value={`₩${fmtMoneyInt(visitMtd)}`}
+          icon={Store}
+          color="green"
+        />
 
-        <Card className="bg-white rounded-xl shadow-sm">
-          <CardHeader><CardTitle>주문수(MTD)</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            {orderCountMtd.toLocaleString()}건
-          </CardContent>
-        </Card>
+        <KPICard
+          title="주문수(MTD)"
+          value={`${orderCountMtd.toLocaleString()}건`}
+          icon={ShoppingCart}
+          color="purple"
+        />
       </div>
 
       {/* 테이블 */}

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
-import { CalendarIcon, Download, Clock, BarChart3 } from 'lucide-react';
+import { CalendarIcon, Download, Clock, BarChart3, Sun, Calendar1, ThumbsUpIcon, ThumbsDownIcon, PercentCircle, Percent, CalendarHeart } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../components/ui/popover';
 import { Calendar } from '../../../components/ui/calendar';
 import { fmtMoneyInt, fmtPercent1, tz } from '../../../lib/format';
@@ -18,6 +18,7 @@ import {
   Tooltip,
   Legend,
 } from 'recharts';
+import { KPICard } from '../../Common/KPICard';
 
 type ViewBy = 'DAY' | 'MONTH';
 
@@ -411,80 +412,57 @@ async function handleDownloadReport() {
 
       {/* 상단 요약 카드 4개 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {/* 1) 피크 시간대 */}
-        <Card className="bg-white rounded-xl shadow-sm">
-          <CardHeader>
-            <CardTitle>피크 시간대</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            <div className="text-2xl font-semibold flex items-center gap-2">
-              <Clock className="w-5 h-5 text-kpi-red" />
-              <span>{peakHourLabel}</span>
-            </div>
-            <div className="text-sm text-gray-600">
-              매출: ₩{fmtMoneyInt(summary?.peakHourSales ?? 0)}
-            </div>
-          </CardContent>
-        </Card>
+        <KPICard
+          title="피크 시간대"
+          value={peakHourLabel}
+          change={`매출: ₩${fmtMoneyInt(summary?.peakHourSales ?? 0)}`}
+          icon={ThumbsUpIcon}
+          color="red"
+        />
 
-        {/* 2) 비수 시간대 */}
-        <Card className="bg-white rounded-xl shadow-sm">
-          <CardHeader>
-            <CardTitle>비수 시간대</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            <div className="text-2xl font-semibold flex items-center gap-2">
-              <Clock className="w-5 h-5 text-dark-gray" />
-              <span>{offpeakHourLabel}</span>
-            </div>
-            <div className="text-sm text-gray-600">
-              매출: ₩{fmtMoneyInt(summary?.offpeakHourSales ?? 0)}
-            </div>
-          </CardContent>
-        </Card>
+        <KPICard
+          title="비수 시간대"
+          value={offpeakHourLabel}
+          change={`매출: ₩${fmtMoneyInt(summary?.offpeakHourSales ?? 0)}`}
+          icon={ThumbsDownIcon}
+          color="orange"
+        />
 
-        {/* 3) 요일 최고 매출 */}
-        <Card className="bg-white rounded-xl shadow-sm">
-          <CardHeader>
-            <CardTitle>최고 매출 요일</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            <div className="text-2xl font-semibold flex items-center gap-2">
-              <CalendarIcon className="w-5 h-5 text-kpi-green" />
-              <span>{topWeekdayLabel}</span>
-            </div>
-            <div className="text-sm text-gray-600">
-              매출: ₩{fmtMoneyInt(summary?.topWeekdaySales ?? 0)}
-            </div>
-          </CardContent>
-        </Card>
+        <KPICard
+          title="최고 매출 요일"
+          value={topWeekdayLabel}
+          change={`매출: ₩${fmtMoneyInt(summary?.topWeekdaySales ?? 0)}`}
+          icon={CalendarHeart}
+          color="green"
+        />
 
-        {/* 4) 주중 / 주말 매출 비율 */}
-        <Card className="bg-white rounded-xl shadow-sm">
-          <CardHeader>
-            <CardTitle>주중 / 주말 매출 비율</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-500">주중</span>
-              <span className="font-semibold">
-                {weekdayRateText.weekdayPercent}{' '}
-                <span className="text-xs text-gray-500">
-                  (₩{fmtMoneyInt(summary?.weekdaySales ?? 0)})
+        <KPICard
+          title="주중 / 주말 매출 비율"
+          value={
+            <div className="space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-500">주중</span>
+                <span className="font-semibold">
+                  {weekdayRateText.weekdayPercent}{' '}
+                  <span className="text-xs text-gray-500">
+                    (₩{fmtMoneyInt(summary?.weekdaySales ?? 0)})
+                  </span>
                 </span>
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">주말</span>
-              <span className="font-semibold">
-                {weekdayRateText.weekendPercent}{' '}
-                <span className="text-xs text-gray-500">
-                  (₩{fmtMoneyInt(summary?.weekendSales ?? 0)})
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">주말</span>
+                <span className="font-semibold">
+                  {weekdayRateText.weekendPercent}{' '}
+                  <span className="text-xs text-gray-500">
+                    (₩{fmtMoneyInt(summary?.weekendSales ?? 0)})
+                  </span>
                 </span>
-              </span>
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          }
+          icon={Percent}
+          color="purple"
+        />
       </div>
 
       {/* ===== 차트 영역 ===== */}

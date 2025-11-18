@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
-import { CalendarIcon, Download } from 'lucide-react';
+import { BarChart3, Calculator, CalendarIcon, Download, Package, Store, TrendingUp } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../components/ui/popover';
 import { Calendar } from '../../../components/ui/calendar';
 import { fmtMoneyInt, fmtUPT, fmtPercent1, tz } from '../../../lib/format';
 import api from '../../../lib/authApi';
+import { KPICard } from '../../Common/KPICard';
 
 // ====== 로컬 타입(서비스 의존 제거, 파일 단독 사용 가능) ======
 type ViewBy = 'DAY' | 'MONTH';
@@ -285,73 +286,53 @@ export default function KpiReport() {
 
       {/* 요약 카드 4개 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {/* 카드1: 매출 MTD */}
-        <Card className="bg-white rounded-xl shadow-sm">
-          <CardHeader>
-            <CardTitle>매출(MTD)</CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            ₩{fmtMoneyInt(salesMtd)}
-          </CardContent>
-        </Card>
+        <KPICard
+          icon={Store}
+          title="매출(MTD)"
+          value={`₩${fmtMoneyInt(salesMtd)}`}
+          color="red"
+        />
 
-        {/* 카드2: 주문수 MTD */}
-        <Card className="bg-white rounded-xl shadow-sm">
-          <CardHeader>
-            <CardTitle>주문수(MTD)</CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            {txMtd.toLocaleString()}건
-          </CardContent>
-        </Card>
+        <KPICard
+          icon={BarChart3}
+          title="주문수(MTD)"
+          value={`${txMtd.toLocaleString()}건`}
+          color="orange"
+        />
 
-        {/* 카드3: KPI 3종(+Units) */}
-        <Card className="bg-white rounded-xl shadow-sm">
-          <CardHeader>
-            <CardTitle>KPI</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Units(판매수량)</span>
-              <span className="font-semibold">
-                {unitsMtd.toLocaleString()}
-              </span>
+        <KPICard
+          icon={Calculator}
+          title="KPI"
+          value={
+            <div className="space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span className="text-white-500">Units(판매수량)</span>
+                <span className="font-semibold">{unitsMtd.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white-500">UPT(주문당 수량)</span>
+                <span className="font-semibold">{fmtUPT(uptMtd)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white-500">ADS(객단가)</span>
+                <span className="font-semibold">₩{fmtMoneyInt(adsMtd)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white-500">AUR(개당 단가)</span>
+                <span className="font-semibold">₩{fmtMoneyInt(aurMtd)}</span>
+              </div>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">UPT(주문당 수량)</span>
-              <span className="font-semibold">
-                {fmtUPT(uptMtd)}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">ADS(객단가)</span>
-              <span className="font-semibold">
-                ₩{fmtMoneyInt(adsMtd)}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">AUR(개당 단가)</span>
-              <span className="font-semibold">
-                ₩{fmtMoneyInt(aurMtd)}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+          }
+          color="green"
+        />
 
-        {/* 카드4: WoW% */}
-        <Card className="bg-white rounded-xl shadow-sm">
-          <CardHeader>
-            <CardTitle>전주 대비 매출(WoW)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold">
-              {wowText}
-            </div>
-            <div className="text-xs text-gray-500 mt-1">
-              어제 기준 최근 7일 vs 그 이전 7일
-            </div>
-          </CardContent>
-        </Card>
+        <KPICard
+          icon={TrendingUp}
+          title="전주 대비 매출(WoW)"
+          value={wowText}
+          change="어제 기준 최근 7일 vs 그 이전 7일"
+          color="purple"
+        />
       </div>
 
       {/* ===== 테이블 영역 ===== */}

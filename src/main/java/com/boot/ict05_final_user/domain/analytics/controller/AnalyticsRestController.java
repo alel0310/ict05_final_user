@@ -183,6 +183,74 @@ public class AnalyticsRestController {
 		return ResponseEntity.ok(service.getMenuMonthlyRows(storeId, cond));
 	}
 
+	// ======================
+	// 재료 분석 Summary (상단 카드)
+	// ======================
+	@Operation(
+			summary = "재료 분석 상단 요약 카드",
+			description = "이번달 1일 ~ 어제까지 재료 사용량/원가/원가율 및 재고 위험/유통기한 임박 재료 수를 반환합니다."
+	)
+	@GetMapping("/api/analytics/materials/summary")
+	public ResponseEntity<MaterialSummaryDto> getMaterialSummary(
+			@AuthenticationPrincipal AppUser appUser
+	) {
+		Long storeId = appUser.getStoreId();
+		return ResponseEntity.ok(service.getMaterialSummary(storeId));
+	}
+
+	// ======================
+	// 재료 분석 테이블 - 일별
+	// ======================
+	@Operation(
+			summary = "재료 분석 일별 테이블",
+			description = "일 단위 재료 사용량/원가/매출 대비 비중 등을 커서 기반 페이징으로 반환합니다."
+	)
+	@GetMapping("/api/analytics/materials/day-rows")
+	public ResponseEntity<CursorPage<MaterialDailyRowDto>> getMaterialDailyRows(
+			@AuthenticationPrincipal AppUser appUser,
+			@RequestParam String start,
+			@RequestParam String end,
+			@RequestParam(defaultValue = "50") Integer size,
+			@RequestParam(required = false) String cursor
+	) {
+		Long storeId = appUser.getStoreId();
+		AnalyticsSearchDto cond = new AnalyticsSearchDto(
+				LocalDate.parse(start),
+				LocalDate.parse(end),
+				AnalyticsSearchDto.ViewBy.DAY,
+				size,
+				cursor
+		);
+		return ResponseEntity.ok(service.getMaterialDailyRows(storeId, cond));
+	}
+
+	// ======================
+	// 재료 분석 테이블 - 월별
+	// ======================
+	@Operation(
+			summary = "재료 분석 월별 테이블",
+			description = "월 단위 재료 사용량/원가/원가율 등을 커서 기반 페이징으로 반환합니다."
+	)
+	@GetMapping("/api/analytics/materials/month-rows")
+	public ResponseEntity<CursorPage<MaterialMonthlyRowDto>> getMaterialMonthlyRows(
+			@AuthenticationPrincipal AppUser appUser,
+			@RequestParam String start,
+			@RequestParam String end,
+			@RequestParam(defaultValue = "50") Integer size,
+			@RequestParam(required = false) String cursor
+	) {
+		Long storeId = appUser.getStoreId();
+		AnalyticsSearchDto cond = new AnalyticsSearchDto(
+				LocalDate.parse(start),
+				LocalDate.parse(end),
+				AnalyticsSearchDto.ViewBy.MONTH,
+				size,
+				cursor
+		);
+		return ResponseEntity.ok(service.getMaterialMonthlyRows(storeId, cond));
+	}
+
+
 	// ==================================================
 	//               ★ 시간/요일 분석 (신규) ★
 	// ==================================================
@@ -388,6 +456,44 @@ public class AnalyticsRestController {
 		);
 
 		String filename = "time-day-report_" + viewBy.name().toLowerCase() + "_" + start + "_" + end + ".pdf";
+
+		HttpHeaders headers = new HttpHeaders();
+		headers.setContentType(MediaType.APPLICATION_PDF);
+		headers.setContentDisposition(
+				ContentDisposition.attachment()
+						.filename(filename, StandardCharsets.UTF_8)
+						.build()
+		);
+
+		return new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK);
+	}
+
+	/**
+	 * 재료 분석 PDF 다운로드
+	 *
+	 * 예:
+	 * GET /api/analytics/materials/report?start=2025-11-01&end=2025-11-17&viewBy=DAY
+	 */
+	@Operation(
+			summary = "재료 분석 PDF 리포트 다운로드",
+			description = "재료 분석 상단 요약 + 일/월별 테이블 데이터를 PDF로 생성하여 다운로드합니다."
+	)
+	@GetMapping("/api/analytics/materials/report")
+	public ResponseEntity<byte[]> downloadMaterialReport(
+			@AuthenticationPrincipal AppUser appUser,
+			@RequestParam String start,
+			@RequestParam String end,
+			@RequestParam(defaultValue = "DAY") AnalyticsSearchDto.ViewBy viewBy
+	) {
+		Long storeId = appUser.getStoreId();
+		LocalDate startDate = LocalDate.parse(start);
+		LocalDate endDate = LocalDate.parse(end);
+
+		byte[] pdfBytes = analyticsReportService.generateMaterialReport(
+				storeId, startDate, endDate, viewBy
+		);
+
+		String filename = "material-report_" + viewBy.name().toLowerCase() + "_" + start + "_" + end + ".pdf";
 
 		HttpHeaders headers = new HttpHeaders();
 		headers.setContentType(MediaType.APPLICATION_PDF);

@@ -2,13 +2,16 @@ package com.boot.ict05_final_user.domain.analytics.repository;
 
 import com.boot.ict05_final_user.domain.analytics.dto.*;
 import com.boot.ict05_final_user.domain.analytics.dto.AnalyticsSearchDto.ViewBy;
+import com.boot.ict05_final_user.domain.inventory.entity.*;
 import com.boot.ict05_final_user.domain.menu.entity.QMenu;
 import com.boot.ict05_final_user.domain.menu.entity.QMenuCategory;
+import com.boot.ict05_final_user.domain.menu.entity.QMenuUsageMaterialLog;
 import com.boot.ict05_final_user.domain.order.entity.*;
 import com.boot.ict05_final_user.domain.store.entity.QStore;
 import com.querydsl.core.Tuple;
 import com.querydsl.core.types.ConstantImpl;
 import com.querydsl.core.types.dsl.*;
+import com.querydsl.jpa.impl.JPAQuery;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
@@ -17,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @RequiredArgsConstructor
@@ -30,6 +34,15 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 	private final QStore s = QStore.store;
 	private final QMenu m = QMenu.menu;
 	private final QMenuCategory mc = QMenuCategory.menuCategory;
+	private final QStoreMaterial sm = QStoreMaterial.storeMaterial;
+	private final QMenuUsageMaterialLog log = QMenuUsageMaterialLog.menuUsageMaterialLog;
+	private final QMaterial material = QMaterial.material;
+	private final QStoreInventoryBatch batch = QStoreInventoryBatch.storeInventoryBatch;
+	private final QStoreInventory inv = QStoreInventory.storeInventory;
+
+	// 유통기한 임박 기준 (일 단위)
+	// 실제 FCM 스캐너 설정과 맞추고 싶으면 설정값 주입으로 교체하면 됨.
+	private static final int EXPIRE_SOON_DAYS = 3;
 
 	// =========================
 	//  KPI Summary (카드 4개)
@@ -872,6 +885,685 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 
 		return new CursorPage<>(result, nextCursor);
 	}
+
+
+	@Override
+	public MaterialSummaryDto fetchMaterialSummary(Long storeId, LocalDate today) {
+		// --------- 1) 기간 계산 (이번달 MTD + 전월 동일 기간) ---------
+		LocalDate thisMonthStart = today.withDayOfMonth(1);      // 이번달 1일
+		LocalDate currentEndDate = today.minusDays(1);           // 어제
+
+		// 오늘이 1일이면 MTD 기간이 없음 → 카드 값은 0 처리(재고 관련만 정상 계산)
+		boolean hasMtd = !currentEndDate.isBefore(thisMonthStart);
+
+		LocalDate prevMonthStart = thisMonthStart.minusMonths(1);           // 전월 1일
+		LocalDate prevMonthLast = prevMonthStart.withDayOfMonth(prevMonthStart.lengthOfMonth());
+
+		int mtdDay = hasMtd ? currentEndDate.getDayOfMonth() : 0;          // 1~31
+		int prevEndDay = hasMtd ? Math.min(mtdDay, prevMonthLast.getDayOfMonth()) : 0;
+		LocalDate prevEndDate = hasMtd && prevEndDay > 0
+				? prevMonthStart.withDayOfMonth(prevEndDay)
+				: prevMonthStart.minusDays(1); // dummy (기간 없음)
+
+		LocalDateTime currentStartDt = thisMonthStart.atStartOfDay();
+		LocalDateTime currentEndExDt = today.atStartOfDay(); // [thisMonthStart, today)
+		LocalDateTime prevStartDt = prevMonthStart.atStartOfDay();
+		LocalDateTime prevEndExDt = prevEndDate.plusDays(1).atStartOfDay(); // [prevMonthStart, prevEndDate+1)
+
+		// --------- 2) Top5 재료 (사용량 / 원가 기준, 이번달 MTD) ---------
+		List<MaterialTopItemDto> topByUsage = hasMtd
+				? findMaterialTopByUsage(storeId, currentStartDt, currentEndExDt, 5)
+				: List.of();
+
+		List<MaterialTopItemDto> topByCost = hasMtd
+				? findMaterialTopByCost(storeId, currentStartDt, currentEndExDt, 5)
+				: List.of();
+
+		// --------- 3) 원가율 (재료 원가 합계 ÷ 매출 합계 × 100) ---------
+		double currentCostRate = 0.0;
+		double prevCostRate = 0.0;
+		double diff = 0.0;
+
+		if (hasMtd) {
+			BigDecimal currentMaterialCost = fetchMaterialCostTotal(storeId, currentStartDt, currentEndExDt);
+			long currentSales = fetchSalesTotal(storeId, currentStartDt, currentEndExDt);
+
+			if (currentSales > 0L) {
+				currentCostRate = round1(
+						safeDiv(currentMaterialCost.longValue(), currentSales) * 100.0				);
+			}
+
+			BigDecimal prevMaterialCost = fetchMaterialCostTotal(storeId, prevStartDt, prevEndExDt);
+			long prevSales = fetchSalesTotal(storeId, prevStartDt, prevEndExDt);
+
+			if (prevSales > 0L) {
+				prevCostRate = round1(
+						safeDiv(prevMaterialCost.longValue(), prevSales) * 100.0
+				);
+			}
+
+			diff = round1(currentCostRate - prevCostRate);
+		}
+
+		// --------- 4) 재고 부족 / 유통기한 임박 재료 수 ---------
+		long lowStockCount = fetchLowStockCount(storeId);
+		long expireSoonCount = fetchExpireSoonCount(storeId, today);
+
+		return new MaterialSummaryDto(
+				topByUsage,
+				topByCost,
+				currentCostRate,
+				prevCostRate,
+				diff,
+				lowStockCount,
+				expireSoonCount
+		);
+	}
+
+	@Override
+	public CursorPage<MaterialDailyRowDto> fetchMaterialDailyRows(Long storeId, AnalyticsSearchDto cond) {
+
+		LocalDateTime startDt = cond.startDate().atStartOfDay();
+		LocalDateTime endExDt = cond.endDate().plusDays(1).atStartOfDay();
+
+		// 일자별 매출 합계 (매출대비 비중 계산용)
+		Map<String, Long> salesByDate = fetchSalesByDayForMaterials(storeId, startDt, endExDt);
+
+		// 재료별 최근 입고일
+		Map<Long, LocalDate> lastInboundByStoreMaterial = fetchLastInboundDateByStoreMaterial(storeId);
+
+		// 커서 파싱: "YYYY-MM-DD|storeMaterialId"
+		String cursor = cond.cursor();
+		String cursorDate = null;
+		Long cursorStoreMaterialId = null;
+
+		if (cursor != null && !cursor.isBlank()) {
+			String[] parts = cursor.split("\\|");
+			if (parts.length >= 2) {
+				cursorDate = parts[0];
+				cursorStoreMaterialId = Long.valueOf(parts[1]);
+			}
+		}
+
+		// 그룹 기준 컬럼
+		// useDateExpr: "2025-11-18" 같은 문자열
+		StringExpression useDateExpr =
+				Expressions.stringTemplate("DATE_FORMAT({0}, '%Y-%m-%d')", co.orderedAt);
+
+		// 사용량 합계 (BigDecimal)
+		NumberExpression<BigDecimal> usedQtyExpr = log.count.sum();
+		// 원가 합계 = 사용량 * 단가
+		// 여기서는 StoreMaterial.purchasePrice 를 "기준 단위당 단가"라고 보고 계산
+		NumberExpression<BigDecimal> costExpr = log.count.multiply(sm.purchasePrice).sum();
+
+		BooleanExpression cursorPredicate = null;
+		if (cursorDate != null && cursorStoreMaterialId != null) {
+			cursorPredicate =
+					useDateExpr.lt(cursorDate)
+							.or(
+									useDateExpr.eq(cursorDate)
+											.and(sm.id.lt(cursorStoreMaterialId))
+							);
+		}
+
+		JPAQuery<Tuple> jpaQuery = query
+				.select(
+						useDateExpr,
+						sm.id,
+						material.name,
+						sm.name,
+						usedQtyExpr,
+						costExpr
+				)
+				.from(log)
+				.join(log.customerOrderFk, co)
+				.join(co.store, QStore.store)
+				.join(log.storeMaterialFk, sm)
+				.join(sm.material, material)
+				.where(
+						statusCompleted(),
+						eqStore(storeId),
+						betweenClosedOpen(co.orderedAt, startDt, endExDt),
+						cursorPredicate
+				)
+				.groupBy(
+						useDateExpr,
+						sm.id,
+						material.name,
+						sm.name
+				)
+				.orderBy(
+						useDateExpr.desc(),   // 최신 일자 먼저
+						sm.id.desc()          // 같은 날이면 재료 ID 역순
+				)
+				.limit(cond.size());
+
+		// Hibernate read-only 힌트
+		jpaQuery
+				.setHint("org.hibernate.readOnly", true)
+				.setHint("org.hibernate.flushMode", "COMMIT")
+				.setHint("jakarta.persistence.query.timeout", 3000);
+
+		List<Tuple> tuples = jpaQuery.fetch();
+
+		List<MaterialDailyRowDto> items = new ArrayList<>(tuples.size());
+
+		for (Tuple t : tuples) {
+			String useDate = t.get(useDateExpr);
+			Long storeMaterialId = t.get(sm.id);
+			String materialName = t.get(material.name);
+			String unitName = t.get(sm.name);
+
+			BigDecimal usedQtyBd = nvlBD(t.get(usedQtyExpr));
+			double usedQty = usedQtyBd.doubleValue();
+
+			BigDecimal costBd = nvlBD(t.get(costExpr));
+			long cost = costBd.longValue();
+
+			long daySales = salesByDate.getOrDefault(useDate, 0L);
+			double salesShare = 0.0;
+			if (daySales > 0L && cost > 0L) {
+				salesShare = round1(
+						safeDiv(cost, daySales) * 100.0
+				);
+			}
+
+			LocalDate inboundDate = lastInboundByStoreMaterial.get(storeMaterialId);
+			String inboundDateStr = inboundDate != null ? inboundDate.toString() : null;
+
+			items.add(new MaterialDailyRowDto(
+					useDate,
+					materialName,
+					usedQty,
+					unitName,
+					cost,
+					salesShare,
+					inboundDateStr
+			));
+		}
+
+		// nextCursor 설정
+		String nextCursor = null;
+		if (tuples.size() == cond.size()) {
+			Tuple last = tuples.get(tuples.size() - 1);
+			String lastDate = last.get(useDateExpr);
+			Long lastStoreMaterialId = last.get(sm.id);
+			nextCursor = lastDate + "|" + lastStoreMaterialId;
+		}
+
+		return new CursorPage<>(items, nextCursor);
+	}
+
+	@Override
+	public CursorPage<MaterialMonthlyRowDto> fetchMaterialMonthlyRows(Long storeId, AnalyticsSearchDto cond) {
+
+		LocalDateTime startDt = cond.startDate().atStartOfDay();
+		LocalDateTime endExDt = cond.endDate().plusDays(1).atStartOfDay();
+
+		// 월별 매출 합계 (원가율 계산용)
+		Map<String, Long> salesByMonth = fetchSalesByMonthForMaterials(storeId, startDt, endExDt);
+
+		// 재료별 최근 입고일
+		Map<Long, LocalDate> lastInboundByStoreMaterial = fetchLastInboundDateByStoreMaterial(storeId);
+
+		// 커서 파싱: "YYYY-MM|storeMaterialId"
+		String cursor = cond.cursor();
+		String cursorYm = null;
+		Long cursorStoreMaterialId = null;
+
+		if (cursor != null && !cursor.isBlank()) {
+			String[] parts = cursor.split("\\|");
+			if (parts.length >= 2) {
+				cursorYm = parts[0];
+				cursorStoreMaterialId = Long.valueOf(parts[1]);
+			}
+		}
+
+		// 그룹 기준: 월(YYYY-MM)
+		StringExpression ymExpr =
+				Expressions.stringTemplate("DATE_FORMAT({0}, '%Y-%m')", co.orderedAt);
+
+		NumberExpression<BigDecimal> usedQtyExpr = log.count.sum();
+		NumberExpression<BigDecimal> costExpr = log.count.multiply(sm.purchasePrice).sum();
+
+		BooleanExpression cursorPredicate = null;
+		if (cursorYm != null && cursorStoreMaterialId != null) {
+			cursorPredicate =
+					ymExpr.lt(cursorYm)
+							.or(
+									ymExpr.eq(cursorYm)
+											.and(sm.id.lt(cursorStoreMaterialId))
+							);
+		}
+
+		JPAQuery<Tuple> jpaQuery = query
+				.select(
+						ymExpr,
+						sm.id,
+						material.name,
+						sm.name,
+						usedQtyExpr,
+						costExpr
+				)
+				.from(log)
+				.join(log.customerOrderFk, co)
+				.join(co.store, QStore.store)
+				.join(log.storeMaterialFk, sm)
+				.join(sm.material, material)
+				.where(
+						statusCompleted(),
+						eqStore(storeId),
+						betweenClosedOpen(co.orderedAt, startDt, endExDt),
+						cursorPredicate
+				)
+				.groupBy(
+						ymExpr,
+						sm.id,
+						material.name,
+						sm.name
+				)
+				.orderBy(
+						ymExpr.desc(),
+						sm.id.desc()
+				)
+				.limit(cond.size());
+
+		jpaQuery
+				.setHint("org.hibernate.readOnly", true)
+				.setHint("org.hibernate.flushMode", "COMMIT")
+				.setHint("jakarta.persistence.query.timeout", 3000);
+
+		List<Tuple> tuples = jpaQuery.fetch();
+		List<MaterialMonthlyRowDto> items = new ArrayList<>(tuples.size());
+
+		DateTimeFormatter ymFormatter = DateTimeFormatter.ofPattern("yyyy-MM");
+
+		for (Tuple t : tuples) {
+			String ym = t.get(ymExpr);
+			Long storeMaterialId = t.get(sm.id);
+			String materialName = t.get(material.name);
+			String unitName = t.get(sm.name);
+
+			BigDecimal usedQtyBd = nvlBD(t.get(usedQtyExpr));
+			double usedQty = usedQtyBd.doubleValue();
+
+			BigDecimal costBd = nvlBD(t.get(costExpr));
+			long cost = costBd.longValue();
+
+			long monthSales = salesByMonth.getOrDefault(ym, 0L);
+			double costRate = 0.0;
+			if (monthSales > 0L && cost > 0L) {
+				costRate = round1(
+						safeDiv(cost, monthSales) * 100.0
+				);
+			}
+
+			LocalDate inboundDate = lastInboundByStoreMaterial.get(storeMaterialId);
+			String lastInboundMonth = null;
+			if (inboundDate != null) {
+				lastInboundMonth = inboundDate.format(ymFormatter);
+			}
+
+			items.add(new MaterialMonthlyRowDto(
+					ym,
+					materialName,
+					usedQty,
+					cost,
+					costRate,
+					lastInboundMonth
+			));
+		}
+
+		String nextCursor = null;
+		if (tuples.size() == cond.size()) {
+			Tuple last = tuples.get(tuples.size() - 1);
+			String lastYm = last.get(ymExpr);
+			Long lastStoreMaterialId = last.get(sm.id);
+			nextCursor = lastYm + "|" + lastStoreMaterialId;
+		}
+
+		return new CursorPage<>(items, nextCursor);
+	}
+
+	private List<MaterialTopItemDto> findMaterialTopByUsage(
+			Long storeId,
+			LocalDateTime startDt,
+			LocalDateTime endExDt,
+			int limit
+	) {
+
+		NumberExpression<BigDecimal> usedQtyExpr = log.count.sum();
+		NumberExpression<BigDecimal> costExpr = log.count.multiply(sm.purchasePrice).sum();
+
+		JPAQuery<Tuple> jpaQuery = query
+				.select(
+						sm.id,
+						material.name,
+						sm.name,
+						usedQtyExpr,
+						costExpr
+				)
+				.from(log)
+				.join(log.customerOrderFk, co)
+				.join(co.store, QStore.store)
+				.join(log.storeMaterialFk, sm)
+				.join(sm.material, material)
+				.where(
+						statusCompleted(),
+						eqStore(storeId),
+						betweenClosedOpen(co.orderedAt, startDt, endExDt)
+				)
+				.groupBy(
+						sm.id,
+						material.name,
+						sm.name
+				)
+				.orderBy(
+						usedQtyExpr.desc(),  // 사용량 기준 내림차순
+						sm.id.asc()
+				)
+				.limit(limit);
+
+		jpaQuery
+				.setHint("org.hibernate.readOnly", true)
+				.setHint("org.hibernate.flushMode", "COMMIT")
+				.setHint("jakarta.persistence.query.timeout", 3000);
+
+		List<Tuple> tuples = jpaQuery.fetch();
+		List<MaterialTopItemDto> result = new ArrayList<>(tuples.size());
+
+		for (Tuple t : tuples) {
+			Long storeMaterialId = t.get(sm.id);
+			String materialName = t.get(material.name);
+			String unitName = t.get(sm.name);
+			BigDecimal usedQtyBd = nvlBD(t.get(usedQtyExpr));
+			BigDecimal costBd = nvlBD(t.get(costExpr));
+
+			result.add(new MaterialTopItemDto(
+					storeMaterialId,
+					materialName,
+					unitName,
+					usedQtyBd.doubleValue(),
+					costBd.longValue()
+			));
+		}
+
+		return result;
+	}
+
+	//Top5 재료 (사용량 / 원가 기준)
+	private List<MaterialTopItemDto> findMaterialTopByCost(
+			Long storeId,
+			LocalDateTime startDt,
+			LocalDateTime endExDt,
+			int limit
+	) {
+
+		NumberExpression<BigDecimal> usedQtyExpr = log.count.sum();
+		NumberExpression<BigDecimal> costExpr = log.count.multiply(sm.purchasePrice).sum();
+
+		JPAQuery<Tuple> jpaQuery = query
+				.select(
+						sm.id,
+						material.name,
+						sm.name,
+						usedQtyExpr,
+						costExpr
+				)
+				.from(log)
+				.join(log.customerOrderFk, co)
+				.join(co.store, QStore.store)
+				.join(log.storeMaterialFk, sm)
+				.join(sm.material, material)
+				.where(
+						statusCompleted(),
+						eqStore(storeId),
+						betweenClosedOpen(co.orderedAt, startDt, endExDt)
+				)
+				.groupBy(
+						sm.id,
+						material.name,
+						sm.name
+				)
+				.orderBy(
+						costExpr.desc(),  // 원가 기준 내림차순
+						sm.id.asc()
+				)
+				.limit(limit);
+
+		jpaQuery
+				.setHint("org.hibernate.readOnly", true)
+				.setHint("org.hibernate.flushMode", "COMMIT")
+				.setHint("jakarta.persistence.query.timeout", 3000);
+
+		List<Tuple> tuples = jpaQuery.fetch();
+		List<MaterialTopItemDto> result = new ArrayList<>(tuples.size());
+
+		for (Tuple t : tuples) {
+			Long storeMaterialId = t.get(sm.id);
+			String materialName = t.get(material.name);
+			String unitName = t.get(sm.name);
+			BigDecimal usedQtyBd = nvlBD(t.get(usedQtyExpr));
+			BigDecimal costBd = nvlBD(t.get(costExpr));
+
+			result.add(new MaterialTopItemDto(
+					storeMaterialId,
+					materialName,
+					unitName,
+					usedQtyBd.doubleValue(),
+					costBd.longValue()
+			));
+		}
+
+		return result;
+	}
+
+	// 재료 원가 합계 / 매출 합계
+	private BigDecimal fetchMaterialCostTotal(Long storeId, LocalDateTime startDt, LocalDateTime endExDt) {
+
+		NumberExpression<BigDecimal> costExpr = log.count.multiply(sm.purchasePrice).sum();
+
+		JPAQuery<BigDecimal> jpaQuery = query
+				.select(costExpr)
+				.from(log)
+				.join(log.customerOrderFk, co)
+				.join(co.store, QStore.store)
+				.join(log.storeMaterialFk, sm)
+				.where(
+						statusCompleted(),
+						eqStore(storeId),
+						betweenClosedOpen(co.orderedAt, startDt, endExDt)
+				);
+
+		jpaQuery
+				.setHint("org.hibernate.readOnly", true)
+				.setHint("org.hibernate.flushMode", "COMMIT")
+				.setHint("jakarta.persistence.query.timeout", 3000);
+
+		BigDecimal result = jpaQuery.fetchOne();
+		return nvlBD(result);
+	}
+
+	private long fetchSalesTotal(Long storeId,
+								 LocalDateTime startDt,
+								 LocalDateTime endExDt) {
+
+		BigDecimal salesBD = query
+				.select(co.totalPrice.sum())
+				.from(co)
+				.join(co.store, s)
+				.where(
+						statusCompleted(),
+						eqStore(storeId),
+						betweenClosedOpen(co.orderedAt, startDt, endExDt)
+				)
+				.setHint("org.hibernate.readOnly", true)
+				.setHint("org.hibernate.flushMode", "COMMIT")
+				.setHint("jakarta.persistence.query.timeout", 3000)
+				.fetchOne();
+
+		return salesBD == null ? 0L : salesBD.longValue();
+	}
+
+
+	// 일별/월별 매출 Map
+	private Map<String, Long> fetchSalesByDayForMaterials(
+			Long storeId,
+			LocalDateTime startDt,
+			LocalDateTime endExDt
+	) {
+		// SELECT용 Expression 미리 정의
+		StringExpression dayExpr =
+				Expressions.stringTemplate("DATE_FORMAT({0}, '%Y-%m-%d')", co.orderedAt);
+		NumberExpression<BigDecimal> salesExpr = co.totalPrice.sum();
+
+		List<Tuple> tuples = query
+				.select(dayExpr, salesExpr)
+				.from(co)
+				.join(co.store, s)
+				.where(
+						statusCompleted(),
+						eqStore(storeId),
+						betweenClosedOpen(co.orderedAt, startDt, endExDt)
+				)
+				.groupBy(dayExpr)
+				.setHint("org.hibernate.readOnly", true)
+				.setHint("org.hibernate.flushMode", "COMMIT")
+				.setHint("jakarta.persistence.query.timeout", 3000)
+				.fetch();
+
+		Map<String, Long> map = new HashMap<>(tuples.size());
+
+		for (Tuple t : tuples) {
+			String day = t.get(dayExpr);
+			BigDecimal salesBD = nvlBD(t.get(salesExpr)); // 🔹 여기 중요
+			long sales = salesBD.longValue();
+			map.put(day, sales);
+		}
+
+		return map;
+	}
+
+	private Map<String, Long> fetchSalesByMonthForMaterials(
+			Long storeId,
+			LocalDateTime startDt,
+			LocalDateTime endExDt
+	) {
+		StringExpression ymExpr =
+				Expressions.stringTemplate("DATE_FORMAT({0}, '%Y-%m')", co.orderedAt);
+		NumberExpression<BigDecimal> salesExpr = co.totalPrice.sum();
+
+		List<Tuple> tuples = query
+				.select(ymExpr, salesExpr)
+				.from(co)
+				.join(co.store, s)
+				.where(
+						statusCompleted(),
+						eqStore(storeId),
+						betweenClosedOpen(co.orderedAt, startDt, endExDt)
+				)
+				.groupBy(ymExpr)
+				.setHint("org.hibernate.readOnly", true)
+				.setHint("org.hibernate.flushMode", "COMMIT")
+				.setHint("jakarta.persistence.query.timeout", 3000)
+				.fetch();
+
+		Map<String, Long> map = new HashMap<>(tuples.size());
+
+		for (Tuple t : tuples) {
+			String ym = t.get(ymExpr);
+			BigDecimal salesBD = nvlBD(t.get(salesExpr));
+			long sales = salesBD.longValue();
+			map.put(ym, sales);
+		}
+
+		return map;
+	}
+
+
+	private Map<Long, LocalDate> fetchLastInboundDateByStoreMaterial(Long storeId) {
+
+		DateTimeExpression<LocalDateTime> lastReceivedExpr = batch.receivedDate.max();
+
+		JPAQuery<Tuple> jpaQuery = query
+				.select(
+						sm.id,
+						lastReceivedExpr
+				)
+				.from(batch)
+				.join(batch.storeInventory, inv)
+				.join(inv.storeMaterial, sm)
+				.join(inv.store, s)
+				.where(eqStore(storeId))
+				.groupBy(sm.id);
+
+		jpaQuery
+				.setHint("org.hibernate.readOnly", true)
+				.setHint("org.hibernate.flushMode", "COMMIT")
+				.setHint("jakarta.persistence.query.timeout", 3000);
+
+		List<Tuple> tuples = jpaQuery.fetch();
+		Map<Long, LocalDate> map = new HashMap<>(tuples.size());
+
+		for (Tuple t : tuples) {
+			Long storeMaterialId = t.get(sm.id);
+
+			LocalDateTime receivedDt = t.get(lastReceivedExpr);
+			if (storeMaterialId != null && receivedDt != null) {
+				map.put(storeMaterialId, receivedDt.toLocalDate());
+			}
+		}
+
+		return map;
+	}
+
+
+	private long fetchLowStockCount(Long storeId) {
+		QStoreInventory inv = QStoreInventory.storeInventory;
+
+		JPAQuery<Long> jpaQuery = query
+				.select(inv.id.countDistinct())
+				.from(inv)
+				.where(
+						inv.store.id.eq(storeId),
+						inv.status.in(InventoryStatus.LOW, InventoryStatus.SHORTAGE)
+				);
+
+		jpaQuery
+				.setHint("org.hibernate.readOnly", true)
+				.setHint("org.hibernate.flushMode", "COMMIT")
+				.setHint("jakarta.persistence.query.timeout", 3000);
+
+		Long result = jpaQuery.fetchOne();
+		return result != null ? result : 0L;
+	}
+
+	// 최근 입고일 / 재고 부족 / 유통기한 임박
+	private long fetchExpireSoonCount(Long storeId, LocalDate today) {
+
+
+		LocalDate endDate = today.plusDays(EXPIRE_SOON_DAYS);
+
+		JPAQuery<Long> jpaQuery = query
+				.select(inv.id.countDistinct())
+				.from(batch)
+				.join(batch.storeInventory, inv)
+				.where(
+						inv.store.id.eq(storeId),
+						batch.expirationDate.goe(today),
+						batch.expirationDate.loe(endDate)
+				);
+
+		jpaQuery
+				.setHint("org.hibernate.readOnly", true)
+				.setHint("org.hibernate.flushMode", "COMMIT")
+				.setHint("jakarta.persistence.query.timeout", 3000);
+
+		Long result = jpaQuery.fetchOne();
+		return result != null ? result : 0L;
+	}
+
+
 
 
 	// ============================================================
