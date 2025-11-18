@@ -9,9 +9,6 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration
 public class MvcConfig implements WebMvcConfigurer {
 
-    @Value("${app.profile-image-dir}")
-    private String profileImageDir;
-
     @Override
     public void addCorsMappings(CorsRegistry corsRegistry) {
 
@@ -23,12 +20,15 @@ public class MvcConfig implements WebMvcConfigurer {
                 .exposedHeaders("Set-Cookie", "Authorization");
     }
 
+    @Value("${file.upload-dir.profile}")
+    private String profileUploadDir;
+
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // 예: /uploads/profile/xxx 요청이 오면
-        // app.profile-image-dir 아래 파일을 리턴
+        String location = "file:" + profileUploadDir + "/";
+
         registry.addResourceHandler("/uploads/profile/**")
-                .addResourceLocations("file:" + profileImageDir + "/");
+                .addResourceLocations(location);
     }
 
 }

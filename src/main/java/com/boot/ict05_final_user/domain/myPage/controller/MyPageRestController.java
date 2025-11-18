@@ -5,6 +5,7 @@ import com.boot.ict05_final_user.domain.myPage.dto.MyPageDTO;
 import com.boot.ict05_final_user.domain.myPage.service.MyPageService;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -23,6 +24,9 @@ import java.util.Map;
 public class MyPageRestController {
 
     private final MyPageService myPageService;
+
+    @Value("${file.upload-dir.profile}")
+    private String profileImageDir;
 
     // 1) 마이페이지 조회
     @GetMapping("/myPage")
