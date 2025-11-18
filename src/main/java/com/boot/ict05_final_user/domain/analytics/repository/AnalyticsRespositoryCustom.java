@@ -1,6 +1,7 @@
 package com.boot.ict05_final_user.domain.analytics.repository;
 
 import com.boot.ict05_final_user.domain.analytics.dto.*;
+
 import java.time.LocalDate;
 
 public interface AnalyticsRespositoryCustom {
