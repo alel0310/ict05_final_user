@@ -74,15 +74,18 @@ export function DailyClosingList({ onSelectDate, initialFromDate, initialToDate,
   const [loading, setLoading] = useState(false);
 
   // 마감 내역 조회
-  const fetchHistory = async () => {
+  const fetchHistory = async (range?: { from: string; to: string }) => {
+    const useFrom = range?.from ?? fromDate;
+    const useTo = range?.to ?? toDate;
+
     setLoading(true);
     try {
       const res = await api.get<DailyClosingSummary[]>(
         "/api/daily-closing/history",
         {
           params: {
-            from: fromDate,
-            to: toDate,
+            from: useFrom,
+            to: useTo,
           },
         }
       );
@@ -108,6 +111,26 @@ export function DailyClosingList({ onSelectDate, initialFromDate, initialToDate,
     } else {
       console.log("선택한 마감 일자 : ", date);
     }
+  };
+
+  // 🔹 조회 기간 초기화 핸들러
+  const handleResetRange = () => {
+    const today = new Date();
+    const weekAgo = new Date();
+    weekAgo.setDate(today.getDate() - 31);
+
+    const defaultFrom = formatDateInputValue(weekAgo);
+    const defaultTo = formatDateInputValue(today);
+
+    // 로컬 state 초기화
+    setFromDate(defaultFrom);
+    setToDate(defaultTo);
+
+    // 부모(App)에게도 알려주기
+    onDateRangeChange?.(defaultFrom, defaultTo);
+
+    // 초기화된 기간으로 다시 조회
+    fetchHistory({ from: defaultFrom, to: defaultTo });
   };
 
   return (
@@ -159,13 +182,24 @@ export function DailyClosingList({ onSelectDate, initialFromDate, initialToDate,
             />
           </div>
 
-          <Button
-            className="ml-auto bg-kpi-green text-white"
-            onClick={fetchHistory}
-            disabled={loading}
-          >
-            {loading ? "조회 중..." : "조회"}
-          </Button>
+          <div className="ml-auto flex gap-2">
+            <Button
+              className="bg-kpi-red text-white"
+              variant="outline"
+              onClick={handleResetRange}
+              disabled={loading}
+            >
+              초기화
+            </Button>
+
+            <Button
+              className="bg-kpi-green text-white"
+              onClick={() => fetchHistory()}
+              disabled={loading}
+            >
+              {loading ? "조회 중..." : "조회"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
