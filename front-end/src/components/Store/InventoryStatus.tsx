@@ -173,7 +173,6 @@ export function InventoryStatus() {
         현재재고: `${item.currentStock || 0}${item.unit || ''}`,
         최소재고: `${item.minStock || 0}${item.unit || ''}`,
         최대재고: `${item.maxStock || 0}${item.unit || ''}`,
-        보관위치: item.location || '-',
         공급업체: item.supplier || '-',
         단가: `${(item.unitPrice || 0).toLocaleString()}원`,
         재고상태: getStatusText(item.status),
@@ -411,10 +410,6 @@ export function InventoryStatus() {
                         <div class="detail-value">${item.최대재고}</div>
                     </div>
                     <div class="detail-item">
-                        <div class="detail-label">보관위치</div>
-                        <div class="detail-value">${item.보관위치}</div>
-                    </div>
-                    <div class="detail-item">
                         <div class="detail-label">공급업체</div>
                         <div class="detail-value">${item.공급업체}</div>
                     </div>
@@ -541,7 +536,6 @@ export function InventoryStatus() {
             {value}
           </div>
           <div className="text-sm text-dark-gray">{row.category}</div>
-          <div className="text-xs text-dark-gray">위치: {row.location}</div>
         </div>
       )
     },
@@ -732,10 +726,6 @@ export function InventoryStatus() {
                         <option value="개">개</option>
                         <option value="박스">박스</option>
                       </select>
-                    </div>
-                    <div>
-                      <Label htmlFor="location">보관위치</Label>
-                      <Input id="location" placeholder="A-01" className="mt-1" />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -1024,13 +1014,6 @@ export function InventoryStatus() {
                     <div className="flex justify-between">
                       <span className="text-gray-600">단위</span>
                       <span className="font-medium">{selectedItem.unit}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600 flex items-center gap-1">
-                        <MapPin className="w-4 h-4" />
-                        보관 위치
-                      </span>
-                      <span className="font-medium">{selectedItem.location}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">공급업체</span>
