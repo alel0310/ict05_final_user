@@ -1,3 +1,4 @@
+// src/pages/StoreMenuManagement.tsx
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -14,7 +15,6 @@ import {
   DialogDescription,
 } from '../ui/dialog';
 import { ScrollArea } from '../ui/scroll-area';
-import { FormModal } from '../Common/FormModal';
 import { useConfirmDialog } from '../Common/ConfirmDialog';
 
 // ======================
@@ -87,10 +87,8 @@ export const StoreMenuManagement: React.FC = () => {
   // 전체 메뉴 목록 (모든 페이지)
   const [menus, setMenus] = useState<StoreMenu[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedMenu, setSelectedMenu] = useState<StoreMenu | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const { dialog, confirm } = useConfirmDialog();
@@ -323,88 +321,6 @@ export const StoreMenuManagement: React.FC = () => {
   };
 
   // ======================
-  // 메뉴 추가 (DB 저장 + 목록 재조회)
-  // ======================
-
-  const formFields = [
-    {
-      name: 'category',
-      label: '카테고리',
-      type: 'select' as const,
-      required: true,
-      options: [
-        { value: '1', label: '세트메뉴' },
-        { value: '2', label: '토스트' },
-        { value: '3', label: '사이드' },
-        { value: '4', label: '음료' },
-      ],
-    },
-    {
-      name: 'name',
-      label: '메뉴명',
-      type: 'text' as const,
-      required: true,
-    },
-    {
-      name: 'nameEnglish',
-      label: '영문명',
-      type: 'text' as const,
-      required: true,
-    },
-    {
-      name: 'price',
-      label: '가격(원)',
-      type: 'number' as const,
-      required: true,
-    },
-    {
-      name: 'kcal',
-      label: '칼로리(kcal)',
-      type: 'number' as const,
-      required: false,
-    },
-    {
-      name: 'description',
-      label: '설명',
-      type: 'textarea' as const,
-      required: true,
-    },
-    {
-      name: 'menuCode',
-      label: '상품코드',
-      type: 'text' as const,
-      required: true,
-    },
-  ];
-
-  const handleSubmit = async (data: Record<string, any>) => {
-    setIsSubmitting(true);
-    try {
-      await api.post('/API/menu/add', {
-        menuName: data.name,
-        menuNameEnglish: data.nameEnglish,
-        menuCategoryId: Number(data.category),
-        menuPrice: Number(data.price),
-        menuKcal: Number(data.kcal) || 0,
-        menuInformation: data.description,
-        menuCode: data.menuCode,
-        soldOutStatus: 'ON_SALE',
-        menuShow: 'SHOW',
-      });
-
-      await fetchMenus();
-
-      toast.success('새 메뉴가 추가되었습니다.');
-      setIsModalOpen(false);
-    } catch (err) {
-      console.error(err);
-      toast.error('메뉴 저장 중 오류가 발생했습니다.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // ======================
   // JSX 렌더링
   // ======================
 
@@ -418,12 +334,7 @@ export const StoreMenuManagement: React.FC = () => {
             {loading ? '불러오는 중...' : `총 ${totalElements}개 항목`}
           </p>
         </div>
-        <Button
-          onClick={() => setIsModalOpen(true)}
-          className="bg-kpi-red hover:bg-red-600 text-white"
-        >
-          + 메뉴 추가
-        </Button>
+        {/* 메뉴 추가 버튼 제거됨 */}
       </div>
 
       {/* Search & Filters */}
@@ -583,16 +494,6 @@ export const StoreMenuManagement: React.FC = () => {
           )}
         </div>
       </Card>
-
-      {/* Form Modal */}
-      <FormModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title="메뉴 추가"
-        fields={formFields}
-        onSubmit={handleSubmit}
-        isLoading={isSubmitting}
-      />
 
       {/* Menu Detail Modal */}
       <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>

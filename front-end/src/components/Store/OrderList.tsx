@@ -40,6 +40,19 @@ import { toast } from 'sonner';
 const api = axios.create({
   baseURL: import.meta.env.VITE_BACKEND_API_BASE_URL,
   withCredentials: true,
+  headers: { 'Content-Type': 'application/json' },
+});
+
+api.interceptors.request.use((config) => {
+  // ✅ 로그인 시 localStorage 에 저장하는 키 이름과 똑같이!
+  const token = localStorage.getItem('accessToken'); // 또는 'storeAccessToken'
+
+  if (token) {
+    config.headers = config.headers ?? {};
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  return config;
 });
 
 /* =========================
@@ -93,6 +106,19 @@ export function OrderList() {
 
   // 탭은 상태 필터와 동일하게 사용 (값 똑같이 유지)
   const currentTab = statusFilter;
+
+  // ===== 페이징 상태 =====
+  const PAGE_SIZE = 20;
+  const [currentPage, setCurrentPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(orders.length / PAGE_SIZE));
+  const startIndex = (currentPage - 1) * PAGE_SIZE;
+  const endIndex = startIndex + PAGE_SIZE;
+  const paginatedOrders = orders.slice(startIndex, endIndex);
+
+  // 필터가 바뀌어서 목록이 새로 로딩될 때는 항상 1페이지부터
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, paymentFilter, orderTypeFilter, dateFilter]);
 
   /* =========================
      백엔드 → 화면 타입 매핑
@@ -193,8 +219,17 @@ export function OrderList() {
       o.address ??
       null;
 
-    // 현재는 주문 상세 API가 따로 없으니 빈 배열로
-    const items: OrderItem[] = [];
+    // 백엔드에서 내려온 items 사용
+    const items: OrderItem[] = Array.isArray(o.items)
+      ? o.items.map((i: any, idx: number) => ({
+          id: i.menuId ?? idx,
+          name: i.menuName ?? '메뉴',
+          price: Number(i.unitPrice ?? 0),
+          quantity: Number(i.quantity ?? 0),
+          image: '',
+          options: [],
+        }))
+      : [];
 
     return {
       orderPk: pk,
@@ -233,17 +268,27 @@ export function OrderList() {
           },
         });
 
-        // 👉 응답이 배열인 경우와 Page 형태인 경우 둘 다 처리
-      const raw = Array.isArray(res.data)
-        ? res.data
-        : Array.isArray(res.data?.content)
-        ? res.data.content
-        : [];
+        // 응답이 배열 or Page 형태 모두 대응
+        const raw = Array.isArray(res.data)
+          ? res.data
+          : Array.isArray((res.data as any)?.content)
+          ? (res.data as any).content
+          : [];
 
-        const mapped = (res.data || []).map(mapBackendOrderToOrder);
+        // 백엔드 → 화면용 Order 타입으로 변환
+        const mapped: Order[] = raw.map(mapBackendOrderToOrder);
 
-        // 주문번호(문자열) 기준 내림차순 정렬
-        mapped.sort((a, b) => b.id.localeCompare(a.id));
+        // 주문시간 기준 최신순 정렬 (최근 주문이 위로 오게)
+        mapped.sort((a, b) => {
+          const tA = new Date(a.orderTime).getTime();
+          const tB = new Date(b.orderTime).getTime();
+
+          if (tA === tB) {
+            // 같은 시간일 때는 주문번호로 한 번 더 정렬
+            return b.id.localeCompare(a.id);
+          }
+          return tB - tA; // 최근 시간 먼저
+        });
 
         setOrders(mapped);
       } catch (error) {
@@ -303,7 +348,7 @@ export function OrderList() {
         status: newStatus,
       });
 
-      setOrders((prev) =>
+        setOrders((prev) =>
         prev.map((o) =>
           o.orderPk === order.orderPk
             ? { ...o, status: newStatus as Order['status'] }
@@ -506,9 +551,7 @@ export function OrderList() {
                         <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
                           주문시간
                         </th>
-                        <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
-                          고객정보
-                        </th>
+                        {/* 🔥 고객정보 컬럼 제거 */}
                         <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
                           주문내역
                         </th>
@@ -530,7 +573,7 @@ export function OrderList() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {orders.map((order) => (
+                      {paginatedOrders.map((order) => (
                         <tr
                           key={order.orderPk}
                           className="hover:bg-gray-50"
@@ -550,18 +593,7 @@ export function OrderList() {
                               </div>
                             </div>
                           </td>
-                          <td className="px-6 py-4">
-                            <div>
-                              <div className="text-gray-900">
-                                {order.customer || '고객'}
-                              </div>
-                              {order.customerPhone && (
-                                <div className="text-sm text-gray-500">
-                                  {order.customerPhone}
-                                </div>
-                              )}
-                            </div>
-                          </td>
+                          {/* 🔥 여기 있던 고객정보 셀 통째로 삭제 */}
                           <td className="px-6 py-4">
                             <div className="space-y-1">
                               {order.items.slice(0, 2).map((item, index) => (
@@ -677,6 +709,57 @@ export function OrderList() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* 페이지네이션 */}
+                {orders.length > 0 && (
+                  <div className="flex items-center justify-between px-6 py-4 border-t">
+                    <div className="text-sm text-gray-500">
+                      총 {orders.length}건 중{' '}
+                      {orders.length === 0
+                        ? 0
+                        : `${startIndex + 1}–${Math.min(endIndex, orders.length)}건`}
+                      표시
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setCurrentPage((p) => Math.max(1, p - 1))
+                        }
+                        disabled={currentPage === 1}
+                      >
+                        이전
+                      </Button>
+
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                        (page) => (
+                          <Button
+                            key={page}
+                            variant={page === currentPage ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => setCurrentPage(page)}
+                          >
+                            {page}
+                          </Button>
+                        ),
+                      )}
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setCurrentPage((p) =>
+                            Math.min(totalPages, p + 1),
+                          )
+                        }
+                        disabled={currentPage === totalPages}
+                      >
+                        다음
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 {orders.length === 0 && !loading && (
                   <div className="text-center py-16">
