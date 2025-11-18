@@ -17,9 +17,9 @@ import {
 import { ScrollArea } from '../ui/scroll-area';
 import { useConfirmDialog } from '../Common/ConfirmDialog';
 
-// ======================
-// 공통 axios 인스턴스 (JWT 자동 첨부)
-// ======================
+/* ======================
+   공통 axios 인스턴스 (JWT 자동 첨부)
+====================== */
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_BACKEND_API_BASE_URL,
@@ -38,9 +38,9 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// ======================
-// 타입 정의
-// ======================
+/* ======================
+   타입 정의
+====================== */
 
 type SoldOutStatus = 'ON_SALE' | 'SOLD_OUT';
 type MenuShow = 'SHOW' | 'HIDE';
@@ -63,13 +63,13 @@ type PageResponse<T> = {
   content: T[];
   totalElements: number;
   totalPages: number;
-  number: number;
+  number: number; // 현재 페이지(0-based)
   size: number;
 };
 
-// ======================
-// 헬퍼 함수
-// ======================
+/* ======================
+   헬퍼 함수
+====================== */
 
 const getCategoryEmoji = (categoryName: string): string => {
   if (categoryName.includes('세트')) return '🍔';
@@ -79,38 +79,96 @@ const getCategoryEmoji = (categoryName: string): string => {
   return '🍽️';
 };
 
-// ======================
-// 컴포넌트
-// ======================
+/**
+ * 카테고리 버튼 정의
+ * value:
+ *  - all          : 전체
+ *  - set/toast/side/drink : 카테고리 이름 필터
+ *  - available    : 판매중(ON_SALE)
+ *  - soldout      : 품절(SOLD_OUT)
+ *
+ * 🔹 categoryName 은 백엔드 MenuSearchDTO.categoryName 으로 그대로 전달됨
+ */
+const CATEGORY_FILTERS = [
+  { label: '전체', value: 'all' as const, categoryName: undefined },
+  { label: '세트', value: 'set' as const, categoryName: '세트' },
+  { label: '토스트', value: 'toast' as const, categoryName: '토스트' },
+  { label: '사이드', value: 'side' as const, categoryName: '사이드' },
+  { label: '음료', value: 'drink' as const, categoryName: '음료' },
+  { label: '판매중', value: 'available' as const, categoryName: undefined },
+  { label: '품절', value: 'soldout' as const, categoryName: undefined },
+];
+
+type CategoryValue =
+  | 'all'
+  | 'set'
+  | 'toast'
+  | 'side'
+  | 'drink'
+  | 'available'
+  | 'soldout';
+
+/* ======================
+   컴포넌트
+====================== */
 
 export const StoreMenuManagement: React.FC = () => {
-  // 전체 메뉴 목록 (모든 페이지)
   const [menus, setMenus] = useState<StoreMenu[]>([]);
   const [loading, setLoading] = useState(true);
+
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedMenu, setSelectedMenu] = useState<StoreMenu | null>(null);
+
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState<CategoryValue>('all');
+
   const { dialog, confirm } = useConfirmDialog();
 
-  // 클라이언트 페이징 상태
+  // 서버 페이징 상태
   const [page, setPage] = useState(0); // 0-based
   const pageSize = 10;
 
-  // ======================
-  // 메뉴 목록 조회 함수 (재사용)
-  // ======================
+  const [totalElements, setTotalElements] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
+  /* ======================
+     메뉴 목록 조회 (백엔드 페이징/검색/필터 사용)
+  ====================== */
+
   const fetchMenus = async () => {
     setLoading(true);
     try {
+      const params: any = {
+        page,
+        size: pageSize,
+      };
+
+      // 검색어 → MenuSearchDTO.s / type=name
+      if (searchTerm.trim() !== '') {
+        params.s = searchTerm.trim();
+        params.type = 'name';
+      }
+
+      // 카테고리/판매상태 필터 → MenuSearchDTO.categoryName / storeMenuSoldout
+      const cat = CATEGORY_FILTERS.find((c) => c.value === selectedCategory);
+
+      if (cat?.categoryName) {
+        params.categoryName = cat.categoryName;
+      }
+
+      if (selectedCategory === 'available') {
+        params.storeMenuSoldout = 'ON_SALE';
+      } else if (selectedCategory === 'soldout') {
+        params.storeMenuSoldout = 'SOLD_OUT';
+      }
+
       const res = await api.get<PageResponse<any>>('/API/menu/list', {
-        params: { page: 0, size: 1000 },
+        params,
       });
 
-      const rawMenus = res.data.content ?? [];
+      const raw = res.data;
 
-      // 백엔드 DTO(MenuListDTO)의 storeMenuSoldout 을 화면용 soldOutStatus 로 매핑
-      const normalized: StoreMenu[] = rawMenus.map((m: any) => ({
+      const normalized: StoreMenu[] = (raw.content ?? []).map((m: any) => ({
         menuId: m.menuId,
         menuName: m.menuName,
         menuNameEnglish: m.menuNameEnglish,
@@ -125,6 +183,9 @@ export const StoreMenuManagement: React.FC = () => {
       }));
 
       setMenus(normalized);
+      setTotalElements(raw.totalElements);
+      setTotalPages(raw.totalPages || 1);
+      setPage(raw.number); // 서버 기준으로 동기화
     } catch (err) {
       console.error(err);
       toast.error('메뉴 목록을 불러오지 못했습니다.');
@@ -133,101 +194,29 @@ export const StoreMenuManagement: React.FC = () => {
     }
   };
 
-  // 초기 로딩
+  // 초기 로딩 + page/search/category 변경 시 재조회
   useEffect(() => {
     fetchMenus();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, searchTerm, selectedCategory]);
 
-  // 검색어 / 카테고리 바뀌면 첫 페이지로 리셋
+  // 검색어나 카테고리가 바뀌면 0페이지부터
   useEffect(() => {
     setPage(0);
   }, [searchTerm, selectedCategory]);
 
-  // ======================
-  // 필터 + 페이징 계산
-  // ======================
-
-  // 전체 개수 (상단 "총 N개 항목")
-  const totalElements = menus.length;
-
-  // 검색/카테고리로 필터링 (전체 목록 기준)
-  const filteredMenus = menus.filter((menu) => {
-    const matchesSearch =
-      searchTerm === '' ||
-      menu.menuName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      menu.menuCategoryName.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesCategory =
-      selectedCategory === 'all' ||
-      menu.menuCategoryName.includes(selectedCategory) ||
-      (selectedCategory === 'available' && menu.soldOutStatus === 'ON_SALE') ||
-      (selectedCategory === 'soldout' && menu.soldOutStatus === 'SOLD_OUT');
-
-    return matchesSearch && matchesCategory;
-  });
-
-  // 전체 페이지 수 / 현재 페이지 데이터
-  const totalPages =
-    filteredMenus.length === 0 ? 1 : Math.ceil(filteredMenus.length / pageSize);
-
-  const currentPage = Math.min(page, totalPages - 1);
-  const pageStart = currentPage * pageSize;
-  const pageEnd = pageStart + pageSize;
-  const pageMenus = filteredMenus.slice(pageStart, pageEnd);
-
-  // 카테고리/판매상태 카운트는 "전체 메뉴" 기준으로
-  const categories = [
-    { label: '전체', value: 'all', count: menus.length },
-    {
-      label: '세트',
-      value: '세트',
-      count: menus.filter((m) => m.menuCategoryName.includes('세트')).length,
-    },
-    {
-      label: '토스트',
-      value: '토스트',
-      count: menus.filter((m) => m.menuCategoryName.includes('토스트')).length,
-    },
-    {
-      label: '사이드',
-      value: '사이드',
-      count: menus.filter((m) => m.menuCategoryName.includes('사이드')).length,
-    },
-    {
-      label: '음료',
-      value: '음료',
-      count: menus.filter((m) => m.menuCategoryName.includes('음료')).length,
-    },
-    {
-      label: '판매중',
-      value: 'available',
-      count: menus.filter((m) => m.soldOutStatus === 'ON_SALE').length,
-    },
-    {
-      label: '품절',
-      value: 'soldout',
-      count: menus.filter((m) => m.soldOutStatus === 'SOLD_OUT').length,
-    },
-  ];
-
-  // ======================
-  // 공통: 서버에 품절 상태 업데이트 (가맹점별)
-  // ======================
-
-  const STORE_ID = 1; // TODO: 실제 로그인한 가맹점의 storeId로 교체
+  /* ======================
+     서버에 품절 상태 업데이트 (로그인한 가맹점 기준)
+  ====================== */
 
   const updateSoldOutOnServer = async (
     menuId: number,
     status: SoldOutStatus,
   ) => {
-    await api.patch(`/API/stores/${STORE_ID}/menus/${menuId}/sold-out`, {
+    await api.patch(`/API/menu/${menuId}/sold-out`, {
       storeMenuSoldout: status,
     });
   };
-
-  // ======================
-  // 이벤트 핸들러
-  // ======================
 
   // 판매 상태 토글 (Switch)
   const handleToggleStatus = async (menuId: number, isOnSale: boolean) => {
@@ -248,7 +237,9 @@ export const StoreMenuManagement: React.FC = () => {
       if (target) {
         toast.success(
           `${target.menuName}을(를) ${
-            newStatus === 'ON_SALE' ? '판매중으로 변경했습니다.' : '품절 처리했습니다.'
+            newStatus === 'ON_SALE'
+              ? '판매중으로 변경했습니다.'
+              : '품절 처리했습니다.'
           }`,
         );
       }
@@ -300,16 +291,14 @@ export const StoreMenuManagement: React.FC = () => {
     }
   };
 
-  // 상세 모달 열기 (재료 포함 X, 기본 정보만)
+  // 상세 모달
   const handleMenuDetail = async (menu: StoreMenu) => {
     try {
       const res = await api.get<any>(`/API/menu/${menu.menuId}`);
 
-      // 상세 정보 DTO(MenuDetailDTO)의 필드를 기존 menu 위에 덮어쓰기
       const detail: StoreMenu = {
         ...menu,
         ...res.data,
-        // soldOutStatus는 가맹점별 정보라 그대로 유지
       };
 
       setSelectedMenu(detail);
@@ -320,9 +309,9 @@ export const StoreMenuManagement: React.FC = () => {
     }
   };
 
-  // ======================
-  // JSX 렌더링
-  // ======================
+  /* ======================
+     JSX 렌더링
+  ====================== */
 
   return (
     <div className="space-y-6">
@@ -334,7 +323,6 @@ export const StoreMenuManagement: React.FC = () => {
             {loading ? '불러오는 중...' : `총 ${totalElements}개 항목`}
           </p>
         </div>
-        {/* 메뉴 추가 버튼 제거됨 */}
       </div>
 
       {/* Search & Filters */}
@@ -352,7 +340,7 @@ export const StoreMenuManagement: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {categories.map((category) => (
+            {CATEGORY_FILTERS.map((category) => (
               <button
                 key={category.value}
                 onClick={() => setSelectedCategory(category.value)}
@@ -362,7 +350,7 @@ export const StoreMenuManagement: React.FC = () => {
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                {category.label} ({category.count})
+                {category.label}
               </button>
             ))}
           </div>
@@ -374,7 +362,7 @@ export const StoreMenuManagement: React.FC = () => {
         <div className="overflow-x-auto">
           {loading ? (
             <div className="text-center py-10 text-gray-500">불러오는 중...</div>
-          ) : pageMenus.length === 0 ? (
+          ) : menus.length === 0 ? (
             <div className="text-center py-16">
               <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-500">조건에 맞는 메뉴가 없습니다.</p>
@@ -396,7 +384,7 @@ export const StoreMenuManagement: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {pageMenus.map((menu) => (
+                  {menus.map((menu) => (
                     <tr key={menu.menuId} className="hover:bg-gray-50">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-4">
@@ -447,17 +435,17 @@ export const StoreMenuManagement: React.FC = () => {
                 </tbody>
               </table>
 
-              {/* 페이징 바 - 숫자 버튼 버전 */}
+              {/* 서버 페이징 바 */}
               <div className="flex items-center justify-between px-6 py-4 border-t">
                 <span className="text-sm text-gray-500">
-                  {`${currentPage + 1} / ${totalPages} 페이지`}
+                  {`${page + 1} / ${totalPages} 페이지`}
                 </span>
                 <div className="flex items-center gap-2">
                   {/* 이전 버튼 */}
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={currentPage === 0}
+                    disabled={page === 0}
                     onClick={() => setPage((prev) => Math.max(prev - 1, 0))}
                   >
                     이전
@@ -469,7 +457,7 @@ export const StoreMenuManagement: React.FC = () => {
                       <Button
                         key={idx}
                         size="sm"
-                        variant={idx === currentPage ? 'default' : 'outline'}
+                        variant={idx === page ? 'default' : 'outline'}
                         onClick={() => setPage(idx)}
                       >
                         {idx + 1}
@@ -481,7 +469,7 @@ export const StoreMenuManagement: React.FC = () => {
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={currentPage >= totalPages - 1}
+                    disabled={page >= totalPages - 1}
                     onClick={() =>
                       setPage((prev) => Math.min(prev + 1, totalPages - 1))
                     }

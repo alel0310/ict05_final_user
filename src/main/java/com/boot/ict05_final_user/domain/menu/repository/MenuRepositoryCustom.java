@@ -7,7 +7,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 public interface MenuRepositoryCustom {
-    Page<MenuListDTO> listMenu(MenuSearchDTO menuSearchDTO, Pageable pageable);
+
+    /** 🔹 로그인한 가맹점(storeId) 기준 메뉴 목록 */
+    Page<MenuListDTO> listMenu(Long storeId, MenuSearchDTO dto, Pageable pageable);
 
     MenuDetailDTO getMenuDetail(Long menuId);
 }
