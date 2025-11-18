@@ -62,4 +62,26 @@ public class StoreMaterialRestController {
     public List<StoreMaterialResponse> list(@RequestParam Long storeId) {
         return storeMaterialService.getStoreMaterials(storeId);
     }
+
+    /**
+     * 선택 매장에 본사 재료 일괄 매핑
+     *
+     * 예) POST /API/store/material/sync-hq?storeId=2
+     *
+     * @return 새로 생성된 StoreMaterial 개수
+     */
+    @PostMapping("/sync-hq")
+    public int syncHqMaterials(@RequestParam Long storeId) {
+        return storeMaterialService.mapAllHqMaterialsToStore(storeId);
+    }
+
+    /**
+     * 가맹점 재고 초기 세팅
+     * 예: POST /API/store/material/init-inventory?storeId=2
+     */
+    @PostMapping("/init-inventory")
+    public ResponseEntity<Integer> initInventory(@RequestParam Long storeId) {
+        int created = storeMaterialService.initStoreInventoryForStore(storeId);
+        return ResponseEntity.ok(created);
+    }
 }

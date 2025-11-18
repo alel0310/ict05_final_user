@@ -18,6 +18,7 @@ import { StaffWorkReports } from "./components/Store/StaffWorkReports";
 import { NoticeEducation } from "./components/Store/NoticeEducation";
 import { DailyClosingPage } from "./components/Store/DailyClosingPage";
 import { DailyClosingList } from "./components/Store/DailyClosingList";
+import { DailyClosingDetail } from "./components/Store/DailyClosingDetail";
 import { MyPage} from "./components/Common/MyPage";
 import { Toaster } from "./components/ui/sonner";
 import { ErrorBoundary } from "./components/Common/ErrorBoundary";
@@ -44,6 +45,9 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [ready, setReady] = useState(false);
   const [headerInfo, setHeaderInfo] = useState<HeaderInfo | null>(null);
+  const [selectedClosingDate, setSelectedClosingDate] = useState<string | null>(null);
+  const [closingListFromDate, setClosingListFromDate] = useState<string | undefined>(undefined);
+  const [closingListToDate, setClosingListToDate] = useState<string | undefined>(undefined);
 
   useEffect(()=> {
     const access = localStorage.getItem("accessToken");
@@ -107,7 +111,49 @@ export default function App() {
       case "inventory-management": return <ErrorBoundary><InventoryManagement /></ErrorBoundary>;
       case "finance": return <ErrorBoundary><FinanceManagement /></ErrorBoundary>;
       case "daily-closing": return (<OrderProvider><ErrorBoundary><DailyClosingPage onPageChange={handlePageChange}/></ErrorBoundary></OrderProvider>);
-      case "daily-closing-list": return (<OrderProvider><ErrorBoundary><DailyClosingList /></ErrorBoundary></OrderProvider>);
+      case "daily-closing-list":
+        return (
+          <OrderProvider>
+            <ErrorBoundary>
+              <DailyClosingList
+                // 처음 들어올 때는 undefined라서, 컴포넌트 내부 기본값(일주일/오늘) 사용
+                initialFromDate={closingListFromDate}
+                initialToDate={closingListToDate}
+                // 사용자가 날짜 바꾸면 App에 반영
+                onDateRangeChange={(from, to) => {
+                  setClosingListFromDate(from);
+                  setClosingListToDate(to);
+                }}
+                // 상세보기 눌렀을 때
+                onSelectDate={(date) => {
+                  setSelectedClosingDate(date);            
+                  setCurrentPage("daily-closing-detail");  
+                }}
+              />
+            </ErrorBoundary>
+          </OrderProvider>
+        );
+      case "daily-closing-detail":
+        return (
+          <OrderProvider>
+            <ErrorBoundary>
+              {selectedClosingDate ? (
+                <DailyClosingDetail
+                  date={selectedClosingDate}
+                  onBack={() => setCurrentPage("daily-closing-list")}
+                />
+              ) : (
+                // 혹시 날짜 없이 들어왔을 때는 리스트로 보내기
+                <DailyClosingList
+                  onSelectDate={(date) => {
+                    setSelectedClosingDate(date);
+                    setCurrentPage("daily-closing-detail");
+                  }}
+                />
+              )}
+            </ErrorBoundary>
+          </OrderProvider>
+        );  
       case "mypage": return <ErrorBoundary><MyPage onProfileImageChange={handleProfileImageChange}/></ErrorBoundary>
       case "staff":
       case "staff-list": return <ErrorBoundary><StaffList /></ErrorBoundary>;

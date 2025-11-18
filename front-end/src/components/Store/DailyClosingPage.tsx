@@ -117,7 +117,13 @@ export function DailyClosingPage({ onPageChange }: DailyClosingPageProps) {
 
   // 오늘 날짜 문자열 (YYYY-MM-DD)
   //const todayStr = new Date().toISOString().slice(0, 10);
-  const todayStr = "2023-01-13";
+  const todayStr = (() => {
+    const d = new Date(); // 로컬 시간
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  })();
 
   // 현금 매출
   const totalCash =

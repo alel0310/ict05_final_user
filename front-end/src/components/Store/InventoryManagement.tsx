@@ -24,15 +24,22 @@ import { Checkbox } from '../ui/checkbox';
 import type { CheckedState } from '@radix-ui/react-checkbox';
 import { toast } from 'sonner';
 import { 
-  createStoreMaterial, 
-  fetchStoreMaterials 
+  createStoreMaterial,
+  fetchStoreMaterials
 } from '../../services/storeMaterialApi';
+import {
+  initStoreInventory,
+  fetchStoreInventory,
+} from '../../services/storeInventoryApi';
 import type { 
   StoreMaterialCreateRequest,
   StoreMaterialResponse,
   MaterialTemperature,
   MaterialStatus,
 } from '../../types/storeMaterial';
+import type {
+  StoreInventoryItemResponse,
+} from '../../types/storeInventory';
 
 /* =======================
    type / interface / 유틸 함수
@@ -146,39 +153,47 @@ function mapStatus(smStatus: MaterialStatus): StockStatus {
   return 'sufficient';
 }
 
-function mapStoreMaterialToInventoryItem(
-  sm: StoreMaterialResponse,
+function mapStoreInventoryToInventoryItem(
+  inv: StoreInventoryItemResponse,
 ): InventoryItem {
-  const optimal = sm.optimalQuantity ?? 0;
-  const minStock = optimal;
-  const maxStock = optimal > 0 ? optimal * 2 : 0;
+  const current = inv.quantity ?? 0;
+  const optimal = inv.optimalQuantity ?? 0;
+  const unit = inv.baseUnit || 'ea';
 
-  // maxStock 이 0이면 Progress 계산에서 NaN 방지
-  const safeMaxStock = maxStock > 0 ? maxStock : 1;
+  // 임시 최대 재고: 적정 * 2
+  const max = optimal > 0 ? optimal * 2 : 0;
 
-  const unit = sm.baseUnit || sm.salesUnit || '개';
+  // 재고 상태 매핑 (InventoryStatus -> StockStatus)
+  let stockStatus: StockStatus;
+  switch (inv.status) {
+    case 'SHORTAGE':
+      stockStatus = 'out';
+      break;
+    case 'LOW':
+      stockStatus = 'low';
+      break;
+    default:
+      stockStatus = 'sufficient';
+  }
 
   return {
-    id: sm.id,
-    name: sm.name,
-    category: mapCategoryLabel(sm.category ?? null),
-
-    // 아직 가맹점 재고 테이블과 연동 전이므로 0으로 시작
-    currentStock: 0,          // 실제 재고 연동 전이라 0
-    minStock: optimal,        // 적정 재고 = minStock 로 사용
-    maxStock: optimal,        // 그래프 기준값을 적정으로 통일
+    id: inv.id,
+    name: inv.name,
+    category: inv.category ?? '기타',
+    currentStock: current,
+    minStock: optimal,
+    maxStock: max,
     unit,
-    unitPrice: sm.purchasePrice ?? 0,
-
-    // TODO: 나중에 입고 이력/유통기한 연동
-    lastRestocked: '',
-    expiryDate: new Date().toISOString().split('T')[0],
-    supplier: sm.supplier ?? '',
-    status: 'sufficient',
-    weeklyUsage: 0,
+    unitPrice: inv.purchasePrice ?? 0,
+    lastRestocked: '', // TODO: 가맹점 입고 이력 붙이면 교체
+    expiryDate: new Date().toISOString().split('T')[0], // TODO: 배치 기준 유통기한
+    supplier: inv.supplier ?? '',
+    status: stockStatus,
+    weeklyUsage: 0, // TODO: 추후 사용량 분석 붙이기
     location: '',
   };
 }
+
 
 // src/components/Store/InventoryManagement.tsx
 
@@ -189,6 +204,7 @@ function mapStoreMaterialToInventoryItem(
 
 export function InventoryManagement() {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [hasInventory, setHasInventory] = useState(false);   // {재고 초기화} 버튼 상태
   const [orders, setOrders] = useState<Order[]>(sampleOrders);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -220,19 +236,19 @@ export function InventoryManagement() {
   useEffect(() => {
     async function load() {
       try {
-        const list = await fetchStoreMaterials(STORE_ID);
-        const mapped = list.map(mapStoreMaterialToInventoryItem);
+        const list = await fetchStoreInventory(STORE_ID);
+        const mapped = list.map(mapStoreInventoryToInventoryItem);
         setInventory(mapped);
+        setHasInventory(mapped.length > 0);   // {재고 초기화} 버튼 상태
       } catch (e: any) {
         console.error(e);
-        toast.error('가맹점 재료 목록을 불러오지 못했습니다.');
+        toast.error('가맹점 재고 목록을 불러오지 못했습니다.');
       }
     }
 
     load();
   }, []);
-
-
+  
   /* ---------- 선택/전체선택 핸들러 (선언문으로 호이스팅) ---------- */
   function handleItemSelect(itemId: number, checked: boolean) {
     setSelectedItems(prev => (checked ? [...prev, itemId] : prev.filter(id => id !== itemId)));
@@ -432,6 +448,34 @@ export function InventoryManagement() {
   const handleAdjust = (item: InventoryItem) => { setSelectedItem(item); setModalType('adjust'); setIsModalOpen(true); };
   const handleOrder = () => { setSelectedItem(null); setModalType('order'); setIsModalOpen(true); };
   const handleRegisterItem = () => { setSelectedItem(null); setModalType('register'); setIsModalOpen(true); };
+
+  const handleInitStoreInventory = async () => {
+    try {
+      setIsLoading(true);
+
+      const created = await initStoreInventory(STORE_ID);
+
+      if (created > 0) {
+        toast.success(`가맹점 재고를 초기화했습니다. (${created}개 생성)`);
+
+        const list = await fetchStoreInventory(STORE_ID);
+        const mapped = list.map(mapStoreInventoryToInventoryItem);
+        setInventory(mapped);
+        setHasInventory(mapped.length > 0);   // {재고 초기화} 버튼 상태
+      } else {
+        toast.info('초기화할 재고가 없습니다.');
+      }
+    } catch (e: any) {
+      console.error(e);
+      toast.error(
+        e?.response?.data?.message ||
+          '가맹점 재고 초기화 중 오류가 발생했습니다.',
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
 
   const handleBulkOrder = () => {
     if (selectedItems.length === 0) {
@@ -741,12 +785,21 @@ export function InventoryManagement() {
           <h2 className="text-xl font-semibold text-gray-900">재고 관리</h2>
           <p className="text-sm text-dark-gray">재고 현황 및 관리</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-3">          
+          {!hasInventory && (
+            <Button
+              onClick={handleInitStoreInventory}
+              variant="outline"
+              className="border-kpi-purple text-kpi-purple hover:bg-purple-50"
+            >
+              재고 초기화
+            </Button>
+          )}
           <Button onClick={handleRegisterItem} variant="outline" className="border-kpi-green text-kpi-green hover:bg-green-50">
-            <Plus className="w-4 h-4 mr-2" />자재 등록
+            <Plus className="w-4 h-4 mr-2" />재료등록
           </Button>
           <Button onClick={handleOrder} variant="outline" className="border-kpi-orange text-kpi-orange hover:bg-orange-50">
-            <Plus className="w-4 h-4 mr-2" />개별 발주
+            <Plus className="w-4 h-4 mr-2" />개별발주
           </Button>
           <Button onClick={handleBulkOrder} className="bg-kpi-red hover:bg-red-600 text-white relative">
             <ShoppingCart className="w-4 h-4 mr-2" />
