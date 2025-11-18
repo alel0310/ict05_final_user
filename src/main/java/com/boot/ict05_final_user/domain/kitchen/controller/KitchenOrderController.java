@@ -1,11 +1,13 @@
 package com.boot.ict05_final_user.domain.kitchen.controller;
 
+import com.boot.ict05_final_user.config.security.principal.AppUser;
 import com.boot.ict05_final_user.domain.kitchen.dto.KitchenOrderResponseDTO;
 import com.boot.ict05_final_user.domain.kitchen.dto.UpdateKitchenOrderStatusRequestDTO;
 import com.boot.ict05_final_user.domain.kitchen.service.KitchenOrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -24,9 +26,14 @@ public class KitchenOrderController {
      */
     @GetMapping
     public ResponseEntity<List<KitchenOrderResponseDTO>> getKitchenOrders(
-            @RequestParam Long storeId
+            @AuthenticationPrincipal AppUser user
     ) {
+        Long storeId = user.getStoreId();              // ✅ 로그인한 점포 ID
+        log.info("[Kitchen] getKitchenOrders storeId={}", storeId);
+
         List<KitchenOrderResponseDTO> orders = kitchenOrderService.getKitchenOrders(storeId);
+        log.info("[Kitchen] result size={}", orders.size());
+
         return ResponseEntity.ok(orders);
     }
 

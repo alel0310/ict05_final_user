@@ -85,8 +85,15 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// 로그인한 가맹점 ID 로 교체
-const STORE_ID = 1;
+// ✅ 토큰 자동 첨부 (OrderSystem.tsx 랑 똑같이)
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('accessToken'); // 실제 키 이름 그대로
+  if (token) {
+    config.headers = config.headers ?? {};
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
 // ========================
 // 컴포넌트
@@ -121,7 +128,7 @@ export function KitchenDisplay() {
       paymentMethod: dto.paymentMethod,
       orderType: dto.orderType,
       priority: dto.priority || 'normal',
-      notes: dto.notes || undefined,
+      notes: dto.notes || undefined
     };
   };
 
@@ -149,41 +156,33 @@ export function KitchenDisplay() {
     });
   };
 
-  // 주문 목록 조회 (서버 + 기존 cooking 상태 유지)
   const fetchOrders = async () => {
-    try {
-      setLoading(true);
-      const res = await api.get<KitchenOrderResponseDTO[]>('/api/kitchen-orders', {
-        params: { storeId: STORE_ID },
+  try {
+    setLoading(true);
+
+    // ✅ storeId 파라미터 제거
+    const res = await api.get<KitchenOrderResponseDTO[]>('/api/kitchen-orders');
+
+    setOrders((prev) => {
+      const prevMap = new Map<number, KitchenOrder>(prev.map((o) => [o.id, o]));
+      const merged = res.data.map((dto) => {
+        const base = mapDtoToOrder(dto);
+        const prevOrder = prevMap.get(base.id);
+        if (prevOrder && prevOrder.status === 'cooking' && base.status === 'preparing') {
+          return { ...base, status: 'cooking' as KitchenOrderStatus };
+        }
+        return base;
       });
-
-      setOrders((prev) => {
-        const prevMap = new Map<number, KitchenOrder>(
-          prev.map((o) => [o.id, o]),
-        );
-
-        const merged = res.data.map((dto) => {
-          const base = mapDtoToOrder(dto);
-          const prevOrder = prevMap.get(base.id);
-
-          // 이전에 프론트에서 cooking 이었는데
-          // 서버는 아직 preparing 이라면 cooking 유지
-          if (prevOrder && prevOrder.status === 'cooking' && base.status === 'preparing') {
-            return { ...base, status: 'cooking' as KitchenOrderStatus };
-          }
-
-          return base;
-        });
-
-        return sortOrders(merged);
-      });
-    } catch (e) {
-      console.error(e);
-      toast.error('주방 주문 목록을 불러오지 못했습니다.');
-    } finally {
-      setLoading(false);
+      return sortOrders(merged);
+    });
+  } catch (e) {
+    console.error(e);
+    toast.error('주방 주문 목록을 불러오지 못했습니다.');
+  } finally {
+    setLoading(false);
     }
   };
+
 
   // 초기 로딩
   useEffect(() => {
