@@ -7,6 +7,7 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 주문(CustomerOrder) 엔티티
@@ -69,6 +70,10 @@ public class CustomerOrder {
     /** 비고 */
     @Column(name = "customer_order_memo")
     private String memo;
+
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL)
+    private List<CustomerOrderDetail> details;
+
 
     @PrePersist
     void prePersist() {

@@ -76,15 +76,15 @@ public class AttendanceRepositoryImpl implements AttendanceRepositoryCustom {
         JPAQuery<AttendanceListDTO> contentQuery = queryFactory
                 .select(Projections.constructor(
                         AttendanceListDTO.class,
-                        attendance.id,              // Long attendanceId
-                        attendance.workDate,        // LocalDate attendanceWorkDate
-                        attendance.checkIn,         // LocalDateTime attendanceCheckIn
-                        attendance.checkOut,        // LocalDateTime attendanceCheckOut
-                        attendance.status,          // AttendanceStatus attendanceStatus
-                        attendance.workHours,       // BigDecimal attendanceWorkHours
-                        staff.id,                   // Long staffId
-                        staff.staffName,            // String staffName
-                        staff.staffEmploymentType   // StaffEmploymentType staffEmploymentType
+                        attendance.id,
+                        attendance.workDate,
+                        attendance.checkIn,
+                        attendance.checkOut,
+                        attendance.status,
+                        attendance.workHours,
+                        staff.id,
+                        staff.staffName,
+                        staff.staffEmploymentType
                 ))
                 .from(attendance)
                 .join(attendance.staffProfile, staff)

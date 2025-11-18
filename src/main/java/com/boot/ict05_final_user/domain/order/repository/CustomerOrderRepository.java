@@ -2,6 +2,7 @@ package com.boot.ict05_final_user.domain.order.repository;
 
 import com.boot.ict05_final_user.domain.order.entity.CustomerOrder;
 import com.boot.ict05_final_user.domain.order.entity.OrderStatus;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -23,6 +24,9 @@ public interface CustomerOrderRepository extends JpaRepository<CustomerOrder, Lo
             Long storeId,
             List<OrderStatus> statuses
     );
+
+    // ✅ 가맹점별 주문 조회
+    List<CustomerOrder> findByStore_Id(Long storeId, Sort sort);
 
 }
 

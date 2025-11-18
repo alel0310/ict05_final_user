@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import axios from 'axios';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
@@ -8,9 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { FormModal } from '../Common/FormModal';
 import { ConfirmDialog } from '../Common/ConfirmDialog';
 import {
-  CalendarX, CalendarDays, Clock, Plus, Edit, Trash2,
-  Coffee, Sun, Moon, ChevronLeft, ChevronRight,
-  XCircle, AlertTriangle, Search
+  Plus, ChevronLeft, ChevronRight, Search
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -190,7 +188,6 @@ export function StaffSchedule() {
   const [holidays, setHolidays] = useState<StoreHoliday[]>([]);
 
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
   const [selectedStaff, setSelectedStaff] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState(''); // 스케줄용 검색
 
@@ -213,11 +210,59 @@ export function StaffSchedule() {
     null
   );
 
+  // =====================
+  // 📌 백엔드 근태 API 호출 (useCallback)
+  // =====================
+  const loadAttendance = useCallback(
+    async (targetDate: Date, page: number = 0) => {
+      try {
+        setAttendanceLoading(true);
+
+        const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
+        const token = localStorage.getItem('accessToken');
+        const dateStr = formatDateLocal(targetDate);
+
+        const res = await axios.get<PageResponse<AttendanceItem>>(
+          `${baseUrl}/api/attendance/daily`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            params: {
+              date: dateStr,
+              page,
+              size: 10, // 🔟 한 페이지 10명
+              keyword: attendanceKeyword || undefined,
+              type: attendanceSearchType,
+              attendanceStatus:
+                attendanceStatusFilter === 'ALL'
+                  ? undefined
+                  : attendanceStatusFilter,
+            },
+          }
+        );
+
+        const data = res.data;
+        console.log('📌 근태 응답', data);
+
+        setAttendanceList(data.content || []);
+        setAttendancePage(data.number ?? 0);
+        setAttendanceTotalPages(data.totalPages ?? 0);
+      } catch (err) {
+        console.error(err);
+        toast.error('근태 데이터를 불러오지 못했습니다.');
+      } finally {
+        setAttendanceLoading(false);
+      }
+    },
+    [attendanceKeyword, attendanceSearchType, attendanceStatusFilter]
+  );
+
+  // =====================
+  // 🔁 날짜 / 검색어 / 타입 / 상태 변경 시 자동 로딩
+  // =====================
   useEffect(() => {
-    // 날짜 바뀔 때마다 현재 검색 조건으로 다시 조회
+    setAttendancePage(0);              // 항상 0페이지부터
     loadAttendance(currentDate, 0);
-    setAttendancePage(0);
-  }, [currentDate]);
+  }, [currentDate, attendanceKeyword, attendanceSearchType, attendanceStatusFilter, loadAttendance]);
 
   // 휴일 체크
   const isHoliday = (date: Date) => {
@@ -240,53 +285,6 @@ export function StaffSchedule() {
         .includes(searchTerm.toLowerCase());
       return matchesDate && matchesStaff && matchesSearch;
     });
-  };
-
-  // 아이콘/뱃지
-  const getWorkTypeIcon = (workType: string) => {
-    switch (workType) {
-      case 'open':
-        return <Sun className="w-4 h-4" />;
-      case 'middle':
-        return <Coffee className="w-4 h-4" />;
-      case 'close':
-        return <Moon className="w-4 h-4" />;
-      case 'A':
-      case 'B':
-      case 'C':
-      case 'D':
-        return <Clock className="w-4 h-4" />;
-      case 'vacation':
-        return <CalendarDays className="w-4 h-4" />;
-      case 'off':
-        return <XCircle className="w-4 h-4" />;
-      default:
-        return <Clock className="w-4 h-4" />;
-    }
-  };
-  const getWorkTypeBadge = (workType: string) => {
-    switch (workType) {
-      case 'open':
-        return <Badge className="bg-blue-100 text-blue-800">오픈</Badge>;
-      case 'middle':
-        return <Badge className="bg-green-100 text-green-800">미들</Badge>;
-      case 'close':
-        return <Badge className="bg-purple-100 text-purple-800">마감</Badge>;
-      case 'A':
-        return <Badge className="bg-indigo-100 text-indigo-800">A근무</Badge>;
-      case 'B':
-        return <Badge className="bg-indigo-100 text-indigo-800">B근무</Badge>;
-      case 'C':
-        return <Badge className="bg-indigo-100 text-indigo-800">C근무</Badge>;
-      case 'D':
-        return <Badge className="bg-indigo-100 text-indigo-800">D근무</Badge>;
-      case 'vacation':
-        return <Badge className="bg-yellow-100 text-yellow-800">휴가</Badge>;
-      case 'off':
-        return <Badge className="bg-gray-100 text-gray-800">휴무</Badge>;
-      default:
-        return <Badge>{workType}</Badge>;
-    }
   };
 
   // ===== Attendance Helpers =====
@@ -327,66 +325,7 @@ export function StaffSchedule() {
     }
   };
 
-  // 백엔드 근태 API 호출
-  const loadAttendance = async (targetDate: Date, page: number = 0) => {
-    try {
-      setAttendanceLoading(true);
-
-      const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
-      const token = localStorage.getItem('accessToken');
-      const dateStr = formatDateLocal(targetDate);
-
-      const res = await axios.get<PageResponse<AttendanceItem>>(
-        `${baseUrl}/api/attendance/daily`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-          params: {
-            date: dateStr,
-            page,
-            size: 20,
-            keyword: attendanceKeyword || undefined,
-            type: attendanceSearchType,
-            // "ALL" 은 필터 없음 → 파라미터 안 보냄
-            attendanceStatus:
-              attendanceStatusFilter === 'ALL'
-                ? undefined
-                : attendanceStatusFilter,
-          },
-        }
-      );
-
-      const data = res.data;
-      console.log('📌 근태 응답', data);
-
-      setAttendanceList(data.content || []);
-      setAttendancePage(data.number ?? 0);
-      setAttendanceTotalPages(data.totalPages ?? 0);
-    } catch (err) {
-      console.error(err);
-      toast.error('근태 데이터를 불러오지 못했습니다.');
-    } finally {
-      setAttendanceLoading(false);
-    }
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'scheduled':
-        return <Badge variant="outline">예정</Badge>;
-      case 'confirmed':
-        return <Badge className="bg-blue-100 text-blue-800">확정</Badge>;
-      case 'working':
-        return <Badge className="bg-green-100 text-green-800">근무중</Badge>;
-      case 'completed':
-        return <Badge className="bg-gray-100 text-gray-800">완료</Badge>;
-      case 'absent':
-        return <Badge className="bg-red-100 text-red-800">결근</Badge>;
-      default:
-        return <Badge>{status}</Badge>;
-    }
-  };
-
-  // 근무/급여 계산
+  // 근무/급여 계산 (지금은 안 써도 냅둠)
   const calculateWorkHours = (schedule: WorkSchedule) => {
     if (!schedule.actualStartTime || !schedule.actualEndTime) return 0;
     const start = new Date(`2024-01-01 ${schedule.actualStartTime}`);
@@ -595,14 +534,9 @@ export function StaffSchedule() {
                   placeholder="직원명 / ID로 검색..."
                   value={attendanceKeyword}
                   onChange={e => {
-                    setAttendanceKeyword(e.target.value);
-                    setSearchTerm(e.target.value); // 스케줄 리스트 필터도 같이 사용
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      setAttendancePage(0);
-                      loadAttendance(currentDate, 0);
-                    }
+                    const value = e.target.value;
+                    setAttendanceKeyword(value);
+                    setSearchTerm(value); // 스케줄 리스트 필터도 같이 사용
                   }}
                   className="pl-10"
                 />
@@ -643,44 +577,7 @@ export function StaffSchedule() {
                   <SelectItem value="ABSENT">결근</SelectItem>
                 </SelectContent>
               </Select>
-
-              {/* 검색 버튼 */}
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setAttendancePage(0);
-                  loadAttendance(currentDate, 0);
-                }}
-              >
-                검색
-              </Button>
             </div>
-          </div>
-
-          {/* 기존 스케줄용 직원/뷰 모드 필터 */}
-          <div className="flex gap-2">
-            <Select value={selectedStaff} onValueChange={setSelectedStaff}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="직원 선택" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">전체 직원</SelectItem>
-                {staffList.map(st => (
-                  <SelectItem key={st.id} value={st.id}>
-                    {st.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={viewMode} onValueChange={(v: any) => setViewMode(v)}>
-              <SelectTrigger className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="week">주간</SelectItem>
-                <SelectItem value="month">월간</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </CardContent>
       </Card>
@@ -756,7 +653,11 @@ export function StaffSchedule() {
                   variant="outline"
                   size="sm"
                   disabled={attendancePage <= 0}
-                  onClick={() => loadAttendance(currentDate, attendancePage - 1)}
+                  onClick={() => {
+                    const prev = attendancePage - 1;
+                    setAttendancePage(prev);
+                    loadAttendance(currentDate, prev);
+                  }}
                 >
                   이전
                 </Button>
@@ -764,7 +665,11 @@ export function StaffSchedule() {
                   variant="outline"
                   size="sm"
                   disabled={attendancePage + 1 >= attendanceTotalPages}
-                  onClick={() => loadAttendance(currentDate, attendancePage + 1)}
+                  onClick={() => {
+                    const next = attendancePage + 1;
+                    setAttendancePage(next);
+                    loadAttendance(currentDate, next);
+                  }}
                 >
                   다음
                 </Button>

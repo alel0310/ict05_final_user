@@ -26,7 +26,21 @@ import { toast } from 'sonner';
 const api = axios.create({
   baseURL: import.meta.env.VITE_BACKEND_API_BASE_URL,
   withCredentials: true,
+  headers: { 'Content-Type': 'application/json' },
 });
+
+api.interceptors.request.use((config) => {
+  // 🔥 로그인할 때 localStorage에 저장한 토큰 키 이름과 반드시 같아야 함!!
+  const token = localStorage.getItem('accessToken'); // 예: 'accessToken' / 'storeAccessToken'
+
+  if (token) {
+    config.headers = config.headers ?? {};
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  return config;
+});
+
 
 /* ============================
    타입 정의
@@ -109,8 +123,6 @@ const ALL_CATEGORY_KEY = 'ALL';
 const PAGE_SIZE = 16;
 const EXCLUDED_CATEGORY_NAMES = ['메뉴'];
 
-// TODO: 로그인 후 storeId 동적 처리
-const STORE_ID = 1;
 
 /* ============================
     주문 등록 화면
@@ -338,7 +350,7 @@ export function OrderSystem() {
       };
 
       await api.post('/api/customer-orders', {
-        storeId: STORE_ID,
+        // storeId 안 보냄
         orderCode: orderId,
         orderType: mapOrderType[orderType],
         paymentType: mapPayment[method] || 'cash',

@@ -1,13 +1,18 @@
 package com.boot.ict05_final_user.domain.order.controller;
 
+import com.boot.ict05_final_user.config.security.auth.CustomUserDetails; // ✅ 추가
+import com.boot.ict05_final_user.config.security.principal.AppUser;
 import com.boot.ict05_final_user.domain.order.dto.CreateOrderRequestDTO;
 import com.boot.ict05_final_user.domain.order.dto.CreateOrderResponseDTO;
 import com.boot.ict05_final_user.domain.order.dto.CustomerOrderListDTO;
 import com.boot.ict05_final_user.domain.order.dto.UpdateStatusRequestDTO;
 import com.boot.ict05_final_user.domain.order.service.CustomerOrderService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal; // ✅ 추가
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Collections;
@@ -22,8 +27,23 @@ public class CustomerOrderController {
     private final CustomerOrderService orderService;
 
     @PostMapping
-    public ResponseEntity<CreateOrderResponseDTO> create(@RequestBody CreateOrderRequestDTO req) {
-        return ResponseEntity.ok(orderService.create(req));
+    public ResponseEntity<CreateOrderResponseDTO> create(
+            @AuthenticationPrincipal AppUser user,
+            @RequestBody CreateOrderRequestDTO req,
+            HttpServletRequest request
+    ) {
+        String authHeader = request.getHeader("Authorization");
+        log.info("Authorization header = {}", authHeader); // 🔍 토큰 확인용
+
+        if (user == null) {
+            log.warn("Unauthenticated POST /api/customer-orders 요청");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        Long storeId = user.getStoreId();
+        log.info("create order by storeId={}", storeId);
+
+        return ResponseEntity.ok(orderService.create(req, storeId));
     }
 
     /**
@@ -32,6 +52,7 @@ public class CustomerOrderController {
      */
     @GetMapping
     public ResponseEntity<List<CustomerOrderListDTO>> listForStore(
+            @AuthenticationPrincipal AppUser user,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String paymentType,
@@ -39,18 +60,24 @@ public class CustomerOrderController {
             @RequestParam(required = false, defaultValue = "all") String period
     ) {
         try {
+            if (user == null) {
+                log.warn("Unauthenticated GET /api/customer-orders 요청");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+
+            Long storeId = user.getStoreId();
+            log.info("list orders for storeId={}", storeId);
+
             List<CustomerOrderListDTO> list =
-                    orderService.searchOrderList(keyword, status, paymentType, orderType, period);
+                    orderService.searchOrderList(storeId, keyword, status, paymentType, orderType, period);
 
-            log.info("orders api result size = {}", list.size()); // 디버깅용
-
-            return ResponseEntity.ok(list);   // ★ Page 말고 List
+            log.info("orders api result size = {}", list.size());
+            return ResponseEntity.ok(list);
         } catch (Exception e) {
             log.error("[GET /api/customer-orders] 주문 리스트 조회 중 오류", e);
             return ResponseEntity.ok(Collections.emptyList());
         }
     }
-
 
     @PatchMapping("/{orderId}/status")
     public ResponseEntity<Void> updateStatus(@PathVariable Long orderId,

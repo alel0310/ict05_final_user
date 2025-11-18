@@ -20,11 +20,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 
-// CustomerOrderService.java
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -36,23 +36,26 @@ public class CustomerOrderService {
     private final MenuRepository menuRepository;
 
     // ─────────────────────
-    // 주문 생성 (기존 그대로)
+    // 주문 생성
     // ─────────────────────
     @Transactional
-    public CreateOrderResponseDTO create(CreateOrderRequestDTO req) {
-        Store store = storeRepository.findById(req.getStoreId())
-                .orElseThrow(() -> new IllegalArgumentException("Store not found: " + req.getStoreId()));
+    public CreateOrderResponseDTO create(CreateOrderRequestDTO req, Long storeId) {
+
+        log.info("▶ create order storeId(from login user) = {}", storeId);
+
+        Store store = storeRepository.findById(storeId)
+                .orElseThrow(() -> new IllegalArgumentException("Store not found: " + storeId));
 
         String orderCode = generateOrderCode();
 
         CustomerOrder order = CustomerOrder.builder()
-                .store(store)
+                .store(store)                                                    // ✅ 로그인 점포
                 .orderCode(orderCode)
-                .orderType(OrderType.from(req.getOrderType()))                 // "VISIT"
-                .paymentType(resolvePaymentType(req.getPaymentType()))        // "card" / "CARD" / "카드"
+                .orderType(OrderType.from(req.getOrderType()))                  // "VISIT"
+                .paymentType(resolvePaymentType(req.getPaymentType()))          // "card" / "CARD" / "카드"
                 .totalPrice(req.getTotalPrice())
                 .discount(req.getDiscount())
-                .status(OrderStatus.PREPARING)                                // 결제 직후 주방에 보여야 하므로 준비중
+                .status(OrderStatus.PREPARING)                                  // 결제 직후 주방에 보여야 하므로 준비중
                 .memo(req.getCustomerName())
                 .build();
 
@@ -92,21 +95,50 @@ public class CustomerOrderService {
     }
 
     // ─────────────────────
-// 주문 리스트 검색/필터 (임시: 전체 조회만)
-// ─────────────────────
+    // 주문 리스트 검색/필터
+    // ─────────────────────
     public List<CustomerOrderListDTO> searchOrderList(
+            Long storeId,                    // ✅ 로그인 가맹점 ID
             String keyword,
             String statusText,
             String paymentTypeText,
             String orderTypeText,
             String period // all / today / week / month
     ) {
-        // 1) 일단 전체 주문을 id 내림차순으로 가져온다
+        // 1) 해당 가맹점의 주문을 최신순으로 가져온다
         List<CustomerOrder> orders =
-                orderRepository.findAll(Sort.by(Sort.Direction.DESC, "id"));
+                orderRepository.findByStore_Id(storeId, Sort.by(Sort.Direction.DESC, "id"));
 
-        // 2) DTO 로 변환만 한다 (필터링 X)
-        return orders.stream()
+        // 2) 기간(period) 필터링
+        LocalDate today = LocalDate.now();
+
+        List<CustomerOrder> filtered = orders.stream()
+                .filter(o -> {
+                    LocalDate createdDate = o.getOrderedAt().toLocalDate();
+
+                    if (period == null || period.isBlank() || "today".equalsIgnoreCase(period)) {
+                        return createdDate.isEqual(today);
+                    } else if ("week".equalsIgnoreCase(period)) {
+                        LocalDate aWeekAgo = today.minusDays(6);
+                        return !createdDate.isBefore(aWeekAgo) && !createdDate.isAfter(today);
+                    } else if ("month".equalsIgnoreCase(period)) {
+                        LocalDate firstDay = today.withDayOfMonth(1);
+                        return !createdDate.isBefore(firstDay) && !createdDate.isAfter(today);
+                    } else {
+                        return true; // all
+                    }
+                })
+                .toList();
+
+        int MAX_SIZE = 100;
+        if (filtered.size() > MAX_SIZE) {
+            log.warn("orders api result size = {}, limit to {}", filtered.size(), MAX_SIZE);
+            filtered = filtered.subList(0, MAX_SIZE);
+        } else {
+            log.info("orders api result size = {}", filtered.size());
+        }
+
+        return filtered.stream()
                 .map(CustomerOrderListDTO::from)
                 .toList();
     }
@@ -117,7 +149,7 @@ public class CustomerOrderService {
                 .orElse(0L);
 
         long next = lastId + 1;
-        return String.format("#%04d", next);   // #0001, #0002 ...
+        return String.format("#%04d", next);
     }
 
     // ─────────────────────

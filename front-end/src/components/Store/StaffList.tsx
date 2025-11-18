@@ -29,14 +29,14 @@ type BaseField = {
 
 type ModalField =
   | (BaseField & {
-    type: Exclude<UIFieldType, 'select'>;
-    placeholder?: string;
-    options?: never;
-  })
+      type: Exclude<UIFieldType, 'select'>;
+      placeholder?: string;
+      options?: never;
+    })
   | (BaseField & {
-    type: 'select';
-    options: { value: string; label: string }[];
-  });
+      type: 'select';
+      options: { value: string; label: string }[];
+    });
 
 /* ---------- Staff & Page 인터페이스 ---------- */
 interface Staff {
@@ -61,27 +61,27 @@ interface PageResponse<T> {
 
 /* ---------- 컴포넌트 ---------- */
 export function StaffList() {
-  console.log('### StaffList 렌더링됨');
-
   const [staff, setStaff] = useState<Staff[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterAttendance, setFilterAttendance] = useState<string>('all');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
 
-  // 페이징 상태
+  // 페이징 상태 (현재 페이지용)
   const [page, setPage] = useState(0);          // 현재 페이지(0-based)
-  const [size, setSize] = useState(8);         // 한 페이지 개수
+  const [size, setSize] = useState(8);         // 한 페이지 8명
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
 
-  // ✅ 날짜 포맷 변환 (LocalDateTime 대응)
+  // 전체 직원 (카테고리 통계용)
+  const [allStaff, setAllStaff] = useState<Staff[]>([]);
+
+  // 날짜 포맷 변환 (LocalDateTime 대응)
   const toDateTime = (v: string) =>
     v && v.length === 10 ? `${v}T00:00:00` : v;
 
-  /* ✅ 직원 목록 불러오기 (page/size 포함) */
+  /* 직원 목록 불러오기 (page/size 포함 - 현재 페이지) */
   const fetchStaffList = async (pageParam = page, sizeParam = size) => {
-     console.log('### fetchStaffList 실행됨', pageParam, sizeParam);
     try {
       const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
       const token = localStorage.getItem('accessToken');
@@ -94,7 +94,7 @@ export function StaffList() {
         }
       );
 
-      console.log("<<백엔드에서 받은 직원 데이터>>", res.data.content);
+      console.log('<<백엔드에서 받은 직원 데이터(현재 페이지)>>', res.data.content);
 
       setStaff(res.data.content);
       setTotalPages(res.data.totalPages);
@@ -107,9 +107,31 @@ export function StaffList() {
     }
   };
 
-  // 최초 로딩 시 1페이지 조회
+  /* 전체 직원 목록 전부 가져오기 (카테고리 숫자 계산용) */
+  const fetchAllStaff = async () => {
+    try {
+      const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
+      const token = localStorage.getItem('accessToken');
+
+      const res = await axios.get<PageResponse<Staff>>(
+        `${baseUrl}/api/staff/list`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          params: { page: 0, size: 9999 }, // 충분히 큰 값으로 전체 조회
+        }
+      );
+
+      console.log('<<백엔드에서 받은 직원 데이터(전체)>>', res.data.content);
+      setAllStaff(res.data.content);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // 최초 로딩 시 1페이지 조회 + 전체 통계용 조회
   useEffect(() => {
-    fetchStaffList(0, 8);  // 8명 기준으로 첫 페이지 조회
+    fetchStaffList(0, 8);   // 현재 페이지
+    fetchAllStaff();        // 전체 직원
   }, []);
 
   /* 등록 처리 */
@@ -131,8 +153,9 @@ export function StaffList() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      // 현재 페이지 다시 조회
+      // 현재 페이지 다시 조회 + 전체 통계 다시 조회
       await fetchStaffList(page, size);
+      await fetchAllStaff();
 
       setIsAddModalOpen(false);
       toast.success(`직원이 등록되었습니다. (ID: ${res.data})`);
@@ -168,8 +191,9 @@ export function StaffList() {
         }
       );
 
-      // 수정 후 현재 페이지 재조회
+      // 수정 후 현재 페이지 + 전체 통계 재조회
       await fetchStaffList(page, size);
+      await fetchAllStaff();
 
       setEditingStaff(null);
       toast.success('직원 정보가 수정되었습니다.');
@@ -191,18 +215,15 @@ export function StaffList() {
       const token = localStorage.getItem('accessToken');
 
       // 오늘 날짜를 yyyy-MM-dd 로
-      const todayDate = new Date().toISOString().slice(0, 10); // "2025-11-18"
+      const todayDate = new Date().toISOString().slice(0, 10);
 
       const payload = {
-        // 문자열로 들어있는 기존값들 → 앞 10자리만 잘라서 다시 LocalDateTime 형태로
         staffName: target.staffName,
         staffEmploymentType: target.staffEmploymentType,
         staffEmail: target.staffEmail,
         staffPhone: target.staffPhone,
         staffBirth: toDateTime(target.staffBirth.slice(0, 10)),
         staffStartDate: toDateTime(target.staffStartDate.slice(0, 10)),
-
-        // ✅ 퇴사일도 "2025-11-18T00:00:00" 형태로 보내기
         staffEndDate: toDateTime(todayDate),
       };
 
@@ -214,8 +235,9 @@ export function StaffList() {
         }
       );
 
-      // 다시 목록 재조회
+      // 다시 목록 재조회 + 통계 재조회
       await fetchStaffList(page, size);
+      await fetchAllStaff();
 
       toast.success(`${target.staffName}님이 퇴사 처리되었습니다.`);
     } catch (err: any) {
@@ -228,22 +250,19 @@ export function StaffList() {
   const getWorkCategoryFromStaff = (s: Staff): 'active' | 'resigned' => {
     // 1) 퇴사일이 있으면 무조건 퇴사
     if (s.staffEndDate) {
-      console.log('카테고리 계산:', s.staffName, '퇴사일=', s.staffEndDate, '→ resigned');
-    return 'resigned';
+      return 'resigned';
     }
 
     // 2) (옵션) 근태 상태 enum도 같이 체크
     if (s.attendanceStatus) {
       const raw = s.attendanceStatus.toString().trim();
       const upper = raw.toUpperCase();
-      console.log('카테고리 계산:', s.staffName, 'status=', upper, '→ active/resign 체크');
 
       if (upper === 'RESIGN' || raw === '퇴사') {
         return 'resigned';
       }
     }
 
-    console.log('카테고리 계산:', s.staffName, '퇴사일 없음 → active');
     // 3) 나머지는 근무중
     return 'active';
   };
@@ -262,7 +281,6 @@ export function StaffList() {
 
     return matchesSearch && matchesAttendance;
   });
-
 
   /* ✅ 근태 상태 뱃지 */
   const getAttendanceBadge = (s: Staff) => {
@@ -339,7 +357,8 @@ export function StaffList() {
             <Users className="w-6 h-6 text-kpi-purple" />
             <div>
               <p className="text-sm text-dark-gray">전체 직원</p>
-              <p className="text-2xl font-semibold">{totalElements}</p>
+              {/* 전체 기준 → allStaff.length */}
+              <p className="text-2xl font-semibold">{allStaff.length}</p>
             </div>
           </div>
         </Card>
@@ -349,7 +368,7 @@ export function StaffList() {
             <div>
               <p className="text-sm text-dark-gray">근무중</p>
               <p className="text-2xl font-semibold">
-                {staff.filter(s => getWorkCategoryFromStaff(s) === 'active').length}
+                {allStaff.filter(s => getWorkCategoryFromStaff(s) === 'active').length}
               </p>
             </div>
           </div>
@@ -360,7 +379,7 @@ export function StaffList() {
             <div>
               <p className="text-sm text-dark-gray">퇴사</p>
               <p className="text-2xl font-semibold">
-                {staff.filter(s => getWorkCategoryFromStaff(s) === 'resigned').length}
+                {allStaff.filter(s => getWorkCategoryFromStaff(s) === 'resigned').length}
               </p>
             </div>
           </div>
@@ -442,7 +461,6 @@ export function StaffList() {
                       >
                         퇴사 처리
                       </Button>
-
                     </div>
                   </div>
                 </div>
@@ -500,13 +518,13 @@ export function StaffList() {
         initialData={
           editingStaff
             ? {
-              ...editingStaff,
-              staffBirth: editingStaff.staffBirth?.slice(0, 10),
-              staffStartDate: editingStaff.staffStartDate?.slice(0, 10),
-              staffEndDate: editingStaff.staffEndDate
-                ? editingStaff.staffEndDate.slice(0, 10)
-                : undefined,
-            }
+                ...editingStaff,
+                staffBirth: editingStaff.staffBirth?.slice(0, 10),
+                staffStartDate: editingStaff.staffStartDate?.slice(0, 10),
+                staffEndDate: editingStaff.staffEndDate
+                  ? editingStaff.staffEndDate.slice(0, 10)
+                  : undefined,
+              }
             : undefined
         }
       />

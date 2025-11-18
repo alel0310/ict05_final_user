@@ -2,8 +2,10 @@ package com.boot.ict05_final_user.domain.attendance.controller;
 
 import com.boot.ict05_final_user.config.security.principal.AppUser;
 import com.boot.ict05_final_user.domain.attendance.dto.AttendanceListDTO;
+import com.boot.ict05_final_user.domain.attendance.dto.AttendanceSearchDTO;
 import com.boot.ict05_final_user.domain.attendance.dto.AttendanceWriteFormDTO;
 import com.boot.ict05_final_user.domain.attendance.service.AttendanceService;
+import com.boot.ict05_final_user.domain.staff.entity.AttendanceStatus;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,15 +39,24 @@ public class AttendanceRestController {
             @RequestParam("date")
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) AttendanceStatus attendanceStatus
     ) {
+        int pageSize = (size != null ? size : 10);  // 한 페이지에 10개 고정
+        Pageable pageable = PageRequest.of(page, pageSize);
 
-        Pageable pageable = PageRequest.of(page, size);
+        AttendanceSearchDTO searchDto = new AttendanceSearchDTO();
+        searchDto.setKeyword(keyword);
+        searchDto.setType(type);
+        searchDto.setAttendanceStatus(attendanceStatus);
 
-        log.info("📌 AttendanceRestController - 하루 근태 조회 요청: date={}, page={}, size={}",
-                date, page, size);
+        log.info("📌 AttendanceRestController - 하루 근태 조회: date={}, page={}, size={}, keyword={}, type={}, status={}",
+                date, page, size, keyword, type, attendanceStatus);
+
         // Service에서 자동으로 로그인한 사용자의 storeId 가져감
-        return attendanceService.getDailyAttendance(date, pageable);
+        return attendanceService.getDailyAttendance(date, pageable, searchDto);
     }
 
     /**
