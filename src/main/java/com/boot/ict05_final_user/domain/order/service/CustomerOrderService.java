@@ -17,11 +17,14 @@ import com.boot.ict05_final_user.domain.store.repository.StoreRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 
+// CustomerOrderService.java
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -32,14 +35,19 @@ public class CustomerOrderService {
     private final StoreRepository storeRepository;
     private final MenuRepository menuRepository;
 
+    // ─────────────────────
+    // 주문 생성 (기존 그대로)
+    // ─────────────────────
     @Transactional
     public CreateOrderResponseDTO create(CreateOrderRequestDTO req) {
         Store store = storeRepository.findById(req.getStoreId())
                 .orElseThrow(() -> new IllegalArgumentException("Store not found: " + req.getStoreId()));
 
+        String orderCode = generateOrderCode();
+
         CustomerOrder order = CustomerOrder.builder()
                 .store(store)
-                .orderCode(req.getOrderCode())
+                .orderCode(orderCode)
                 .orderType(OrderType.from(req.getOrderType()))                 // "VISIT"
                 .paymentType(resolvePaymentType(req.getPaymentType()))        // "card" / "CARD" / "카드"
                 .totalPrice(req.getTotalPrice())
@@ -74,7 +82,6 @@ public class CustomerOrderService {
         CustomerOrder order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
 
-        // "PREPARING" 같은 enum name 우선 시도, 실패 시 한글값으로도 허용
         OrderStatus newStatus;
         try {
             newStatus = OrderStatus.valueOf(statusText.toUpperCase());
@@ -84,45 +91,54 @@ public class CustomerOrderService {
         order.setStatus(newStatus);
     }
 
-    public List<CustomerOrder> findForKitchen() {
-        return orderRepository.findByStatusInOrderByOrderedAtAsc(
-                List.of(OrderStatus.PREPARING, OrderStatus.READY)
-        );
-    }
+    // ─────────────────────
+// 주문 리스트 검색/필터 (임시: 전체 조회만)
+// ─────────────────────
+    public List<CustomerOrderListDTO> searchOrderList(
+            String keyword,
+            String statusText,
+            String paymentTypeText,
+            String orderTypeText,
+            String period // all / today / week / month
+    ) {
+        // 1) 일단 전체 주문을 id 내림차순으로 가져온다
+        List<CustomerOrder> orders =
+                orderRepository.findAll(Sort.by(Sort.Direction.DESC, "id"));
 
-    // ✅ 주문 리스트 화면용 DTO
-    public List<CustomerOrderListDTO> findForKitchenList() {
-        List<CustomerOrder> orders = findForKitchen();
+        // 2) DTO 로 변환만 한다 (필터링 X)
         return orders.stream()
                 .map(CustomerOrderListDTO::from)
                 .toList();
     }
 
-    // ✅ 컨트롤러에서 사용하는 safe 버전
-    public List<CustomerOrderListDTO> findForKitchenListSafe() {
-        try {
-            return findForKitchenList();
-        } catch (Exception e) {
-            log.error("주문 리스트 조회 중 오류 발생", e);
-            // 여기서도 예외 삼키고 빈 리스트
-            return Collections.emptyList();
-        }
+    private String generateOrderCode() {
+        Long lastId = orderRepository.findTopByOrderByIdDesc()
+                .map(CustomerOrder::getId)
+                .orElse(0L);
+
+        long next = lastId + 1;
+        return String.format("#%04d", next);   // #0001, #0002 ...
     }
 
-    // ─────────────────────────────────────────────
-    // paymentType 문자열 → PaymentType enum 변환
-    // ─────────────────────────────────────────────
+    // ─────────────────────
+    // paymentType 문자열 → PaymentType enum 변환 (기존)
+    // ─────────────────────
     private PaymentType resolvePaymentType(String value) {
         if (value == null) {
             throw new IllegalArgumentException("paymentType is null");
         }
+
         String v = value.trim();
+
+        // 0) "카드결제", "현금결제" 처럼 뒤에 "결제" 붙은 경우 잘라내기
+        if (v.endsWith("결제")) {
+            v = v.substring(0, v.length() - 2); // "카드결제" -> "카드"
+        }
 
         // 1) enum name / 코드 형식: "CARD", "card"
         try {
             return PaymentType.valueOf(v.toUpperCase());
-        } catch (Exception ignore) {
-        }
+        } catch (Exception ignore) { }
 
         // 2) 한글 라벨: "카드", "현금", "상품권", "외부 결제"
         for (PaymentType type : PaymentType.values()) {
@@ -132,5 +148,10 @@ public class CustomerOrderService {
         }
 
         throw new IllegalArgumentException("Unknown paymentType: " + value);
+    }
+
+
+    private String safeLower(String s) {
+        return s == null ? null : s.toLowerCase();
     }
 }

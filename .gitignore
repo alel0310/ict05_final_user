@@ -45,3 +45,5 @@ out/
 spy.log
 spy.log
 *.log
+python-pdf-download/__pycache__
+python-pdf-download/component/__pycache__

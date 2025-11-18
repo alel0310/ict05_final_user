@@ -1,5 +1,5 @@
 // src/App.tsx
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";            // ✅ navigate 사용
 import { Layout } from "./components/Common/Layout";
 // import LoginPage from "./pages/LoginPage";
@@ -10,7 +10,6 @@ import { StoreMenuManagement } from "./components/Store/MenuManagement";
 import { OrderSystem } from "./components/Store/OrderSystem";
 import { OrderList } from "./components/Store/OrderList";
 import { KitchenDisplay } from "./components/Store/KitchenDisplay";
-import { InventoryStatus } from "./components/Store/InventoryStatus";
 import { InventoryManagement } from "./components/Store/InventoryManagement";
 import { InventoryOrders } from "./components/Store/InventoryOrders";
 import { FinanceManagement } from "./components/Store/FinanceManagement";
@@ -18,8 +17,8 @@ import { StaffList } from "./components/Store/StaffList";
 import { StaffWorkReports } from "./components/Store/StaffWorkReports";
 import { NoticeEducation } from "./components/Store/NoticeEducation";
 import { DailyClosingPage } from "./components/Store/DailyClosingPage";
+import { DailyClosingList } from "./components/Store/DailyClosingList";
 import { MyPage} from "./components/Common/MyPage";
-import { toast } from "sonner";
 import { Toaster } from "./components/ui/sonner";
 import { ErrorBoundary } from "./components/Common/ErrorBoundary";
 import { OrderProvider } from "./components/Common/OrderContext";
@@ -27,13 +26,16 @@ import { OrderProvider } from "./components/Common/OrderContext";
 import { StaffSchedule } from "./components/Store/StaffSchedule"; // ⬅️ 추가
 import api from "./lib/authApi";
 import KpiReport from "./components/Store/reports/KpiReport";
-import NotificationSettings from "./components/Store/NotificationSettings";
 import OrderReport from "./components/Store/reports/OrderReport";
+import NotificationSettings from "./components/Store/NotificationSettings";
+import MenuReport from "./components/Store/reports/MenuReport";
+import TimeReport from "./components/Store/reports/TimeReport";
  // ✅ 인터셉터/강제로그아웃 핸들러
 
 type HeaderInfo = {
   memberName: string;
   storeName?: string | null;
+  memberImagePath?: string | null;
 };
 
 export default function App() {
@@ -67,6 +69,7 @@ export default function App() {
         setHeaderInfo({
           memberName: res.data.name,       // 응답의 name
           storeName: res.data.storeName,   // 응답의 storeName
+          memberImagePath: res.data.memberImagePath,
         });
       })
       .catch((err) => {
@@ -83,6 +86,13 @@ export default function App() {
 
   const handlePageChange = (page: string) => setCurrentPage(page);
 
+  const handleProfileImageChange = (path: string | null) => {
+    setHeaderInfo((prev) => ({
+      ...(prev ?? { memberName: "", storeName: null }),
+      memberImagePath: path,
+    }));
+  };
+
   const renderPage = () => {
     switch (currentPage) {
       case "dashboard": return <StoreDashboard/>;
@@ -92,12 +102,12 @@ export default function App() {
       case "order-list": return (<OrderProvider><ErrorBoundary><OrderList /></ErrorBoundary></OrderProvider> )
       case "order-kitchen":return (<OrderProvider><ErrorBoundary><KitchenDisplay /></ErrorBoundary></OrderProvider>);
       case "inventory":
-      case "inventory-status": return <ErrorBoundary><InventoryStatus /></ErrorBoundary>;
       case "inventory-orders": return <ErrorBoundary><InventoryOrders /></ErrorBoundary>;
       case "inventory-management": return <ErrorBoundary><InventoryManagement /></ErrorBoundary>;
       case "finance": return <ErrorBoundary><FinanceManagement /></ErrorBoundary>;
-      case "daily-closing": return (<OrderProvider><ErrorBoundary><DailyClosingPage /></ErrorBoundary></OrderProvider>);
-      case "mypage": return <ErrorBoundary><MyPage /></ErrorBoundary>
+      case "daily-closing": return (<OrderProvider><ErrorBoundary><DailyClosingPage onPageChange={handlePageChange}/></ErrorBoundary></OrderProvider>);
+      case "daily-closing-list": return (<OrderProvider><ErrorBoundary><DailyClosingList /></ErrorBoundary></OrderProvider>);
+      case "mypage": return <ErrorBoundary><MyPage onProfileImageChange={handleProfileImageChange}/></ErrorBoundary>
       case "staff":
       case "staff-list": return <ErrorBoundary><StaffList /></ErrorBoundary>;
     
@@ -107,6 +117,8 @@ export default function App() {
       case "notice": return <ErrorBoundary><NoticeEducation /></ErrorBoundary>;
       case "kpi-report": return <ErrorBoundary><KpiReport /></ErrorBoundary>;
       case "order-report": return <ErrorBoundary><OrderReport /></ErrorBoundary>;
+      case "menu-report": return <ErrorBoundary><MenuReport /></ErrorBoundary>;
+      case "daytime-report": return <ErrorBoundary><TimeReport /></ErrorBoundary>;
       
       case "settings-notifications": return (<ErrorBoundary><NotificationSettings /></ErrorBoundary>);
       default:
@@ -129,6 +141,7 @@ return (
       storeName={headerInfo?.storeName ?? ""}
       currentPage={currentPage}
       onPageChange={handlePageChange}
+      memberImagePath={headerInfo?.memberImagePath ?? null} 
     >
       {renderPage()}
     </Layout>

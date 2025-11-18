@@ -10,6 +10,7 @@ import com.boot.ict05_final_user.domain.menu.repository.MenuCategoryRepository;
 import com.boot.ict05_final_user.domain.menu.repository.MenuRecipeRepository;
 import com.boot.ict05_final_user.domain.menu.repository.MenuRepository;
 import com.boot.ict05_final_user.domain.menu.repository.StoreMenuRepository;
+import com.boot.ict05_final_user.domain.store.repository.StoreRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -29,9 +30,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class MenuService {
 
     private final MenuRepository menuRepository;    // @RequiredArgsConstructor가 자동으로 주입해 줘서 @Autowired가 필요 없음
-    private final MenuRecipeRepository menuRecipeRepository;
-    private final MenuCategoryRepository menuCategoryRepository;
     private final StoreMenuRepository storeMenuRepository;
+    private final StoreRepository storeRepository;
 
     /**
      * 메뉴 목록을 페이지 단위로 조회한다.
@@ -67,11 +67,22 @@ public class MenuService {
     public void updateSoldOutStatus(Long storeId, Long menuId, StoreMenuSoldout status) {
         StoreMenu storeMenu = storeMenuRepository
                 .findByStoreIdAndMenuId(storeId, menuId)
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "가맹점 메뉴를 찾을 수 없습니다. storeId=" + storeId + ", menuId=" + menuId));
+                .orElseGet(() -> {
+                    var store = storeRepository.findById(storeId)
+                            .orElseThrow(() -> new IllegalArgumentException("store not found: " + storeId));
+                    var menu = menuRepository.findById(menuId)
+                            .orElseThrow(() -> new IllegalArgumentException("menu not found: " + menuId));
 
-        storeMenu.setStoreMenuSoldout(status); // JPA dirty checking
+                    StoreMenu sm = new StoreMenu();
+                    sm.setStore(store);
+                    sm.setMenu(menu);
+                    sm.setStoreMenuSoldout(StoreMenuSoldout.ON_SALE); // 기본값
+                    return storeMenuRepository.save(sm);
+                });
+
+        storeMenu.setStoreMenuSoldout(status);  // JPA dirty checking
     }
-
-
 }
+
+
+

@@ -11,26 +11,29 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
  * 가맹점 재료(StoreMaterial) 엔티티
  *
- * <p>각 가맹점의 재료 정보를 관리한다.</p>
- * <ul>
- *   <li>본사 공급 재료(isHqMaterial = true) → material_id_fk 존재</li>
- *   <li>가맹점 자체 등록 재료(isHqMaterial = false) → material_id_fk = NULL</li>
- * </ul>
  * <p>
- * 본사 재료일 경우, 본사의 판매단위(salesUnit)를 가맹점 기준 단위로 사용한다.
- * 자체 등록 재료일 경우, 가맹점의 기본 단위를 직접 입력한다.
+ * - 재고 수량/유통기한/입출고 이력은 {@link StoreInventory} 및 이후
+ *   StoreInventoryBatch/Log 에서만 관리한다.<br>
+ * - 이 엔티티는 “가맹점 기준 재료 마스터 + 적정 재고 + 최근 매입 정보”까지만 가진다.
  * </p>
+ *
+ * <ul>
+ *   <li>본사 공급 재료(hqMaterial = true) → material FK 존재</li>
+ *   <li>가맹점 자체 등록 재료(hqMaterial = false) → material FK = NULL</li>
+ * </ul>
  */
 @Entity
 @Table(
         name = "store_material",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"store_id_fk", "store_material_code"})
+        uniqueConstraints = @UniqueConstraint(
+                name = "uq_store_material_code",
+                columnNames = {"store_id_fk", "store_material_code"}
+        )
 )
 @Getter
 @NoArgsConstructor
@@ -56,7 +59,7 @@ public class StoreMaterial {
     @Comment("매장 시퀀스 (FK)")
     private Store store;
 
-    /** 본사 재료 (FK: material.material_id) */
+    /** 본사 재료 (FK: material.material_id) – 본사 재료 사용 시에만 설정 */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(
             name = "material_id_fk",
@@ -72,34 +75,40 @@ public class StoreMaterial {
     @Comment("가맹점 재료 코드(점포별 고유)")
     private String code;
 
-    /** 가맹점 재료명 */
+    /** 가맹점 재료명 (표시명) */
     @Column(name = "store_material_name", length = 100, nullable = false,
             columnDefinition = "VARCHAR(100)")
     @Comment("가맹점 재료명")
     private String name;
 
-    /** 카테고리 */
+    /** 카테고리 (본사의 MaterialCategory Enum 값을 문자열로 저장) */
     @Column(name = "store_material_category", length = 50,
             columnDefinition = "VARCHAR(50)")
     @Comment("가맹점 재료 카테고리")
     private String category;
 
-    /** 기본 단위 (소진 단위, 가맹점 기준) */
+    /** 소진 단위 (가맹점 기준 – 예: 개, 샷, g) */
     @Column(name = "store_material_base_unit", length = 20,
             columnDefinition = "VARCHAR(20)")
-    @Comment("기본 단위(가맹점 기준)")
+    @Comment("소진 단위(가맹점 기준)")
     private String baseUnit;
 
-    /** 판매 단위 (본사 기준 단위, 본사 재료일 경우 참조됨) */
+    /** 입고 단위 (본사 판매단위/발주단위 – 예: 박스, 통, kg) */
     @Column(name = "store_material_sales_unit", length = 20,
             columnDefinition = "VARCHAR(20)")
-    @Comment("판매 단위(본사 기준)")
+    @Comment("입고 단위(본사 기준 단위)")
     private String salesUnit;
 
-    /** 공급업체명 */
+    /** 변환비율(입고단위 → 소진단위, 예: 1박스=1000g) */
+    @Column(name = "material_conversion_rate", nullable = false,
+            columnDefinition = "INT DEFAULT 1")
+    @Comment("변환비율(입고단위 → 소진단위)")
+    private Integer conversionRate;
+
+    /** 공급업체명 (최근/대표 공급처) */
     @Column(name = "store_material_supplier", length = 100,
             columnDefinition = "VARCHAR(100)")
-    @Comment("가맹점 재료 공급업체명")
+    @Comment("가맹점 재료 공급업체명(대표/최근)")
     private String supplier;
 
     /** 보관온도 */
@@ -109,42 +118,24 @@ public class StoreMaterial {
     @Comment("보관온도")
     private MaterialTemperature temperature;
 
-    /** 재료 상태 */
+    /** 재료 상태 (USE=사용, STOP=미사용) */
     @Enumerated(EnumType.STRING)
     @Column(name = "store_material_status", nullable = false,
             columnDefinition = "ENUM('USE','STOP') DEFAULT 'USE'")
     @Comment("재료 상태")
     private MaterialStatus status;
 
-    /** 현재 수량 */
-    @Column(name = "store_material_quantity", nullable = false, precision = 15, scale = 3,
-            columnDefinition = "DECIMAL(15,3) DEFAULT 0")
-    @Comment("현재 수량")
-    private BigDecimal quantity;
-
-    /** 적정 수량 */
+    /** 적정 수량 (가맹점 기준 – 보통 소진단위 기준으로 운용) */
     @Column(name = "store_material_optimal_quantity", precision = 15, scale = 3,
             columnDefinition = "DECIMAL(15,3)")
-    @Comment("적정 수량")
+    @Comment("적정 수량(가맹점 기준)")
     private BigDecimal optimalQuantity;
 
-    /** 매입가 */
+    /** 최근 매입 단가 (입고단위 기준 금액) */
     @Column(name = "store_material_purchase_price",
-            columnDefinition = "BIGINT")
-    @Comment("매입가")
+            columnDefinition = "DECIMAL(15,2)")
+    @Comment("최근 매입 단가(입고단위 기준)")
     private BigDecimal purchasePrice;
-
-    /** 판매가 */
-    @Column(name = "store_material_selling_price",
-            columnDefinition = "BIGINT")
-    @Comment("판매가")
-    private BigDecimal sellingPrice;
-
-    /** 유통기한 */
-    @Column(name = "store_material_expiration_date",
-            columnDefinition = "DATE")
-    @Comment("유통기한")
-    private LocalDate expirationDate;
 
     /** 본사 재료 여부 (1=본사, 0=가맹점 자체 등록) */
     @Column(name = "store_material_is_hq_material", nullable = false,

@@ -24,11 +24,10 @@ import { useConfirmDialog } from '../Common/ConfirmDialog';
 const api = axios.create({
   baseURL: import.meta.env.VITE_BACKEND_API_BASE_URL,
   withCredentials: true,
-  headers: {"Content-Type": "application/json"},
+  headers: { 'Content-Type': 'application/json' },
 });
 
 api.interceptors.request.use((config) => {
-  // 로그인 후 localStorage 에 저장해 둔 토큰 키 이름으로 바꿔줘도 됨
   const token = localStorage.getItem('accessToken');
 
   if (token) {
@@ -56,8 +55,7 @@ export type StoreMenu = {
   menuKcal: number;
   menuInformation: string;
   menuCode: string;
-  ingredients: string;
-  soldOutStatus: SoldOutStatus;
+  soldOutStatus: SoldOutStatus; // 화면에서 쓰는 판매/품절 상태
   menuShow: MenuShow;
 };
 
@@ -107,20 +105,25 @@ export const StoreMenuManagement: React.FC = () => {
   const fetchMenus = async () => {
     setLoading(true);
     try {
-      const res = await api.get<PageResponse<StoreMenu>>(
-        '/API/menu/list',
-        {
-          params: { page: 0, size: 1000 },
-        },
-      );
+      const res = await api.get<PageResponse<any>>('/API/menu/list', {
+        params: { page: 0, size: 1000 },
+      });
 
-      console.log('menu list response:', res.data);
       const rawMenus = res.data.content ?? [];
 
-      // soldOutStatus 없으면 기본값 ON_SALE
-      const normalized: StoreMenu[] = rawMenus.map((m) => ({
-        ...m,
-        soldOutStatus: (m.soldOutStatus ?? 'ON_SALE') as SoldOutStatus,
+      // 백엔드 DTO(MenuListDTO)의 storeMenuSoldout 을 화면용 soldOutStatus 로 매핑
+      const normalized: StoreMenu[] = rawMenus.map((m: any) => ({
+        menuId: m.menuId,
+        menuName: m.menuName,
+        menuNameEnglish: m.menuNameEnglish,
+        menuCategoryId: m.menuCategoryId,
+        menuCategoryName: m.menuCategoryName,
+        menuPrice: m.menuPrice,
+        menuKcal: m.menuKcal,
+        menuInformation: m.menuInformation,
+        menuCode: m.menuCode,
+        menuShow: m.menuShow as MenuShow,
+        soldOutStatus: (m.storeMenuSoldout ?? 'ON_SALE') as SoldOutStatus,
       }));
 
       setMenus(normalized);
@@ -210,15 +213,17 @@ export const StoreMenuManagement: React.FC = () => {
   ];
 
   // ======================
-  // 공통: 서버에 품절 상태 업데이트
+  // 공통: 서버에 품절 상태 업데이트 (가맹점별)
   // ======================
+
+  const STORE_ID = 1; // TODO: 실제 로그인한 가맹점의 storeId로 교체
 
   const updateSoldOutOnServer = async (
     menuId: number,
     status: SoldOutStatus,
   ) => {
-    await api.patch(`/API/menu/${menuId}/sold-out`, {
-      soldOutStatus: status,
+    await api.patch(`/API/stores/${STORE_ID}/menus/${menuId}/sold-out`, {
+      storeMenuSoldout: status,
     });
   };
 
@@ -297,15 +302,16 @@ export const StoreMenuManagement: React.FC = () => {
     }
   };
 
-  // 상세 모달 열기 (재료 포함)
+  // 상세 모달 열기 (재료 포함 X, 기본 정보만)
   const handleMenuDetail = async (menu: StoreMenu) => {
     try {
-      const res = await api.get<StoreMenu>(`/API/menu/${menu.menuId}`);
+      const res = await api.get<any>(`/API/menu/${menu.menuId}`);
 
+      // 상세 정보 DTO(MenuDetailDTO)의 필드를 기존 menu 위에 덮어쓰기
       const detail: StoreMenu = {
         ...menu,
         ...res.data,
-        soldOutStatus: (res.data.soldOutStatus ?? 'ON_SALE') as SoldOutStatus,
+        // soldOutStatus는 가맹점별 정보라 그대로 유지
       };
 
       setSelectedMenu(detail);
@@ -317,7 +323,7 @@ export const StoreMenuManagement: React.FC = () => {
   };
 
   // ======================
-  // 메뉴 추가 폼 필드 (재료 입력 추가)
+  // 메뉴 추가 (DB 저장 + 목록 재조회)
   // ======================
 
   const formFields = [
@@ -364,13 +370,6 @@ export const StoreMenuManagement: React.FC = () => {
       required: true,
     },
     {
-      name: 'ingredients',
-      label: '재료 정보',
-      type: 'textarea' as const,
-      required: false,
-      placeholder: '예) 마가린, 딥치즈소스...',
-    },
-    {
       name: 'menuCode',
       label: '상품코드',
       type: 'text' as const,
@@ -378,22 +377,17 @@ export const StoreMenuManagement: React.FC = () => {
     },
   ];
 
-  // ======================
-  // 메뉴 추가 (DB 저장 + 목록 재조회)
-  // ======================
-
   const handleSubmit = async (data: Record<string, any>) => {
     setIsSubmitting(true);
     try {
       await api.post('/API/menu/add', {
         menuName: data.name,
         menuNameEnglish: data.nameEnglish,
-        menuCategoryId: Number(data.category), // 백엔드 DTO 에 맞게 조정
+        menuCategoryId: Number(data.category),
         menuPrice: Number(data.price),
         menuKcal: Number(data.kcal) || 0,
         menuInformation: data.description,
         menuCode: data.menuCode,
-        ingredients: data.ingredients ?? '',
         soldOutStatus: 'ON_SALE',
         menuShow: 'SHOW',
       });
@@ -627,17 +621,6 @@ export const StoreMenuManagement: React.FC = () => {
                 <p className="text-sm text-gray-500 mb-4">
                   가격: ₩{selectedMenu.menuPrice.toLocaleString()}
                 </p>
-
-                {/* 재료 정보 섹션 */}
-                <div className="mt-4 border rounded-xl p-4 bg-gray-50">
-                  <h3 className="text-sm font-semibold mb-2">재료 정보</h3>
-                  <p className="text-sm text-gray-700">
-                    {selectedMenu.ingredients &&
-                    selectedMenu.ingredients.trim().length > 0
-                      ? selectedMenu.ingredients
-                      : '등록된 재료 정보가 없습니다.'}
-                  </p>
-                </div>
 
                 <div className="mt-4 flex gap-2">
                   {selectedMenu.soldOutStatus === 'SOLD_OUT' ? (

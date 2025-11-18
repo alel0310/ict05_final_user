@@ -19,7 +19,8 @@ import {
   BookOpen,
   Calendar,
   CircleDollarSign,
-  Clock
+  Clock,
+  ClipboardList
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useNavigate } from "react-router-dom";
@@ -27,6 +28,7 @@ import api from "../../lib/authApi";
 import FcmForegroundListener from '../fcm/FcmForegroundListener';
 import { getMessagingIfSupported } from "../../lib/firebase";
 import { deleteToken } from "firebase/messaging";
+import defaultProfile from "/images/default-profile.png"; // 기본 이미지
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -35,6 +37,7 @@ interface LayoutProps {
   onPageChange: (page: string) => void; 
   memberName: string;              
   storeName?: string | null;
+  memberImagePath?: string | null;
 }
 
 interface MenuItem {
@@ -73,7 +76,6 @@ const storeMenuItems: MenuItem[] = [
     label: '재고/발주', 
     icon: Package,
     children: [
-      { id: 'inventory-status', label: '재고 현황', icon: Package },
       { id: 'inventory-management', label: '재고 관리', icon: Package},
       { id: 'inventory-orders', label: '발주 관리', icon: Truck }
     ]
@@ -83,7 +85,8 @@ const storeMenuItems: MenuItem[] = [
     label: '정산', 
     icon: Calculator,
     children: [
-      { id: 'daily-closing', label: '일일 시재/마감', icon: CircleDollarSign }
+      { id: 'daily-closing', label: '일일 시재/마감', icon: CircleDollarSign },
+      { id: 'daily-closing-list', label: '일일 마감 내역', icon: ClipboardList }
     ]
   },
   { 
@@ -111,7 +114,7 @@ const storeMenuItems: MenuItem[] = [
   },
 ];
 
-export function Layout({ children, userType, currentPage, onPageChange, memberName, storeName}: LayoutProps) {
+export function Layout({ children, userType, currentPage, onPageChange, memberName, storeName, memberImagePath,}: LayoutProps) {
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<string[]>(() => {
@@ -245,11 +248,21 @@ export function Layout({ children, userType, currentPage, onPageChange, memberNa
     }
   };
 
-
+  const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_API_BASE_URL;
   const customTitles: Record<string, string> = {
     "settings-notifications": "가맹점 알림 설정",
     "mypage": "마이페이지",
   };
+
+  // 헤더에서 쓸 프로필 이미지 src
+   const profileSrc =
+    memberImagePath && memberImagePath.trim().length > 0
+      ? (
+          memberImagePath.startsWith("http")
+            ? memberImagePath                     // 이미 절대 URL 이면 그대로 사용
+            : `${BACKEND_BASE_URL}${memberImagePath}` // 상대경로면 백엔드 베이스 붙이기
+        )
+      : defaultProfile;
 
   return (
     <div className="min-h-screen bg-light-gray flex">
@@ -407,9 +420,11 @@ export function Layout({ children, userType, currentPage, onPageChange, memberNa
                   {storeName || "가맹점"}
                 </p>
               </div>
-              <div className="w-8 h-8 bg-kpi-green rounded-full flex items-center justify-center">
-                <Users className="w-4 h-4 text-white" />
-              </div>
+              <img
+                src={profileSrc}
+                alt="프로필 이미지"
+                className="w-8 h-8 rounded-full object-cover border border-gray-200"
+              />
             </div>
           </div>
         </header>

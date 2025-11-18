@@ -27,20 +27,30 @@ public class CustomerOrderController {
     }
 
     /**
-     * 주문 리스트 (주방/가맹점 주문목록 화면)
-     * 여기서는 절대 400/500 안 나가게 방어
+     * 주문 리스트 (가맹점 주문 목록 화면)
+     * 검색/필터는 모두 쿼리 파라미터로 받아서 서비스에서 처리
      */
     @GetMapping
-    public ResponseEntity<List<CustomerOrderListDTO>> listForKitchen() {
+    public ResponseEntity<List<CustomerOrderListDTO>> listForStore(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String paymentType,
+            @RequestParam(required = false) String orderType,
+            @RequestParam(required = false, defaultValue = "all") String period
+    ) {
         try {
-            List<CustomerOrderListDTO> list = orderService.findForKitchenListSafe();
-            return ResponseEntity.ok(list);
+            List<CustomerOrderListDTO> list =
+                    orderService.searchOrderList(keyword, status, paymentType, orderType, period);
+
+            log.info("orders api result size = {}", list.size()); // 디버깅용
+
+            return ResponseEntity.ok(list);   // ★ Page 말고 List
         } catch (Exception e) {
-            log.error("[/api/customer-orders] 알 수 없는 오류 발생", e);
-            // 최후의 보루: 그래도 화면이 죽지 않게 빈 리스트로 응답
+            log.error("[GET /api/customer-orders] 주문 리스트 조회 중 오류", e);
             return ResponseEntity.ok(Collections.emptyList());
         }
     }
+
 
     @PatchMapping("/{orderId}/status")
     public ResponseEntity<Void> updateStatus(@PathVariable Long orderId,

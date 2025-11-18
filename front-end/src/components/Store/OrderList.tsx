@@ -56,7 +56,12 @@ interface OrderItem {
 }
 
 interface Order {
-  id: string; // 화면에 보여줄 주문번호 (#0001)
+  /** 백엔드 PK (PATCH 용도) */
+  orderPk: number;
+
+  /** 화면에 보여줄 주문번호 (#0001 형식) */
+  id: string;
+
   items: OrderItem[];
   total: number;
   originalTotal: number;
@@ -76,14 +81,18 @@ type BackendOrder = any;
 
 export function OrderList() {
   const [orders, setOrders] = useState<Order[]>([]);
-  const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // 상단 검색/필터
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [paymentFilter, setPaymentFilter] = useState<string>('all');
-  const [orderTypeFilter, setOrderTypeFilter] = useState<string>('all');
-  const [dateFilter, setDateFilter] = useState<string>('all'); // ✅ 기본값 전체
-  const [currentTab, setCurrentTab] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');      // pending, preparing...
+  const [paymentFilter, setPaymentFilter] = useState<string>('all');    // 카드결제, 현금결제...
+  const [orderTypeFilter, setOrderTypeFilter] = useState<string>('all'); // 방문/포장/배달
+  const [dateFilter, setDateFilter] = useState<string>('all');          // all/today/week/month
+
+  // 탭은 상태 필터와 동일하게 사용 (값 똑같이 유지)
+  const currentTab = statusFilter;
 
   /* =========================
      백엔드 → 화면 타입 매핑
@@ -143,12 +152,14 @@ export function OrderList() {
   };
 
   const mapBackendOrderToOrder = (o: BackendOrder): Order => {
-    // id / code
-    const id: number | string = o.id ?? o.customerOrderId ?? 0;
+    // 백엔드 PK
+    const pk: number = Number(o.id ?? o.customerOrderId ?? 0);
+
+    // 화면용 주문번호
     const orderCode: string =
       o.orderCode ??
       o.customerOrderCode ??
-      `#${String(id).padStart(4, '0')}`;
+      `#${String(pk).padStart(4, '0')}`;
 
     // 가격/할인
     const total = Number(o.totalPrice ?? o.customerOrderTotalPrice ?? 0);
@@ -165,6 +176,7 @@ export function OrderList() {
     const dateStr =
       o.orderDate ??
       o.customerOrderDate ??
+      o.orderedAt ??
       o.createdAt ??
       new Date().toISOString();
     const orderTime = new Date(dateStr);
@@ -185,6 +197,7 @@ export function OrderList() {
     const items: OrderItem[] = [];
 
     return {
+      orderPk: pk,
       id: orderCode,
       items,
       total,
@@ -202,97 +215,49 @@ export function OrderList() {
   };
 
   /* =========================
-     주문 목록 조회
-  ========================= */
-
-  const fetchOrders = async () => {
-    try {
-      const res = await api.get<BackendOrder[]>('/api/customer-orders');
-      console.log('order list response:', res.data); // ✅ 응답 확인용
-
-      const mapped = (res.data || []).map(mapBackendOrderToOrder);
-      // 주문번호 기준 내림차순
-      mapped.sort((a, b) => b.id.localeCompare(a.id));
-      setOrders(mapped);
-    } catch (error) {
-      console.error('주문 목록 조회 오류:', error);
-      toast.error('주문 목록을 불러오지 못했습니다.');
-    }
-  };
-
-  useEffect(() => {
-    fetchOrders();
-  }, []);
-
-  /* =========================
-     필터링 로직
+     주문 목록 조회 (★ 전부 백엔드 필터)
   ========================= */
 
   useEffect(() => {
-    let filtered = [...orders];
+    const fetchOrders = async () => {
+      try {
+        setLoading(true);
 
-    // 검색어 필터
-    if (searchTerm) {
-      const keyword = searchTerm.toLowerCase();
-      filtered = filtered.filter(
-        (order) =>
-          order.id.toLowerCase().includes(keyword) ||
-          order.customer?.toLowerCase().includes(keyword) ||
-          order.customerPhone?.includes(searchTerm) ||
-          order.items.some((item) =>
-            item.name.toLowerCase().includes(keyword),
-          ),
-      );
-    }
+        const res = await api.get<BackendOrder[]>('/api/customer-orders', {
+          params: {
+            keyword: searchTerm || undefined,
+            status: statusFilter === 'all' ? undefined : statusFilter,
+            paymentType: paymentFilter === 'all' ? undefined : paymentFilter,
+            orderType: orderTypeFilter === 'all' ? undefined : orderTypeFilter,
+            period: dateFilter || 'all', // all / today / week / month
+          },
+        });
 
-    // 상태 필터
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter((order) => order.status === statusFilter);
-    }
+        // 👉 응답이 배열인 경우와 Page 형태인 경우 둘 다 처리
+      const raw = Array.isArray(res.data)
+        ? res.data
+        : Array.isArray(res.data?.content)
+        ? res.data.content
+        : [];
 
-    // 결제 방법 필터
-    if (paymentFilter !== 'all') {
-      filtered = filtered.filter(
-        (order) => order.paymentMethod === paymentFilter,
-      );
-    }
+        const mapped = (res.data || []).map(mapBackendOrderToOrder);
 
-    // 주문 유형 필터
-    if (orderTypeFilter !== 'all') {
-      filtered = filtered.filter(
-        (order) => order.orderType === orderTypeFilter,
-      );
-    }
+        // 주문번호(문자열) 기준 내림차순 정렬
+        mapped.sort((a, b) => b.id.localeCompare(a.id));
 
-    // 날짜 필터
-    if (dateFilter !== 'all') {
-      const now = new Date();
-      const today = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-      );
-
-      if (dateFilter === 'today') {
-        filtered = filtered.filter((order) => order.orderTime >= today);
-      } else if (dateFilter === 'week') {
-        const weekAgo = new Date(
-          today.getTime() - 7 * 24 * 60 * 60 * 1000,
-        );
-        filtered = filtered.filter((order) => order.orderTime >= weekAgo);
-      } else if (dateFilter === 'month') {
-        const monthAgo = new Date(
-          today.getTime() - 30 * 24 * 60 * 60 * 1000,
-        );
-        filtered = filtered.filter((order) => order.orderTime >= monthAgo);
+        setOrders(mapped);
+      } catch (error) {
+        console.error('주문 목록 조회 오류:', error);
+        toast.error('주문 목록을 불러오지 못했습니다.');
+        setOrders([]);
+      } finally {
+        setLoading(false);
       }
-    }
+    };
 
-    // 주문번호 내림차순
-    filtered.sort((a, b) => b.id.localeCompare(a.id));
-
-    setFilteredOrders(filtered);
-  }, [orders, searchTerm, statusFilter, paymentFilter, orderTypeFilter, dateFilter]);
+    // 필터 값이 바뀔 때마다 서버에서 다시 조회
+    fetchOrders();
+  }, [searchTerm, statusFilter, paymentFilter, orderTypeFilter, dateFilter]);
 
   /* =========================
      유틸 함수들
@@ -331,27 +296,45 @@ export function OrderList() {
     }
   };
 
-  // 지금은 화면에서만 상태 변경 (백엔드 연동 필요하면 PATCH 호출 추가)
-  const updateOrderStatus = (orderId: string, newStatus: string) => {
-    setOrders((prev) =>
-      prev.map((order) =>
-        order.id === orderId
-          ? { ...order, status: newStatus as Order['status'] }
-          : order,
-      ),
-    );
-    toast.success(`주문 ${orderId} 상태가 ${newStatus}로 변경되었습니다.`);
+  // ★ 이제는 상태 변경도 백엔드 PATCH 호출
+  const updateOrderStatus = async (order: Order, newStatus: string) => {
+    try {
+      await api.patch(`/api/customer-orders/${order.orderPk}/status`, {
+        status: newStatus,
+      });
+
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.orderPk === order.orderPk
+            ? { ...o, status: newStatus as Order['status'] }
+            : o,
+        ),
+      );
+      toast.success(`주문 ${order.id} 상태가 ${newStatus}로 변경되었습니다.`);
+    } catch (e) {
+      console.error('상태 변경 오류:', e);
+      toast.error('주문 상태 변경에 실패했습니다.');
+    }
   };
 
-  const cancelOrder = (orderId: string, reason: string) => {
-    setOrders((prev) =>
-      prev.map((order) =>
-        order.id === orderId
-          ? { ...order, status: 'cancelled', cancelReason: reason }
-          : order,
-      ),
-    );
-    toast.success(`주문 ${orderId}가 취소되었습니다.`);
+  const cancelOrder = async (order: Order, reason: string) => {
+    try {
+      await api.patch(`/api/customer-orders/${order.orderPk}/status`, {
+        status: 'CANCELLED',
+      });
+
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.orderPk === order.orderPk
+            ? { ...o, status: 'cancelled', cancelReason: reason }
+            : o,
+        ),
+      );
+      toast.success(`주문 ${order.id}가 취소되었습니다.`);
+    } catch (e) {
+      console.error('주문 취소 오류:', e);
+      toast.error('주문 취소에 실패했습니다.');
+    }
   };
 
   const formatTime = (date: Date | string) => {
@@ -372,25 +355,6 @@ export function OrderList() {
     return d.toLocaleString('ko-KR');
   };
 
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return '주문접수';
-      case 'preparing':
-        return '준비중';
-      case 'cooking':
-        return '조리중';
-      case 'ready':
-        return '완료';
-      case 'completed':
-        return '픽업완료';
-      case 'cancelled':
-        return '취소';
-      default:
-        return '알수없음';
-    }
-  };
-
   const todayCount = orders.filter(
     (o) =>
       o.orderTime >= new Date(new Date().setHours(0, 0, 0, 0)),
@@ -402,7 +366,7 @@ export function OrderList() {
 
   return (
     <div className="space-y-6">
-      {/* Header (버튼 제거 버전) */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1>주문 리스트</h1>
@@ -428,8 +392,11 @@ export function OrderList() {
             </div>
           </div>
 
-          {/* 상태 필터 */}
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
+          {/* 상태 필터 (탭과 동일 값 사용) */}
+          <Select
+            value={statusFilter}
+            onValueChange={(v) => setStatusFilter(v)}
+          >
             <SelectTrigger className="w-32">
               <SelectValue placeholder="상태" />
             </SelectTrigger>
@@ -445,7 +412,10 @@ export function OrderList() {
           </Select>
 
           {/* 결제 방법 필터 */}
-          <Select value={paymentFilter} onValueChange={setPaymentFilter}>
+          <Select
+            value={paymentFilter}
+            onValueChange={setPaymentFilter}
+          >
             <SelectTrigger className="w-32">
               <SelectValue placeholder="결제방법" />
             </SelectTrigger>
@@ -458,7 +428,10 @@ export function OrderList() {
           </Select>
 
           {/* 주문 유형 필터 */}
-          <Select value={orderTypeFilter} onValueChange={setOrderTypeFilter}>
+          <Select
+            value={orderTypeFilter}
+            onValueChange={setOrderTypeFilter}
+          >
             <SelectTrigger className="w-32">
               <SelectValue placeholder="주문유형" />
             </SelectTrigger>
@@ -487,7 +460,11 @@ export function OrderList() {
 
       {/* Orders Table */}
       <Card>
-        <Tabs value={currentTab} onValueChange={setCurrentTab} className="w-full">
+        <Tabs
+          value={currentTab}
+          onValueChange={(value) => setStatusFilter(value)} // 탭 바꾸면 statusFilter도 같이 변경
+          className="w-full"
+        >
           <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="all">
               전체 ({getOrderCountByStatus('all')})
@@ -513,209 +490,206 @@ export function OrderList() {
           </TabsList>
 
           <TabsContent value={currentTab} className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
-                      주문번호
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
-                      주문시간
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
-                      고객정보
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
-                      주문내역
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
-                      유형
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
-                      금액
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
-                      결제
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
-                      상태
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
-                      액션
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {filteredOrders
-                    .filter(
-                      (order) =>
-                        currentTab === 'all' || order.status === currentTab,
-                    )
-                    .map((order) => (
-                      <tr
-                        key={order.id}
-                        className="hover:bg-gray-50"
-                      >
-                        <td className="px-6 py-4">
-                          <div className="font-medium text-gray-900">
-                            {order.id}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div>
-                            <div className="text-gray-900">
-                              {formatTime(order.orderTime)}
+            {loading ? (
+              <div className="text-center py-16">
+                <p className="text-gray-500">주문 목록을 불러오는 중입니다...</p>
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
+                          주문번호
+                        </th>
+                        <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
+                          주문시간
+                        </th>
+                        <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
+                          고객정보
+                        </th>
+                        <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
+                          주문내역
+                        </th>
+                        <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
+                          유형
+                        </th>
+                        <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
+                          금액
+                        </th>
+                        <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
+                          결제
+                        </th>
+                        <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
+                          상태
+                        </th>
+                        <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
+                          액션
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {orders.map((order) => (
+                        <tr
+                          key={order.orderPk}
+                          className="hover:bg-gray-50"
+                        >
+                          <td className="px-6 py-4">
+                            <div className="font-medium text-gray-900">
+                              {order.id}
                             </div>
-                            <div className="text-sm text-gray-500">
-                              {formatDate(order.orderTime)}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div>
-                            <div className="text-gray-900">
-                              {order.customer || '고객'}
-                            </div>
-                            {order.customerPhone && (
+                          </td>
+                          <td className="px-6 py-4">
+                            <div>
+                              <div className="text-gray-900">
+                                {formatTime(order.orderTime)}
+                              </div>
                               <div className="text-sm text-gray-500">
-                                {order.customerPhone}
+                                {formatDate(order.orderTime)}
                               </div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="space-y-1">
-                            {order.items.slice(0, 2).map((item, index) => (
-                              <div
-                                key={index}
-                                className="text-sm text-gray-900"
-                              >
-                                {item.name} x{item.quantity}
-                              </div>
-                            ))}
-                            {order.items.length > 2 && (
-                              <div className="text-sm text-gray-500">
-                                외 {order.items.length - 2}개
-                              </div>
-                            )}
-                            {order.items.length === 0 && (
-                              <div className="text-sm text-gray-400">
-                                (메뉴 정보 미연동)
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            {getOrderTypeIcon(order.orderType)}
-                            <span className="text-gray-900">
-                              {order.orderType}
-                            </span>
-                          </div>
-                          {order.orderType === '배달' &&
-                            order.deliveryAddress && (
-                              <div className="text-sm text-gray-500 mt-1">
-                                <MapPin className="w-3 h-3 inline mr-1" />
-                                {order.deliveryAddress.slice(0, 20)}...
-                              </div>
-                            )}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div>
-                            <div className="font-semibold text-gray-900">
-                              {(order.total || 0).toLocaleString()}원
                             </div>
-                            {order.discount > 0 && (
-                              <div className="text-sm text-red-500">
-                                -{order.discount.toLocaleString()}원 할인
+                          </td>
+                          <td className="px-6 py-4">
+                            <div>
+                              <div className="text-gray-900">
+                                {order.customer || '고객'}
                               </div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="text-gray-900">
-                            {order.paymentMethod}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div>
-                            {getStatusBadge(order.status)}
-                            {order.status === 'cancelled' &&
-                              order.cancelReason && (
-                                <div className="text-sm text-gray-500 mt-1">
-                                  {order.cancelReason}
+                              {order.customerPhone && (
+                                <div className="text-sm text-gray-500">
+                                  {order.customerPhone}
                                 </div>
                               )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setSelectedOrder(order)}
-                              className="h-8 w-8 p-0"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </Button>
-
-                            {order.status !== 'cancelled' &&
-                              order.status !== 'completed' && (
-                                <Select
-                                  value={order.status}
-                                  onValueChange={(value: any) =>
-                                    updateOrderStatus(order.id, value)
-                                  }
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="space-y-1">
+                              {order.items.slice(0, 2).map((item, index) => (
+                                <div
+                                  key={index}
+                                  className="text-sm text-gray-900"
                                 >
-                                  <SelectTrigger className="h-8 w-8 p-0 border-none bg-transparent hover:bg-gray-100">
-                                    <MoreHorizontal className="w-4 h-4" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="preparing">
-                                      준비중
-                                    </SelectItem>
-                                    <SelectItem value="cooking">
-                                      조리중
-                                    </SelectItem>
-                                    <SelectItem value="ready">
-                                      완료
-                                    </SelectItem>
-                                    <SelectItem value="completed">
-                                      픽업완료
-                                    </SelectItem>
-                                    <SelectItem
-                                      value="cancelled"
-                                      onClick={() =>
-                                        cancelOrder(order.id, '관리자 취소')
-                                      }
-                                    >
-                                      취소
-                                    </SelectItem>
-                                  </SelectContent>
-                                </Select>
+                                  {item.name} x{item.quantity}
+                                </div>
+                              ))}
+                              {order.items.length > 2 && (
+                                <div className="text-sm text-gray-500">
+                                  외 {order.items.length - 2}개
+                                </div>
                               )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
+                              {order.items.length === 0 && (
+                                <div className="text-sm text-gray-400">
+                                  (메뉴 정보 미연동)
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              {getOrderTypeIcon(order.orderType)}
+                              <span className="text-gray-900">
+                                {order.orderType}
+                              </span>
+                            </div>
+                            {order.orderType === '배달' &&
+                              order.deliveryAddress && (
+                                <div className="text-sm text-gray-500 mt-1">
+                                  <MapPin className="w-3 h-3 inline mr-1" />
+                                  {order.deliveryAddress.slice(0, 20)}...
+                                </div>
+                              )}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div>
+                              <div className="font-semibold text-gray-900">
+                                {(order.total || 0).toLocaleString()}원
+                              </div>
+                              {order.discount > 0 && (
+                                <div className="text-sm text-red-500">
+                                  -{order.discount.toLocaleString()}원 할인
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="text-gray-900">
+                              {order.paymentMethod}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div>
+                              {getStatusBadge(order.status)}
+                              {order.status === 'cancelled' &&
+                                order.cancelReason && (
+                                  <div className="text-sm text-gray-500 mt-1">
+                                    {order.cancelReason}
+                                  </div>
+                                )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setSelectedOrder(order)}
+                                className="h-8 w-8 p-0"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
 
-            {filteredOrders.filter(
-              (order) =>
-                currentTab === 'all' || order.status === currentTab,
-            ).length === 0 && (
-              <div className="text-center py-16">
-                <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  주문이 없습니다
-                </h3>
-                <p className="text-gray-500">
-                  조건에 맞는 주문이 없습니다.
-                </p>
-              </div>
+                              {order.status !== 'cancelled' &&
+                                order.status !== 'completed' && (
+                                  <Select
+                                    value={order.status}
+                                    onValueChange={(value: any) =>
+                                      value === 'cancelled'
+                                        ? cancelOrder(order, '관리자 취소')
+                                        : updateOrderStatus(order, value)
+                                    }
+                                  >
+                                    <SelectTrigger className="h-8 w-8 p-0 border-none bg-transparent hover:bg-gray-100">
+                                      <MoreHorizontal className="w-4 h-4" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="preparing">
+                                        준비중
+                                      </SelectItem>
+                                      <SelectItem value="cooking">
+                                        조리중
+                                      </SelectItem>
+                                      <SelectItem value="ready">
+                                        완료
+                                      </SelectItem>
+                                      <SelectItem value="completed">
+                                        픽업완료
+                                      </SelectItem>
+                                      <SelectItem value="cancelled">
+                                        취소
+                                      </SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {orders.length === 0 && !loading && (
+                  <div className="text-center py-16">
+                    <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                      주문이 없습니다
+                    </h3>
+                    <p className="text-gray-500">
+                      조건에 맞는 주문이 없습니다.
+                    </p>
+                  </div>
+                )}
+              </>
             )}
           </TabsContent>
         </Tabs>

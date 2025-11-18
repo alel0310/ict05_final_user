@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState, useEffect  } from "react";
 import {
   Card,
   CardHeader,
@@ -14,7 +14,6 @@ import {
   CreditCard,
   Gift,
   TrendingDown,
-  Printer,
   CheckCircle,
   Banknote,
   AlertTriangle,
@@ -22,8 +21,52 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { KPICard } from "../Common/KPICard";
-import { useOrder } from "../Common/OrderContext";
 import { Label } from "../ui/label";
+import api from "../../lib/authApi";
+
+type DailyClosingExpenseDto = {
+  description: string;
+  amount: number;
+};
+
+type DailyClosingDenomDto = {
+  denomValue: number;
+  count: number;
+};
+
+type DailyClosingInitResponse = {
+  cashVisit: number;
+  cashTakeout: number;
+  cashDelivery: number;
+  cardVisit: number;
+  cardTakeout: number;
+  cardDelivery: number;
+  voucherTotal: number;
+  totalDiscount: number;
+  totalRefund: number;
+  startingCash: number | null;
+  totalExpense: number | null;
+  depositAmount: number | null;
+  calculatedCash: number | null;
+  actualCash: number | null;
+  carryoverCash: number | null;
+  differenceAmount: number | null;
+  differenceMemo: string | null;
+  closed: boolean;
+  expenses: DailyClosingExpenseDto[];
+  denoms: DailyClosingDenomDto[];
+};
+
+// 화면용 지출 배열
+type UiExpense = {
+  id: number;
+  description: string;
+  amount: number;
+};
+
+type DailyClosingPageProps = {
+  onPageChange?: (page: string) => void;
+};
 
 // 권종별 화폐
 const denominations = [
@@ -37,61 +80,161 @@ const denominations = [
   { value: 10, name: "10원", type: "coin", color: "text-gray-300" },
 ];
 
-export function DailyClosingPage() {
-  const { getTodayCashPayments, getTodayCardPayments } = useOrder();
+export function DailyClosingPage({ onPageChange }: DailyClosingPageProps) {
+
+  const [loading, setLoading] = useState(false);
 
   // [ 기본 데이터 ]
-  const [cashPayments, setCashPayments] = useState(getTodayCashPayments());   // 현금 결제 내역
-  const [cardPayments, setCardPayments] = useState(getTodayCardPayments());   // 카드 결제 내역
-  const [refundAmount, setRefundAmount] = useState(10000);                    // 환불 금액
-  const [discountAmount, setDiscountAmount] = useState(8000);                 // 할인 금액
-  const [expenses, setExpenses] = useState([                                  // 지출 내역 목록
-    { id: 1, description: "택배 착불", amount: 12000 },
-    { id: 2, description: "청소용품 구매", amount: 23000 },
-  ]);
-  const [newExpense, setNewExpense] = useState({ description: "", amount: "" });  // 새 지출 항목 입력값
-  const [depositAmount, setDepositAmount] = useState(0);                          // 은행 입금액
-  const [isClosed, setIsClosed] = useState(false);                                // 마감 완료 여부
+  // 결제 요약
+  const [cashPayments, setCashPayments] = useState({
+    visit: 0,
+    takeout: 0,
+    delivery: 0,
+  });
+  const [cardPayments, setCardPayments] = useState({
+    visit: 0,
+    takeout: 0,
+    delivery: 0,
+  });
+  const [voucherTotal, setVoucherTotal] = useState(0);
+  const [refundAmount, setRefundAmount] = useState(0);
+  const [discountAmount, setDiscountAmount] = useState(0);
 
-  // [ 시재 관련 ]
-  const [startingCash, setStartingCash] = useState(200000);   // 시재 시작금
+  // 지출
+  const [expenses, setExpenses] = useState<UiExpense[]>([]);
+  const [newExpense, setNewExpense] = useState({ description: "", amount: "" });
+
+  // 시재 관련
+  const [startingCash, setStartingCash] = useState(0);
+  const [depositAmount, setDepositAmount] = useState(0);
+  const [differenceMemo, setDifferenceMemo] = useState("");
+
   const [denomCounts, setDenomCounts] = useState<Record<number, number>>({
     50000: 0, 10000: 0, 5000: 0, 1000: 0, 500: 0, 100: 0, 50: 0, 10: 0,
-  });   // 권종별 시재 입력
+  });
 
-  // [ 계산 ]
-  const totalCash =                   // 현금·카드·상품권 매출 합산
-    cashPayments.visitPayments +
-    cashPayments.takeoutPayments +
-    cashPayments.deliveryPayments;
+  const [isClosed, setIsClosed] = useState(false);
+
+  // 오늘 날짜 문자열 (YYYY-MM-DD)
+  //const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = "2023-01-13";
+
+  // 현금 매출
+  const totalCash =
+    cashPayments.visit +
+    cashPayments.takeout +
+    cashPayments.delivery;
+
+  // 카드 매출
   const totalCard =
-    cardPayments.visitPayments +
-    cardPayments.takeoutPayments +
-    cardPayments.deliveryPayments;
-  const totalVoucher = 15000;
+    cardPayments.visit +
+    cardPayments.takeout +
+    cardPayments.delivery;
 
-  // 총 매출, 총 지출, 순매출 계산
-  const totalSales = totalCash + totalCard + totalVoucher;
+  // 총 매출
+  const totalSales = totalCash + totalCard + voucherTotal;
   const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
   const netSales = totalSales - discountAmount - refundAmount;
 
-  // [ 시재 계산 ]
-  // 실제 권종별 시재 총합 (실제 금고 안 현금)
+  // 시재 계산
   const actualCashFromCounts = denominations.reduce(
     (total, denom) => total + (denomCounts[denom.value] * denom.value),
     0
   );
-  // 계산된(이론상) 시재 금액  
-  // = 시작 시 금액 + 오늘 현금 매출 - 현금 지출 - 은행 입금액  
-  // → 실제로 금고에 남아 있어야 하는 금액
-  const calculatedCash = startingCash + totalCash - totalExpenses - depositAmount;
-  // 차액 계산  
-  // = 실제 금고 내 현금(권종 입력값 합계) - 계산된 시재 금액  
-  // → 결과: 0이면 일치, +면 현금 과다, -면 현금 부족
+
+  const calculatedCash =
+    startingCash + totalCash - totalExpenses - depositAmount;
+
   const difference = actualCashFromCounts - calculatedCash;
+  const carryoverCash = calculatedCash;
+
+  useEffect(() => {
+    const fetchDailyClosing = async () => {
+      try {
+        setLoading(true);
+        const res = await api.get<DailyClosingInitResponse>(
+          "/api/daily-closing/close",
+          { params: { date: todayStr } }
+        );
+        const data = res.data;
+
+        // 결제 요약
+        setCashPayments({
+          visit: data.cashVisit,
+          takeout: data.cashTakeout,
+          delivery: data.cashDelivery,
+        });
+        setCardPayments({
+          visit: data.cardVisit,
+          takeout: data.cardTakeout,
+          delivery: data.cardDelivery,
+        });
+        setVoucherTotal(data.voucherTotal);
+
+        setDiscountAmount(data.totalDiscount ?? 0);
+        setRefundAmount(data.totalRefund ?? 0);
+
+        // 시재 기본값
+        setStartingCash(data.startingCash ?? 0);
+        setDepositAmount(data.depositAmount ?? 0);
+        setDifferenceMemo(data.differenceMemo ?? "");
+        setIsClosed(data.closed);
+
+        // 지출: DTO 에 id 가 없으므로 화면용 id 는 index 로 만든다
+        const uiExpenses: UiExpense[] =
+          (data.expenses || []).map((e, idx) => ({
+            id: idx + 1,
+            description: e.description,
+            amount: e.amount,
+          }));
+        setExpenses(uiExpenses);
+
+        // 권종: denomValue, count 에서 counts 맵으로 변환
+        const nextCounts: Record<number, number> = {
+          50000: 0, 10000: 0, 5000: 0, 1000: 0, 500: 0, 100: 0, 50: 0, 10: 0,
+        };
+        (data.denoms || []).forEach((d) => {
+          nextCounts[d.denomValue] = d.count;
+        });
+        setDenomCounts(nextCounts);
+      } catch (err) {
+        console.error(err);
+        toast.error("일일 시재 정보를 불러오지 못했습니다.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDailyClosing();
+  }, [todayStr]);
 
   // 이벤트
+  const handleOpen = async () => {
+    if (isClosed) return;
+
+    const ok = window.confirm("오늘 일자의 오픈 시재를 저장하시겠습니까?");
+    if (!ok) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const payload = {
+        closingDate: todayStr,
+        startingCash,
+      };
+      await api.post("/api/daily-closing/open", payload);
+      toast.success("오픈 시재가 저장되었습니다.");
+    } catch (err) {
+      console.error(err);
+      toast.error("오픈 시재 저장에 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleAddExpense = () => {
+    if (isClosed) return; // 마감 후 입력 방지
     if (!newExpense.description || !newExpense.amount) {
       toast.error("지출 내역과 금액을 입력하세요.");
       return;
@@ -106,20 +249,75 @@ export function DailyClosingPage() {
     toast.success("지출 항목이 추가되었습니다.");
   };
 
-  const handleRemoveExpense = (id: number) =>
+  const handleRemoveExpense = (id: number) => {
+    if (isClosed) return; // 마감 후 입력 방지
     setExpenses(expenses.filter((e) => e.id !== id));
+  }
 
   const handleDenomCountChange = (value: number, count: number) => {
+    if (isClosed) return; // 마감 후 입력 방지
     setDenomCounts((prev) => ({ ...prev, [value]: count }));
   };
 
-  const handleCompleteClosing = () => {
-    setIsClosed(true);
-    toast.success("일일 마감이 완료되었습니다.");
-  };
+  const handleCompleteClosing = async () => {
+    if (isClosed) {
+      return;
+    }
+    // 차액이 있을 때 메모 필수
+    if (difference !== 0 && !differenceMemo.trim()) {
+      toast.error("차액이 있을 경우 사유 메모를 입력해야 마감할 수 있습니다.");
+      return;
+    }
 
-  const printClosingReport = () => {
-    toast.success("마감 보고서를 출력합니다.");
+    const ok = window.confirm("오늘 일자를 마감 처리하시겠습니까?");
+    if (!ok) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // 테스트용 로그
+      console.log("[DailyClosingPage] complete closing, go list");
+
+      const payload = {
+        closingDate: todayStr,
+        startingCash,
+        totalExpense: totalExpenses,
+        depositAmount,
+        calculatedCash,
+        actualCash: actualCashFromCounts,
+        carryoverCash,
+        differenceAmount: difference,
+        differenceMemo: differenceMemo || null,
+        expenses: expenses.map((e) => ({
+          description: e.description,
+          amount: e.amount,
+        })),
+        denoms: denominations
+          .map((d) => ({
+            denomValue: d.value,
+            count: denomCounts[d.value] || 0,
+          }))
+          .filter((d) => d.count > 0), // 개수 0 인 것은 빼도 된다
+      };
+
+      // 백엔드에 마감 저장 요청
+      await api.post("/api/daily-closing/close", payload);
+
+      setIsClosed(true);
+      toast.success("일일 마감이 완료되었습니다.");
+
+      if (onPageChange) {
+        console.log("[DailyClosingPage] go list");
+        onPageChange("daily-closing-list");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("일일 마감 저장에 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -133,13 +331,19 @@ export function DailyClosingPage() {
           </p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={printClosingReport} className="gap-2">
-            <Printer className="w-4 h-4" /> 보고서 출력
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={handleOpen}
+            disabled={isClosed || loading}
+          >
+            <Package className="w-4 h-4" />
+            오픈 시재 저장
           </Button>
           <Button
             className="bg-kpi-green text-white gap-2"
             onClick={handleCompleteClosing}
-            disabled={isClosed}
+            disabled={isClosed || loading}
           >
             <CheckCircle className="w-4 h-4" /> 마감 완료
           </Button>
@@ -193,9 +397,9 @@ export function DailyClosingPage() {
               </CardHeader>
               <CardContent>
                <div className="grid grid-cols-3 text-center">
-                  <div>방문: ₩{cardPayments.visitPayments.toLocaleString()}</div>
-                  <div>포장: ₩{cardPayments.takeoutPayments.toLocaleString()}</div>
-                  <div>배달: ₩{cardPayments.deliveryPayments.toLocaleString()}</div>
+                  <div>방문: ₩{cashPayments.visit.toLocaleString()}</div>
+                  <div>포장: ₩{cashPayments.takeout.toLocaleString()}</div>
+                  <div>배달: ₩{cashPayments.delivery.toLocaleString()}</div>
                 </div>
               </CardContent>
             </Card>
@@ -212,9 +416,9 @@ export function DailyClosingPage() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-3 text-center">
-                  <div>방문: ₩{cardPayments.visitPayments.toLocaleString()}</div>
-                  <div>포장: ₩{cardPayments.takeoutPayments.toLocaleString()}</div>
-                  <div>배달: ₩{cardPayments.deliveryPayments.toLocaleString()}</div>
+                  <div>방문: ₩{cardPayments.visit.toLocaleString()}</div>
+                  <div>포장: ₩{cardPayments.takeout.toLocaleString()}</div>
+                  <div>배달: ₩{cardPayments.delivery.toLocaleString()}</div>
                 </div>
               </CardContent>
             </Card>
@@ -230,7 +434,7 @@ export function DailyClosingPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p>총액: ₩{totalVoucher.toLocaleString()}</p>
+                <p>총액: ₩{voucherTotal.toLocaleString()}</p>
               </CardContent>
             </Card>
           </TabsContent>
@@ -361,6 +565,7 @@ export function DailyClosingPage() {
                           handleDenomCountChange(denom.value, parseInt(e.target.value) || 0)
                         }
                         className="w-16 h-8"
+                        disabled={isClosed}
                       />
                       <span className="text-xs text-gray-500">장</span>
                       <span className="text-xs text-gray-600 w-20 text-right">
@@ -387,6 +592,7 @@ export function DailyClosingPage() {
                           handleDenomCountChange(denom.value, parseInt(e.target.value) || 0)
                         }
                         className="w-16 h-8"
+                        disabled={isClosed}
                       />
                       <span className="text-xs text-gray-500">개</span>
                       <span className="text-xs text-gray-600 w-20 text-right">
@@ -449,6 +655,7 @@ export function DailyClosingPage() {
                   onChange={(e) =>
                     setDepositAmount(parseFloat(e.target.value) || 0)
                   }
+                  disabled={isClosed}
                 />
               </div>
 
@@ -477,6 +684,27 @@ export function DailyClosingPage() {
                     : `-₩${Math.abs(difference).toLocaleString()}`}
                 </span>
               </div>
+
+              {/* 차액 사유 메모 */}
+              {difference !== 0 && (
+                <div className="pt-3">
+                  <Label className="text-sm text-gray-700 flex items-center gap-1">
+                    <AlertTriangle className="w-4 h-4 text-kpi-red" />
+                    차액 사유 메모
+                  </Label>
+                  <textarea
+                    className="mt-1 w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-kpi-orange"
+                    rows={2}
+                    value={differenceMemo}
+                    onChange={(e) => setDifferenceMemo(e.target.value)}
+                    placeholder="예: 현금 계산 실수로 보임, 오후 교대 시 재확인 예정"
+                    disabled={isClosed}
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    차액이 발생한 경우 사유를 간단히 기록해 주세요.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </section>  

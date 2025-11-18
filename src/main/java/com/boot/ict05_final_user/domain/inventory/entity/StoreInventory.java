@@ -10,14 +10,16 @@ import org.hibernate.annotations.Comment;
 /**
  * 가맹점 재고(StoreInventory) 엔티티
  *
- * <p>각 매장의 현재 재고, 적정 수량, 상태를 관리한다.</p>
- * <p>본사 Inventory와 StoreMaterial을 기반으로 재고를 추적한다.</p>
+ * <p>
+ * 각 매장의 현재 재고와 재고 상태를 관리한다.<br>
+ * 적정 수량(Optimal Quantity)은 {@link StoreMaterial} 에서 관리하고,
+ * 본 엔티티는 StoreMaterial 별 현재 수량/상태/최근 갱신 정보에 집중한다.
+ * </p>
  */
 @Entity
 @Table(name = "store_inventory",
         uniqueConstraints = @UniqueConstraint(name = "uq_store_inv",
                 columnNames = {"store_id_fk", "store_material_id_fk"}))
-
 @NoArgsConstructor(access = lombok.AccessLevel.PROTECTED)
 @SuperBuilder
 @Getter

@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "fcm")
 @Getter @Setter
 public class FcmProperties {
+
     private boolean enabled = true;
     /** 서비스 계정 JSON 경로 (file:/..., classpath:...) */
     private String serviceAccount;
