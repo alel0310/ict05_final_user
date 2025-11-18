@@ -8,7 +8,9 @@ import { fmtMoneyInt, fmtPercent1, tz } from '../../../lib/format';
 import api from '../../../lib/authApi';
 import { KPICard } from '../../Common/KPICard';
 
-// ====== 로컬 타입 ======
+// ==========================
+// 타입 정의
+// ==========================
 type ViewBy = 'DAY' | 'MONTH';
 
 type PageResp<T> = {
@@ -35,6 +37,7 @@ type MaterialSummary = {
   expireSoonCount: number;
 };
 
+// 테이블 행 타입
 type MaterialDailyRow = {
   useDate: string;
   materialName: string;
@@ -58,6 +61,9 @@ type MaterialRow = MaterialDailyRow | MaterialMonthlyRow;
 
 const PAGE_SIZE_OPTIONS = [20, 40, 60, 80, 100];
 
+// ==========================
+// 유틸 함수
+// ==========================
 function formatDateLocal(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -65,6 +71,9 @@ function formatDateLocal(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+// ==========================
+// 메인 컴포넌트
+// ==========================
 export default function MaterialReport() {
   const [storeId] = useState<number>(1);
 
@@ -82,6 +91,7 @@ export default function MaterialReport() {
   const [summary, setSummary] = useState<MaterialSummary | null>(null);
   const [rows, setRows] = useState<MaterialRow[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
 
@@ -89,7 +99,7 @@ export default function MaterialReport() {
   const endStr   = useMemo(() => formatDateLocal(end),   [end]);
 
   // ==========================
-  // 상단 카드 요약 로드
+  // 상단 카드 요약 로드 (주문분석과 동일 패턴)
   // ==========================
   async function loadSummary() {
     try {
@@ -97,13 +107,14 @@ export default function MaterialReport() {
         params: { storeId },
       });
       setSummary(data);
-    } catch {
+    } catch (e) {
+      console.error('재료 요약 조회 실패', e);
       setSummary(null);
     }
   }
 
   // ==========================
-  // 테이블 첫 페이지 로드
+  // 테이블 첫 페이지 로드 (주문분석 스타일)
   // ==========================
   async function loadFirst() {
     setLoading(true);
@@ -113,32 +124,30 @@ export default function MaterialReport() {
           ? '/api/analytics/materials/day-rows'
           : '/api/analytics/materials/month-rows';
 
-      const [rowsResp, summaryResp] = await Promise.all([
-        api.get<PageResp<MaterialRow>>(url, {
-          params: {
-            start: startStr,
-            end: endStr,
-            size: pageSize,
-            cursor: null,
-          },
-        }),
-        api.get<MaterialSummary>('/api/analytics/materials/summary'),
-      ]);
+      const { data } = await api.get<PageResp<MaterialRow>>(url, {
+        params: {
+          storeId,         // ✅ 400 방지: storeId 반드시 포함
+          start: startStr,
+          end: endStr,
+          size: pageSize,
+          cursor: null,
+        },
+      });
 
-      setRows(rowsResp.data.items);
-      setCursor(rowsResp.data.nextCursor);
-      setSummary(summaryResp.data);
+      setRows(data.items);
+      setCursor(data.nextCursor);
     } catch (e) {
       console.error('재료 분석 조회 실패', e);
       alert('재료 분석 데이터를 불러오지 못했습니다. 콘솔 로그를 확인해주세요.');
       setRows([]);
       setCursor(null);
-      setSummary(null);
     } finally {
       setLoading(false);
     }
-  }
 
+    // 주문분석과 동일하게 카드 별도 로드
+    loadSummary();
+  }
 
   // ==========================
   // 테이블 추가 로드(더보기)
@@ -154,6 +163,7 @@ export default function MaterialReport() {
 
       const { data } = await api.get<PageResp<MaterialRow>>(url, {
         params: {
+          storeId,         // ✅ 여기도 storeId 포함
           start: startStr,
           end: endStr,
           size: pageSize,
@@ -164,13 +174,12 @@ export default function MaterialReport() {
       setRows(prev => [...prev, ...data.items]);
       setCursor(data.nextCursor);
     } catch (e) {
-      console.error('더보기 실패', e);
+      console.error('재료 분석 더보기 실패', e);
       alert('추가 데이터를 불러오지 못했습니다.');
     } finally {
       setLoading(false);
     }
   }
-
 
   // ==========================
   // PDF 다운로드
@@ -209,7 +218,7 @@ export default function MaterialReport() {
     }
   }
 
-  // 최초 1회 + storeId 변경 시 자동 조회
+  // 최초 1회 + storeId 변경 시 자동 조회 (주문분석과 동일)
   useEffect(() => {
     loadFirst();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -336,11 +345,11 @@ export default function MaterialReport() {
             <div className="text-xs space-y-2">
               <div className="font-semibold text-white-600">사용량 기준</div>
               {summary && summary.topByUsage && summary.topByUsage.length > 0 ? (
-                summary.topByUsage.slice(0, 5).map((m) => ( // ✅ TOP5 실제로 5개
+                summary.topByUsage.slice(0, 5).map((m) => (
                   <div key={m.materialId} className="flex justify-between">
                     <span className="text-white-700 truncate">{m.materialName}</span>
                     <span className="font-semibold">
-                      {m.usedQuantity.toFixed(1)} {m.unitName}  {/* ✅ 중복 제거, usedQuantity로 교정 */}
+                      {m.usedQuantity.toFixed(1)} {m.unitName}
                     </span>
                   </div>
                 ))
@@ -376,18 +385,20 @@ export default function MaterialReport() {
               <div className="text-sm text-white-600">
                 전월: {fmtPercent1(summary?.prevCostRate ?? 0)}
               </div>
-              <div className={`text-sm flex items-center gap-1 ${
-                (summary?.costRateDiff ?? 0) >= 0 
-                  ? 'text-red-400' 
-                  : 'text-green-400'
-              }`}>
+              <div
+                className={`text-sm flex items-center gap-1 ${
+                  (summary?.costRateDiff ?? 0) >= 0
+                    ? 'text-red-400'
+                    : 'text-green-400'
+                }`}
+              >
                 {(summary?.costRateDiff ?? 0) >= 0 ? (
                   <TrendingUp className="w-4 h-4" />
                 ) : (
                   <TrendingDown className="w-4 h-4" />
                 )}
-                {summary?.costRateDiff != null 
-                  ? `${Math.abs(summary.costRateDiff).toFixed(1)}%p` 
+                {summary?.costRateDiff != null
+                  ? `${Math.abs(summary.costRateDiff).toFixed(1)}%p`
                   : '—'}
               </div>
             </div>
