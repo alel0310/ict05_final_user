@@ -249,19 +249,16 @@ export function Layout({ children, userType, currentPage, onPageChange, memberNa
   };
 
   const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_API_BASE_URL;
+  const staticRoot = BACKEND_BASE_URL.replace(/\/api\/?$/, ""); 
   const customTitles: Record<string, string> = {
     "settings-notifications": "가맹점 알림 설정",
     "mypage": "마이페이지",
   };
 
   // 헤더에서 쓸 프로필 이미지 src
-   const profileSrc =
+  const profileSrc =
     memberImagePath && memberImagePath.trim().length > 0
-      ? (
-          memberImagePath.startsWith("http")
-            ? memberImagePath                     // 이미 절대 URL 이면 그대로 사용
-            : `${BACKEND_BASE_URL}${memberImagePath}` // 상대경로면 백엔드 베이스 붙이기
-        )
+      ? `${staticRoot}/uploads/profile/${memberImagePath}`
       : defaultProfile;
 
   return (

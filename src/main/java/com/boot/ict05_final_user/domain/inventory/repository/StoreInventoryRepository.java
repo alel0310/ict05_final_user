@@ -6,6 +6,7 @@ import com.boot.ict05_final_user.domain.store.entity.Store;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface StoreInventoryRepository
         extends JpaRepository<StoreInventory, Long>, StoreInventoryRepositoryCustom {
@@ -19,5 +20,6 @@ public interface StoreInventoryRepository
     /** 매장 + 가맹점 재료 기준 존재 여부 체크 */
     boolean existsByStoreAndStoreMaterial(Store store, StoreMaterial storeMaterial);
 
-
+    /** 매장+재료로 조회 **/
+    Optional<StoreInventory> findByStore_IdAndStoreMaterial_Id(Long storeId, Long storeMaterialId);
 }
