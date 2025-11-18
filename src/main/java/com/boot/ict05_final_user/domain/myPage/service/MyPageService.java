@@ -36,12 +36,8 @@ public class MyPageService {
     private final JwtService jwtService;
     private final StaffRepository staffRepository;
 
-    @Value("${app.profile-image-dir}")
+    @Value("${file.upload-dir.profile}")
     private String profileImageDir;
-
-    @Value("${app.profile-image-url-prefix}")
-    private String profileImageUrlPrefix;
-
 
     @Transactional(readOnly = true)
     public MyPageDTO getMyPro(Long memberId) {
@@ -111,9 +107,8 @@ public class MyPageService {
             // 파일 저장
             file.transferTo(targetPath.toFile());
 
-            // 브라우저에서 사용할 경로
-            String urlPath = profileImageUrlPrefix + "/" + filename;
-            member.setMemberImagePath(urlPath);
+            // DB 에는 "파일 이름만" 저장 (경로/URL X)
+            member.setMemberImagePath(filename);
 
             return MyPageDTO.fromEntity(member);
         } catch (IOException e) {
@@ -136,14 +131,8 @@ public class MyPageService {
         }
 
         try {
-            // DB 에는 prefix 포함 경로가 들어있으므로 파일명만 뽑기
-            String filename;
-            int idx = imagePath.lastIndexOf('/');
-            if (idx >= 0 && idx < imagePath.length() - 1) {
-                filename = imagePath.substring(idx + 1);
-            } else {
-                filename = imagePath;
-            }
+            // imagePath 자체가 파일 이름이라고 가정
+            String filename = imagePath;
 
             Path uploadDir = Paths.get(profileImageDir).toAbsolutePath().normalize();
             Path filePath = uploadDir.resolve(filename).normalize();
