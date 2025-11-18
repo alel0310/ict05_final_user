@@ -141,6 +141,23 @@ public class StoreMaterialService {
                 .build();
 
         storeMaterialRepository.save(storeMaterial);
+
+        // 5) 신규 가맹점 재료에 대한 재고 자동 생성
+        if (!storeInventoryRepository.existsByStoreAndStoreMaterial(store, storeMaterial)) {
+            StoreInventory inventory = StoreInventory.builder()
+                    .store(store)
+                    .storeMaterial(storeMaterial)
+                    .quantity(BigDecimal.ZERO)                       // 초기 재고 0
+                    .optimalQuantity(nullSafe(dto.getOptimalQuantity())) // 적정 재고는 DTO 기준
+                    .status(InventoryStatus.SUFFICIENT)             // 기본값, 실제 상태 계산은 touchAfterQuantityChange에서 보정
+                    .build();
+
+            // 상태/업데이트일 동기화
+            inventory.touchAfterQuantityChange();
+
+            storeInventoryRepository.save(inventory);
+        }
+
         return storeMaterial.getId();
     }
 
