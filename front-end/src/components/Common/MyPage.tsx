@@ -49,10 +49,12 @@ export function MyPage({ onProfileImageChange }: MyPageProps) {
     return newPassword === confirmPassword ? "일치" : "불일치";
   }, [newPassword, confirmPassword]);
 
-  const profileImage = previewUrl
-    || (user?.memberImagePath
-          ? `${BACKEND_BASE_URL}${user.memberImagePath}`
-          : DEFAULT_PROFILE_IMAGE);
+  const staticRoot = BACKEND_BASE_URL.replace(/\/api\/?$/, "");
+  const profileImage =
+    previewUrl ||
+    (user?.memberImagePath
+      ? `${staticRoot}/uploads/profile/${user.memberImagePath}`
+      : DEFAULT_PROFILE_IMAGE);
 
   // 초기 로드
   useEffect(() => {
