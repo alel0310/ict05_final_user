@@ -214,9 +214,12 @@ public class AnalyticsRestController {
 			@RequestParam(required = false) String cursor
 	) {
 		Long storeId = appUser.getStoreId();
+		LocalDate startDate = LocalDate.parse(start);
+		LocalDate endDate = LocalDate.parse(end);
+
 		AnalyticsSearchDto cond = new AnalyticsSearchDto(
-				LocalDate.parse(start),
-				LocalDate.parse(end),
+				startDate,
+				endDate,
 				AnalyticsSearchDto.ViewBy.DAY,
 				size,
 				cursor
@@ -240,9 +243,12 @@ public class AnalyticsRestController {
 			@RequestParam(required = false) String cursor
 	) {
 		Long storeId = appUser.getStoreId();
+		LocalDate startDate = LocalDate.parse(start);
+		LocalDate endDate = LocalDate.parse(end);
+
 		AnalyticsSearchDto cond = new AnalyticsSearchDto(
-				LocalDate.parse(start),
-				LocalDate.parse(end),
+				startDate,
+				endDate,
 				AnalyticsSearchDto.ViewBy.MONTH,
 				size,
 				cursor

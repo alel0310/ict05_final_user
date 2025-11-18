@@ -28,31 +28,29 @@ type MaterialTopItem = {
 type MaterialSummary = {
   topByUsage: MaterialTopItem[];
   topByCost: MaterialTopItem[];
-  currentCostRate: number;
-  prevCostRate: number;
-  costRateDiff: number;
+  currentCostRate: number;  // 0~100 (소수 1자리)
+  prevCostRate: number;     // 0~100 (소수 1자리)
+  costRateDiff: number;     // percentage point
   lowStockCount: number;
   expireSoonCount: number;
 };
 
-// 테이블 행 (일별)
 type MaterialDailyRow = {
-  useDate: string;        // YYYY-MM-DD
+  useDate: string;
   materialName: string;
   usedQuantity: number;
   unitName: string;
   cost: number;
-  salesShare: number;     // %
+  salesShare: number;
   lastInboundDate?: string | null;
 };
 
-// 테이블 행 (월별)
 type MaterialMonthlyRow = {
-  yearMonth: string;      // YYYY-MM
+  yearMonth: string;
   materialName: string;
   usedQuantity: number;
   cost: number;
-  costRate: number;       // %
+  costRate: number;
   lastInboundMonth?: string | null;
 };
 
@@ -115,25 +113,32 @@ export default function MaterialReport() {
           ? '/api/analytics/materials/day-rows'
           : '/api/analytics/materials/month-rows';
 
-      const { data } = await api.get<PageResp<MaterialRow>>(url, {
-        params: {
-          storeId,
-          start: startStr,
-          end: endStr,
-          size: pageSize,
-          cursor: null,
-        },
-      });
+      const [rowsResp, summaryResp] = await Promise.all([
+        api.get<PageResp<MaterialRow>>(url, {
+          params: {
+            start: startStr,
+            end: endStr,
+            size: pageSize,
+            cursor: null,
+          },
+        }),
+        api.get<MaterialSummary>('/api/analytics/materials/summary'),
+      ]);
 
-      setRows(data.items);
-      setCursor(data.nextCursor);
+      setRows(rowsResp.data.items);
+      setCursor(rowsResp.data.nextCursor);
+      setSummary(summaryResp.data);
+    } catch (e) {
+      console.error('재료 분석 조회 실패', e);
+      alert('재료 분석 데이터를 불러오지 못했습니다. 콘솔 로그를 확인해주세요.');
+      setRows([]);
+      setCursor(null);
+      setSummary(null);
     } finally {
       setLoading(false);
     }
-
-    // 상단 카드도 같이 갱신
-    loadSummary();
   }
+
 
   // ==========================
   // 테이블 추가 로드(더보기)
@@ -149,7 +154,6 @@ export default function MaterialReport() {
 
       const { data } = await api.get<PageResp<MaterialRow>>(url, {
         params: {
-          storeId,
           start: startStr,
           end: endStr,
           size: pageSize,
@@ -157,12 +161,16 @@ export default function MaterialReport() {
         },
       });
 
-      setRows((prev) => [...prev, ...data.items]);
+      setRows(prev => [...prev, ...data.items]);
       setCursor(data.nextCursor);
+    } catch (e) {
+      console.error('더보기 실패', e);
+      alert('추가 데이터를 불러오지 못했습니다.');
     } finally {
       setLoading(false);
     }
   }
+
 
   // ==========================
   // PDF 다운로드
@@ -323,28 +331,38 @@ export default function MaterialReport() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {/* 1. 사용량/원가 TOP5 통합 카드 */}
         <KPICard
-        title="재료 TOP5"
-        value={
+          title="재료 TOP5"
+          value={
             <div className="text-xs space-y-2">
-            <div className="font-semibold text-gray-600">사용량 기준</div>
-
-            {summary && summary.topByUsage && summary.topByUsage.length > 0 ? (
-                summary.topByUsage.slice(0, 3).map((m) => (
-                <div key={m.materialId} className="flex justify-between">
-                    <span className="text-gray-700 truncate">{m.materialName}</span>
+              <div className="font-semibold text-white-600">사용량 기준</div>
+              {summary && summary.topByUsage && summary.topByUsage.length > 0 ? (
+                summary.topByUsage.slice(0, 5).map((m) => ( // ✅ TOP5 실제로 5개
+                  <div key={m.materialId} className="flex justify-between">
+                    <span className="text-white-700 truncate">{m.materialName}</span>
                     <span className="font-semibold">
-                    {m.usedQuantity.toFixed(1)}
-                    {m.unitName}
+                      {m.usedQuantity.toFixed(1)} {m.unitName}  {/* ✅ 중복 제거, usedQuantity로 교정 */}
                     </span>
-                </div>
+                  </div>
                 ))
-            ) : (
-                <div className="text-gray-400">데이터 없음</div>
-            )}
+              ) : (
+                <div className="text-white-400">데이터 없음</div>
+              )}
+
+              <div className="mt-3 font-semibold text-white-600">원가 기준</div>
+              {summary && summary.topByCost && summary.topByCost.length > 0 ? (
+                summary.topByCost.slice(0, 5).map((m) => (
+                  <div key={`cost-${m.materialId}`} className="flex justify-between">
+                    <span className="text-gray-700 truncate">{m.materialName}</span>
+                    <span className="font-semibold">₩{fmtMoneyInt(m.cost)}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-white-400">데이터 없음</div>
+              )}
             </div>
-        }
-        icon={Package}
-        color="orange"
+          }
+          icon={Package}
+          color="orange"
         />
 
         {/* 2. 원가율 */}

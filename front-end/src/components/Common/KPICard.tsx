@@ -41,7 +41,7 @@ export function KPICard({
       <div className="flex items-center justify-between">
         <div className="flex-1">
           <p className="text-white/80 text-sm mb-2">{title}</p>
-          <p className="text-2xl font-bold mb-1">{value}</p>
+          <div className="text-2xl font-bold leading-tight">{value}</div>
 
           {change && (
             <div className="flex items-center gap-1">
