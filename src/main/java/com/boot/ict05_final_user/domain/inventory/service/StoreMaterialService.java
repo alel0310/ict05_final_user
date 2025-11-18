@@ -19,7 +19,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -142,22 +144,6 @@ public class StoreMaterialService {
         return storeMaterial.getId();
     }
 
-    /* create의 코드 자동 생성 */
-    private String generateStoreMaterialCode(Store store) {
-        String code = "SM-" + store.getId() + "-" + System.currentTimeMillis();
-
-        // 유니크 제약 충돌 방지용으로 한 번만 더 시도
-        if (storeMaterialRepository.existsByStoreAndCode(store, code)) {
-            code = "SM-" + store.getId() + "-" + (System.currentTimeMillis() + 1);
-        }
-        return code;
-    }
-
-    private BigDecimal nullSafe(BigDecimal value) {
-        return value != null ? value : BigDecimal.ZERO;
-    }
-
-
     /**
      * 지정 매장의 가맹점 재료 목록을 조회한다.
      *
@@ -179,5 +165,78 @@ public class StoreMaterialService {
                 .map(StoreMaterialResponse::from)
                 .toList();
     }
+
+    /**
+     * store_material 에 존재하는 모든 가맹점 재료에 대하여
+     * 아직 store_inventory 가 없는 것만 0재고로 생성한다.
+     *
+     * - 대상: store_material.store_id_fk = storeId 인 모든 행
+     * - 이미 store_inventory 가 있는 (store, storeMaterial) 는 스킵
+     * - 생성 시 quantity = 0, status = SUFFICIENT
+     *
+     * @param storeId 매장 ID
+     * @return 새로 생성된 StoreInventory 개수
+     */
+    @Transactional
+    public int initStoreInventoryForStore(Long storeId) {
+        // 1) 매장 조회
+        Store store = storeRepository.findById(storeId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 매장입니다. id=" + storeId));
+
+        // 2) 이 매장의 모든 가맹점 재료 (HQ/자체 모두 포함)
+        List<StoreMaterial> materials = storeMaterialRepository.findByStore(store);
+        if (materials.isEmpty()) {
+            return 0;
+        }
+
+        // 3) 이미 재고가 있는 StoreMaterial ID 집합
+        List<StoreInventory> existingInventories = storeInventoryRepository.findByStore(store);
+        Set<Long> alreadyHasInventory = new HashSet<>();
+        for (StoreInventory inv : existingInventories) {
+            if (inv.getStoreMaterial() != null) {
+                alreadyHasInventory.add(inv.getStoreMaterial().getId());
+            }
+        }
+
+        int created = 0;
+
+        // 4) 아직 재고 없는 재료만 0재고로 생성
+        for (StoreMaterial sm : materials) {
+            if (alreadyHasInventory.contains(sm.getId())) {
+                continue;
+            }
+
+            StoreInventory inventory = StoreInventory.builder()
+                    .store(store)
+                    .storeMaterial(sm)
+                    .quantity(BigDecimal.ZERO)     // ← 모든 재료 재고 0으로 생성
+                    .optimalQuantity(null)         // 적정재고는 여기선 터치 안 함
+                    .status(InventoryStatus.SUFFICIENT)
+                    .build();
+
+            inventory.touchAfterQuantityChange(); // status + updateDate 동기화
+            storeInventoryRepository.save(inventory);
+            created++;
+        }
+
+        return created;
+    }
+
+    /* create의 코드 자동 생성 */
+    private String generateStoreMaterialCode(Store store) {
+        String code = "SM-" + store.getId() + "-" + System.currentTimeMillis();
+
+        // 유니크 제약 충돌 방지용으로 한 번만 더 시도
+        if (storeMaterialRepository.existsByStoreAndCode(store, code)) {
+            code = "SM-" + store.getId() + "-" + (System.currentTimeMillis() + 1);
+        }
+        return code;
+    }
+
+    /* nullSafe */
+    private BigDecimal nullSafe(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
+    }
+
 
 }

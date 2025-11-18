@@ -10,7 +10,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 @Repository
-public interface StoreInventoryBatchRepository extends JpaRepository<StoreInventoryBatch, Long> {
+public interface StoreInventoryBatchRepository extends JpaRepository<StoreInventoryBatch, Long>, StoreInventoryBatchRepositoryCustom {
 
     /**
      * 특정 가맹점 재고에 속한 배치 목록
