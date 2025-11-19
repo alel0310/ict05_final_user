@@ -5,7 +5,6 @@ const config: CapacitorConfig = {
   appName: 'Toast Lab App',
   webDir: 'build',
   server: {
-    url: 'http://10.0.2.2:8082/user',
     cleartext: true,
   },
 };

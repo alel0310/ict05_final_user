@@ -25,7 +25,6 @@ type PageResp<T> = {
   nextCursor: string | null;
 };
 
-// ✅ 백엔드 KpiSummaryDto와 필드 맞춤
 type KpiSummary = {
   salesMtd: number;
   txMtd: number;
@@ -46,7 +45,6 @@ function formatDateLocal(date: Date): string {
 }
 
 export default function KpiReport() {
-  const [storeId] = useState<number>(1); // 추후 상단 필터와 연동
 
   // 백엔드가 endInclusive(YYYY-MM-DD 그대로) + 내부에서 plusDays(1) 처리
   const today = new Date();
@@ -72,48 +70,48 @@ export default function KpiReport() {
   const endStr   = useMemo(() => formatDateLocal(end),   [end]);
 
 
-  // ====== 데이터 로드 ======
   async function loadFirst() {
     setLoading(true);
+    let alive = true;
     try {
       // 테이블: 조회기간 + viewBy + pageSize + cursor=null
-      const { data: page } = await api.get<PageResp<KpiRow>>(
-        '/api/analytics/kpi/rows',
-        {
+      const [rowsRes, summaryRes] = await Promise.all([
+        api.get<PageResp<KpiRow>>('/api/analytics/kpi/rows', {
           params: {
-            storeId,
             start: startStr,
             end: endStr,
             viewBy,
             size: pageSize,
             cursor: null,
           },
-        }
-      );
-      setRows(page.items);
-      setCursor(page.nextCursor);
+        }),
+        // 요약 카드: 항상 "이번달 1일 ~ 어제(MTD)" 기준(파라미터 없음)
+        api.get<KpiSummary>('/api/analytics/kpi/summary'),
+      ]);
+      if (!alive) return;
+      setRows(rowsRes.data.items);
+      setCursor(rowsRes.data.nextCursor);
+      setSummary(summaryRes.data);
+    } catch (e) {
+      // 실패 시 비워주기
+      setRows([]);
+      setCursor(null);
+      setSummary(null);
     } finally {
-      setLoading(false);
+      if (alive) setLoading(false);
     }
-
-    // 요약 카드: 항상 "이번달 1일 ~ 어제(MTD)" 기준
-    api
-      .get<KpiSummary>('/api/analytics/kpi/summary', {
-        params: { storeId },
-      })
-      .then((res) => setSummary(res.data))
-      .catch(() => setSummary(null));
+    return () => { alive = false; };
   }
 
   async function loadMore() {
     if (!cursor) return;
     setLoading(true);
+    let alive = true;
     try {
       const { data: page } = await api.get<PageResp<KpiRow>>(
         '/api/analytics/kpi/rows',
         {
           params: {
-            storeId,
             start: startStr,
             end: endStr,
             viewBy,
@@ -122,11 +120,14 @@ export default function KpiReport() {
           },
         }
       );
+      if (!alive) return;
       setRows((prev) => [...prev, ...page.items]);
       setCursor(page.nextCursor);
     } finally {
       setLoading(false);
+      if (alive) setLoading(false);
     }
+    return () => { alive = false; };
   }
 
   // ==========================
@@ -171,7 +172,7 @@ export default function KpiReport() {
   useEffect(() => {
     loadFirst();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storeId]);
+  }, []);
 
   // 요약카드, 테이블 표시용 안전값
   const salesMtd = summary?.salesMtd ?? 0;
@@ -238,7 +239,13 @@ export default function KpiReport() {
                   ? 'bg-kpi-red text-white'
                   : 'text-gray-700 hover:bg-white'
               }`}
-              onClick={() => setViewBy('DAY')}
+              onClick={() => {
+                if (viewBy !== 'DAY') {
+                  setViewBy('DAY');
+                  setRows([]);      // 뷰 전환 시 잔상 제거
+                  setCursor(null);
+                }
+              }}
             >
               일별
             </button>
@@ -248,7 +255,13 @@ export default function KpiReport() {
                   ? 'bg-kpi-red text-white'
                   : 'text-gray-700 hover:bg-white'
               }`}
-              onClick={() => setViewBy('MONTH')}
+              onClick={() => {
+                if (viewBy !== 'MONTH') {
+                  setViewBy('MONTH');
+                  setRows([]);
+                  setCursor(null);
+                }
+              }}
             >
               월별
             </button>

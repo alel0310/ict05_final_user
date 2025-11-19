@@ -415,8 +415,6 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		return new CursorPage<>(items, nextCursor);
 	}
 
-
-
 	// =========================
 	//  주문 분석 월별 테이블(월 단위 집계)
 	// =========================
@@ -521,11 +519,6 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 
 		return new CursorPage<>(items, nextCursor);
 	}
-
-
-	// ============================================================
-	//                      ★ 메뉴 분석 (신규) ★
-	// ============================================================
 
 	// ============================================================================
 	//                            ★ 메뉴 분석 Summary ★
@@ -764,7 +757,6 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		return new CursorPage<>(result, nextCursor);
 	}
 
-
 	// ============================================================================
 	//                         ★ 메뉴 분석 월별 테이블 ★
 	// ============================================================================
@@ -886,7 +878,9 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		return new CursorPage<>(result, nextCursor);
 	}
 
-
+	// ============================================================================
+	//                            ★ 재료 분석 Summary ★
+	// ============================================================================
 	@Override
 	@Transactional(readOnly = true)
 	public MaterialSummaryDto fetchMaterialSummary(Long storeId, LocalDate today) {
@@ -943,10 +937,14 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		);
 	}
 
-
+	// ============================================================================
+	//                         ★ 재료 분석 일별 테이블 ★
+	// ============================================================================
 	@Override
 	@Transactional(readOnly = true)
 	public CursorPage<MaterialDailyRowDto> fetchMaterialDailyRows(Long storeId, AnalyticsSearchDto cond) {
+		int size = (cond.size() == null ? 50 : cond.size());
+
 		LocalDateTime startDt = cond.startDate().atStartOfDay();
 		LocalDateTime endExDt = cond.endDate().plusDays(1).atStartOfDay();
 
@@ -961,7 +959,7 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 			String[] parts = cursor.split("\\|");
 			if (parts.length >= 2) {
 				cDate = parts[0];
-				cSmId = Long.valueOf(parts[1]);
+				try { cSmId = Long.valueOf(parts[1]); } catch (NumberFormatException ignore) {}
 			}
 		}
 
@@ -969,7 +967,7 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		StringExpression dayExpr = Expressions.stringTemplate("DATE_FORMAT({0}, '%Y-%m-%d')", co.orderedAt);
 
 		// 집계식
-		NumberExpression<BigDecimal> usedQtyExpr = log.count.sum(); // baseUnit 수량 합
+		NumberExpression<BigDecimal> usedQtyExpr = log.count.sum();     // baseUnit 수량 합
 		NumberExpression<BigDecimal> costExpr    = materialCostSumExpr(); // SUM( (count / conv) * price )
 
 		// 이름/단위
@@ -986,7 +984,7 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 				.select(
 						dayExpr,                // 0
 						sm.id,                  // 1
-						materialNameExpr,       // 2  (IFNULL)
+						materialNameExpr,       // 2 (IFNULL)
 						sm.baseUnit,            // 3
 						usedQtyExpr,            // 4
 						costExpr                // 5
@@ -995,7 +993,7 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 				.join(log.customerOrderFk, co)
 				.join(co.store, s)
 				.join(log.storeMaterialFk, sm)
-				.leftJoin(sm.material, material) // ★ HQ재료 없을 수도 있으므로 LEFT
+				.leftJoin(sm.material, material) // HQ재료 없을 수도 있으므로 LEFT
 				.where(
 						statusCompleted(),
 						eqStore(storeId),
@@ -1004,18 +1002,21 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 				)
 				.groupBy(dayExpr, sm.id, sm.name, material.name, sm.baseUnit)
 				.orderBy(dayExpr.desc(), sm.id.desc())
-				.limit(cond.size())
+				.limit(size + 1) // ← hasNext 판단을 위해 +1
 				.setHint("org.hibernate.readOnly", true)
 				.setHint("org.hibernate.flushMode", "COMMIT")
 				.setHint("jakarta.persistence.query.timeout", 3000)
 				.fetch();
 
-		List<MaterialDailyRowDto> items = new ArrayList<>(tuples.size());
-		for (Tuple t : tuples) {
-			String useDate      = t.get(dayExpr);
-			Long storeMaterialId= t.get(sm.id);
-			String matName      = t.get(materialNameExpr);
-			String unitName     = t.get(sm.baseUnit);
+		boolean hasNext = tuples.size() > size;
+		List<Tuple> pageRows = hasNext ? tuples.subList(0, size) : tuples;
+
+		List<MaterialDailyRowDto> items = new ArrayList<>(pageRows.size());
+		for (Tuple t : pageRows) {
+			String useDate       = t.get(dayExpr);
+			Long storeMaterialId = t.get(sm.id);
+			String matName       = t.get(materialNameExpr);
+			String unitName      = t.get(sm.baseUnit);
 
 			double usedQty = nvlBD(t.get(usedQtyExpr)).doubleValue();
 			long cost      = nvlBD(t.get(costExpr)).longValue();
@@ -1024,7 +1025,7 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 			double salesShare = (daySales > 0L && cost > 0L) ? round1(safeDiv(cost, daySales) * 100.0) : 0.0;
 
 			LocalDate inbound = lastInboundBySm.get(storeMaterialId);
-			String inboundStr = inbound != null ? inbound.toString() : null;
+			String inboundStr = (inbound != null ? inbound.toString() : null);
 
 			items.add(new MaterialDailyRowDto(
 					useDate,
@@ -1038,16 +1039,22 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		}
 
 		String nextCursor = null;
-		if (tuples.size() == cond.size()) {
-			Tuple last = tuples.get(tuples.size() - 1);
+		if (hasNext && !pageRows.isEmpty()) {
+			Tuple last = pageRows.get(pageRows.size() - 1);
 			nextCursor = last.get(dayExpr) + "|" + last.get(sm.id);
 		}
+
 		return new CursorPage<>(items, nextCursor);
 	}
 
+	// ============================================================================
+	//                         ★ 재료 분석 월별 테이블 ★
+	// ============================================================================
 	@Override
 	@Transactional(readOnly = true)
 	public CursorPage<MaterialMonthlyRowDto> fetchMaterialMonthlyRows(Long storeId, AnalyticsSearchDto cond) {
+		int size = (cond.size() == null ? 50 : cond.size());
+
 		LocalDateTime startDt = cond.startDate().atStartOfDay();
 		LocalDateTime endExDt = cond.endDate().plusDays(1).atStartOfDay();
 
@@ -1062,7 +1069,7 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 			String[] parts = cursor.split("\\|");
 			if (parts.length >= 2) {
 				cYm  = parts[0];
-				cSmId= Long.valueOf(parts[1]);
+				try { cSmId = Long.valueOf(parts[1]); } catch (NumberFormatException ignore) {}
 			}
 		}
 
@@ -1099,22 +1106,26 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 				)
 				.groupBy(ymExpr, sm.id, sm.name, material.name, sm.baseUnit)
 				.orderBy(ymExpr.desc(), sm.id.desc())
-				.limit(cond.size())
+				.limit(size + 1) // ← hasNext 판단을 위해 +1
 				.setHint("org.hibernate.readOnly", true)
 				.setHint("org.hibernate.flushMode", "COMMIT")
 				.setHint("jakarta.persistence.query.timeout", 3000)
 				.fetch();
 
-		List<MaterialMonthlyRowDto> items = new ArrayList<>(tuples.size());
+		boolean hasNext = tuples.size() > size;
+		List<Tuple> pageRows = hasNext ? tuples.subList(0, size) : tuples;
+
+		List<MaterialMonthlyRowDto> items = new ArrayList<>(pageRows.size());
 		DateTimeFormatter ymFormatter = DateTimeFormatter.ofPattern("yyyy-MM");
 
-		for (Tuple t : tuples) {
-			String ym          = t.get(ymExpr);
-			Long smId          = t.get(sm.id);
-			String matName     = t.get(materialNameExpr);
-			String unitName    = t.get(sm.baseUnit);
-			double usedQty     = nvlBD(t.get(usedQtyExpr)).doubleValue();
-			long cost          = nvlBD(t.get(costExpr)).longValue();
+		for (Tuple t : pageRows) {
+			String ym       = t.get(ymExpr);
+			Long smId       = t.get(sm.id);
+			String matName  = t.get(materialNameExpr);
+			String unitName = t.get(sm.baseUnit);
+
+			double usedQty  = nvlBD(t.get(usedQtyExpr)).doubleValue();
+			long cost       = nvlBD(t.get(costExpr)).longValue();
 
 			long monthSales = salesByMonth.getOrDefault(ym, 0L);
 			double costRate = (monthSales > 0L && cost > 0L) ? round1(safeDiv(cost, monthSales) * 100.0) : 0.0;
@@ -1133,10 +1144,11 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		}
 
 		String nextCursor = null;
-		if (tuples.size() == cond.size()) {
-			Tuple last = tuples.get(tuples.size() - 1);
+		if (hasNext && !pageRows.isEmpty()) {
+			Tuple last = pageRows.get(pageRows.size() - 1);
 			nextCursor = last.get(ymExpr) + "|" + last.get(sm.id);
 		}
+
 		return new CursorPage<>(items, nextCursor);
 	}
 

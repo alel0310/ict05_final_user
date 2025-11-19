@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
-import { CalendarIcon, Download, Clock, BarChart3, Sun, Calendar1, ThumbsUpIcon, ThumbsDownIcon, PercentCircle, Percent, CalendarHeart } from 'lucide-react';
+import { CalendarIcon, Download,  BarChart3, ThumbsUpIcon, ThumbsDownIcon, Percent, CalendarHeart } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../components/ui/popover';
 import { Calendar } from '../../../components/ui/calendar';
 import { fmtMoneyInt, fmtPercent1, tz } from '../../../lib/format';
@@ -109,7 +109,6 @@ const hourRangeLabel = (h: number) =>
   `${String(h).padStart(2, '0')}:00 ~ ${String(h).padStart(2, '0')}:59`;
 
 export default function TimeReport() {
-  const [storeId] = useState<number>(1);
 
   const today = new Date();
   const [end, setEnd] = useState<Date>(() => today);
@@ -178,21 +177,18 @@ export default function TimeReport() {
       const [rowsRes, summaryRes, hourlyRes, weekdayRes] = await Promise.all([
         api.get<PageResp<TimeRow>>(rowsUrl, {
           params: {
-            storeId,
             start: startStr,
             end: endStr,
             size: pageSize,
             cursor: null,
           },
         }),
-        api.get<TimeDaySummary>('/api/analytics/time-day/summary', {
-          params: { storeId },
-        }),
+        api.get<TimeDaySummary>('/api/analytics/time-day/summary'),
         api.get<TimeHourlyPointDto[]>('/api/analytics/time-day/hourly-chart', {
-          params: { storeId, start: startStr, end: endStr },
+          params: { start: startStr, end: endStr },
         }),
         api.get<WeekdaySalesPointDto[]>('/api/analytics/time-day/weekday-chart', {
-          params: { storeId, start: startStr, end: endStr },
+          params: { start: startStr, end: endStr },
         }),
       ]);
 
@@ -228,7 +224,6 @@ export default function TimeReport() {
 
       const { data } = await api.get<PageResp<TimeRow>>(rowsUrl, {
         params: {
-          storeId,
           start: startStr,
           end: endStr,
           size: pageSize,
@@ -263,8 +258,7 @@ async function handleDownloadReport() {
       } as any
     );
 
-    const blob = new Blob([data], { type: 'application/pdf' });
-    const url = window.URL.createObjectURL(blob);
+    const url = window.URL.createObjectURL(data);
 
     const link = document.createElement('a');
     const viewLabel = viewBy === 'DAY' ? 'day' : 'month';
@@ -283,11 +277,9 @@ async function handleDownloadReport() {
 }
 
 
-  // 최초 1회 + storeId 변경시 기본 조회
   useEffect(() => {
     loadFirst();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storeId]);
+  }, []);
 
   const peakHourLabel =
     summary?.peakHour != null ? `${summary.peakHour}시` : '—';

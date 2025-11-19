@@ -194,6 +194,7 @@ public class AnalyticsRestController {
 	public ResponseEntity<MaterialSummaryDto> getMaterialSummary(
 			@AuthenticationPrincipal AppUser appUser
 	) {
+		System.out.println("재료카드 되나?");
 		Long storeId = appUser.getStoreId();
 		return ResponseEntity.ok(service.getMaterialSummary(storeId));
 	}
@@ -213,6 +214,7 @@ public class AnalyticsRestController {
 			@RequestParam(defaultValue = "50") Integer size,
 			@RequestParam(required = false) String cursor
 	) {
+		System.out.println("재료일별 되나?");
 		Long storeId = appUser.getStoreId();
 		LocalDate startDate = LocalDate.parse(start);
 		LocalDate endDate = LocalDate.parse(end);
@@ -242,6 +244,7 @@ public class AnalyticsRestController {
 			@RequestParam(defaultValue = "50") Integer size,
 			@RequestParam(required = false) String cursor
 	) {
+		System.out.println("재료월별 되나?");
 		Long storeId = appUser.getStoreId();
 		LocalDate startDate = LocalDate.parse(start);
 		LocalDate endDate = LocalDate.parse(end);

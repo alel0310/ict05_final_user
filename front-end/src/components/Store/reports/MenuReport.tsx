@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
-import { AlertTriangle, CalendarIcon, Download, Package, PartyPopper, Star, ThumbsUp, TrendingUp } from 'lucide-react';
+import { AlertTriangle, CalendarIcon, Download, Star, ThumbsUp, TrendingUp } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../components/ui/popover';
 import { Calendar } from '../../../components/ui/calendar';
 import { fmtMoneyInt, fmtPercent1, tz } from '../../../lib/format';
@@ -82,7 +82,6 @@ function formatDateLocal(date: Date): string {
 }
 
 export default function MenuReport() {
-  const [storeId] = useState<number>(1); // TODO: 상단 스토어 필터 연동
 
   const today = new Date();
   const [end, setEnd] = useState<Date>(() => today);
@@ -109,9 +108,7 @@ export default function MenuReport() {
   // ==========================
   async function loadSummary() {
     try {
-      const { data } = await api.get<MenuSummary>('/api/analytics/menus/summary', {
-        params: { storeId, start: startStr, end: endStr },
-      });
+      const { data } = await api.get<MenuSummary>('/api/analytics/menus/summary');
       setSummary(data);
     } catch {
       setSummary(null);
@@ -123,30 +120,38 @@ export default function MenuReport() {
   // ==========================
   async function loadFirst() {
     setLoading(true);
+    let alive = true;
     try {
       const url =
         viewBy === 'DAY'
           ? '/api/analytics/menus/day-rows'
           : '/api/analytics/menus/month-rows';
 
-      const { data } = await api.get<PageResp<MenuRow>>(url, {
-        params: {
-          storeId,
-          start: startStr,
-          end: endStr,
-          size: pageSize,
-          cursor: null,
-        },
-      });
-
-      setRows(data.items);
-      setCursor(data.nextCursor);
+      // 표 + 상단 요약 동시 로드
+      const [rowsRes, summaryRes] = await Promise.all([
+        api.get<PageResp<MenuRow>>(url, {
+          params: {
+            start: startStr,
+            end: endStr,
+            size: pageSize,
+            cursor: null,
+          },
+        }),
+        api.get<MenuSummary>('/api/analytics/menus/summary'),
+      ]);
+      if (!alive) return;
+      setRows(rowsRes.data.items);
+      setCursor(rowsRes.data.nextCursor);
+      setSummary(summaryRes.data);
+    } catch {
+      if (!alive) return;
+      setRows([]);
+      setCursor(null);
+      setSummary(null);
     } finally {
-      setLoading(false);
+      if (alive) setLoading(false);
     }
-
-    // 상단 카드도 같이 갱신
-    loadSummary();
+    return () => { alive = false; };
   }
 
   // ==========================
@@ -155,6 +160,7 @@ export default function MenuReport() {
   async function loadMore() {
     if (!cursor) return;
     setLoading(true);
+    let alive = true;
     try {
       const url =
         viewBy === 'DAY'
@@ -163,7 +169,6 @@ export default function MenuReport() {
 
       const { data } = await api.get<PageResp<MenuRow>>(url, {
         params: {
-          storeId,
           start: startStr,
           end: endStr,
           size: pageSize,
@@ -171,11 +176,13 @@ export default function MenuReport() {
         },
       });
 
+      if (!alive) return;
       setRows((prev) => [...prev, ...data.items]);
       setCursor(data.nextCursor);
     } finally {
-      setLoading(false);
+      if (alive) setLoading(false);
     }
+    return () => { alive = false; };
   }
 
   // ==========================
@@ -196,8 +203,7 @@ export default function MenuReport() {
         } as any
       );
 
-      const blob = new Blob([data], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
+      const url = window.URL.createObjectURL(data);
 
       const link = document.createElement('a');
       const viewLabel = viewBy === 'DAY' ? 'day' : 'month';
@@ -216,11 +222,9 @@ export default function MenuReport() {
   }
 
 
-  // 최초 1회 + storeId 변경 시 자동 조회
   useEffect(() => {
     loadFirst();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storeId]);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -229,7 +233,7 @@ export default function MenuReport() {
         <div>
           <h1 className="text-2xl font-semibold">메뉴 분석</h1>
           <p className="text-sm text-gray-600">
-            타임존: {tz} / 상단 카드와 테이블 모두 선택한 기간 기준
+            타임존: {tz} / 상단 카드는 이번달 1일 ~ 어제 기준(MTD), 테이블은 선택한 기간 기준
           </p>
         </div>
         <div className="flex flex-wrap gap-2 items-center justify-end">
