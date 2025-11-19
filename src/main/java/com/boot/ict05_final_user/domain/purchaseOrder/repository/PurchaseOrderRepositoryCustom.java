@@ -4,12 +4,10 @@ import com.boot.ict05_final_user.domain.purchaseOrder.dto.PurchaseOrderDetailDTO
 import com.boot.ict05_final_user.domain.purchaseOrder.dto.PurchaseOrderListDTO;
 import com.boot.ict05_final_user.domain.purchaseOrder.dto.PurchaseOrderRequestsDTO;
 import com.boot.ict05_final_user.domain.purchaseOrder.dto.PurchaseOrderSearchDTO;
-import com.boot.ict05_final_user.domain.purchaseOrder.entity.PurchaseOrder;
 import com.boot.ict05_final_user.domain.purchaseOrder.entity.PurchaseOrderStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
-import java.util.List;
 import java.util.Optional;
 
 public interface PurchaseOrderRepositoryCustom {

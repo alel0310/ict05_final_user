@@ -40,7 +40,6 @@ import java.util.stream.Collectors;
 @Repository
 @RequiredArgsConstructor
 @Slf4j
-@Transactional
 public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCustom{
 
     private final JPAQueryFactory queryFactory;

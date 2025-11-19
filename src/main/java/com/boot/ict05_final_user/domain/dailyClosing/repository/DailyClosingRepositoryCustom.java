@@ -1,6 +1,5 @@
 package com.boot.ict05_final_user.domain.dailyClosing.repository;
 
-import com.boot.ict05_final_user.domain.dailyClosing.dto.DailyClosingSummaryDto;
 import com.boot.ict05_final_user.domain.dailyClosing.entity.DailyClosing;
 import com.boot.ict05_final_user.domain.dailyClosing.entity.DailyClosingDenom;
 import com.boot.ict05_final_user.domain.dailyClosing.entity.DailyClosingExpense;

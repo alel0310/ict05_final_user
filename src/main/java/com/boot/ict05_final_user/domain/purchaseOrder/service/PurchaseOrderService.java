@@ -1,16 +1,14 @@
 package com.boot.ict05_final_user.domain.purchaseOrder.service;
 
 import com.boot.ict05_final_user.domain.purchaseOrder.dto.*;
-import com.boot.ict05_final_user.domain.purchaseOrder.entity.PurchaseOrder;
-import com.boot.ict05_final_user.domain.purchaseOrder.entity.PurchaseOrderDetail;
 import com.boot.ict05_final_user.domain.purchaseOrder.entity.PurchaseOrderStatus;
 import com.boot.ict05_final_user.domain.purchaseOrder.repository.PurchaseOrderRepository;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 가맹점 발주 도메인의 비즈니스 로직을 담당하는 서비스 클래스.
@@ -45,6 +43,7 @@ public class PurchaseOrderService {
      * @param pageable               페이지 번호, 크기, 정렬 정보
      * @return 발주 목록 페이지 (요약 정보 DTO 리스트)
      */
+    @Transactional(readOnly = true)
     public Page<PurchaseOrderListDTO> selectAllPurchase(PurchaseOrderSearchDTO purchaseOrderSearchDTO, Pageable pageable) {
         return purchaseOrderRepository.listPurchase(purchaseOrderSearchDTO, pageable);
     }
@@ -60,6 +59,7 @@ public class PurchaseOrderService {
      * @param id 발주 ID (PK)
      * @return 발주 상세 DTO, 존재하지 않으면 null
      */
+    @Transactional(readOnly = true)
     public PurchaseOrderDetailDTO getPurchaseOrderDetail(Long id) {
         return purchaseOrderRepository.findPurchaseOrderDetail(id);
     }
