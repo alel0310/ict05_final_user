@@ -3,6 +3,7 @@ package com.boot.ict05_final_user.domain.inventory.dto;
 import com.boot.ict05_final_user.domain.inventory.entity.MaterialStatus;
 import com.boot.ict05_final_user.domain.inventory.entity.MaterialTemperature;
 import com.boot.ict05_final_user.domain.inventory.entity.MaterialCategory;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -26,7 +27,7 @@ import java.math.BigDecimal;
 public class StoreMaterialCreateDTO {
 
     /** 가맹점 ID */
-    @NotNull(message = "가맹점 ID는 필수입니다.")
+    @Schema(hidden = true)
     private Long storeId;
 
     /** 가맹점 재료 코드 (미지정 시 서버에서 자동 생성 가능) */

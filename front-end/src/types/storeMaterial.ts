@@ -28,6 +28,9 @@ export type MaterialCategory =
  * - 백엔드 StoreMaterialCreateDTO 와 필드명을 최대한 맞춘다.
  */
 export interface StoreMaterialCreateRequest {
+  hqMaterial?: boolean | null;
+  materialId?: number | null;
+ 
   // 가맹점 표시명 (재료명)
   name: string;
 
