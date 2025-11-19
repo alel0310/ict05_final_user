@@ -1145,8 +1145,10 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 			Long storeId, LocalDateTime startDt, LocalDateTime endExDt, int limit) {
 
 		NumberExpression<BigDecimal> usedQtyExpr = log.count.sum();
-		NumberExpression<BigDecimal> costExpr    = materialCostSumExpr();
-		StringExpression materialNameExpr = Expressions.stringTemplate("IFNULL({0}, {1})", sm.name, material.name);
+		NumberExpression<BigDecimal> costExpr = materialCostSumExpr();
+		StringExpression materialNameExpr = Expressions.stringTemplate(
+				"IFNULL({0}, {1})", sm.name, material.name
+		);
 
 		List<Tuple> tuples = query
 				.select(
@@ -1176,13 +1178,13 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 
 		List<MaterialTopItemDto> result = new ArrayList<>(tuples.size());
 		for (Tuple t : tuples) {
-			result.add(new MaterialTopItemDto(
-					t.get(sm.id),
-					t.get(materialNameExpr),
-					t.get(sm.baseUnit),
-					nvlBD(t.get(usedQtyExpr)).doubleValue(),
-					nvlBD(t.get(costExpr)).longValue()
-			));
+			Long smId = t.get(sm.id);
+			String matName = t.get(materialNameExpr);
+			String unit = t.get(sm.baseUnit);
+			double qty = nvlBD(t.get(usedQtyExpr)).doubleValue();
+			long costLong = nvlBD(t.get(costExpr)).longValue();
+
+			result.add(new MaterialTopItemDto(smId, matName, unit, qty, costLong));
 		}
 		return result;
 	}
@@ -1191,8 +1193,10 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 			Long storeId, LocalDateTime startDt, LocalDateTime endExDt, int limit) {
 
 		NumberExpression<BigDecimal> usedQtyExpr = log.count.sum();
-		NumberExpression<BigDecimal> costExpr    = materialCostSumExpr();
-		StringExpression materialNameExpr = Expressions.stringTemplate("IFNULL({0}, {1})", sm.name, material.name);
+		NumberExpression<BigDecimal> costExpr = materialCostSumExpr();
+		StringExpression materialNameExpr = Expressions.stringTemplate(
+				"IFNULL({0}, {1})", sm.name, material.name
+		);
 
 		List<Tuple> tuples = query
 				.select(
@@ -1222,13 +1226,13 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 
 		List<MaterialTopItemDto> result = new ArrayList<>(tuples.size());
 		for (Tuple t : tuples) {
-			result.add(new MaterialTopItemDto(
-					t.get(sm.id),
-					t.get(materialNameExpr),
-					t.get(sm.baseUnit),
-					nvlBD(t.get(usedQtyExpr)).doubleValue(),
-					nvlBD(t.get(costExpr)).longValue()
-			));
+			Long smId = t.get(sm.id);
+			String matName = t.get(materialNameExpr);
+			String unit = t.get(sm.baseUnit);
+			double qty = nvlBD(t.get(usedQtyExpr)).doubleValue();
+			long costLong = nvlBD(t.get(costExpr)).longValue();
+
+			result.add(new MaterialTopItemDto(smId, matName, unit, qty, costLong));
 		}
 		return result;
 	}
@@ -1406,23 +1410,35 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		return result != null ? result : 0L;
 	}
 
-	/** 원가 합계 식: SUM( (log.count / conversionRate) * purchasePrice )
-	 *  - CAST 제거하고 산술 강제( * 1.000 ) + NULLIF 로 0 나누기 방지
+	/**
+	 * 재료 원가 합계 식: SUM( (log.count / conversionRate) * purchasePrice )
+	 *
+	 * 1. conversionRate가 0이거나 null인 경우 1로 대체
+	 * 2. purchasePrice가 null인 경우 0으로 대체
+	 * 3. COALESCE 사용으로 안전성 강화
 	 */
 	private NumberExpression<BigDecimal> materialCostSumExpr() {
-		NumberExpression<BigDecimal> convDec =
-				Expressions.numberTemplate(
-						BigDecimal.class,
-						"NULLIF(({0} * 1.000), 0)",     // ← CAST 대신 * 1.000 로 소수화
-						sm.conversionRate
-				);
+		// conversionRate: NULL이면 1, 0이면 1로 대체
+		NumberExpression<BigDecimal> safeConvRate = Expressions.numberTemplate(
+				BigDecimal.class,
+				"COALESCE(NULLIF({0}, 0), 1.0)",
+				sm.conversionRate
+		);
 
+		// purchasePrice: NULL이면 0으로 대체
+		NumberExpression<BigDecimal> safePurchasePrice = Expressions.numberTemplate(
+				BigDecimal.class,
+				"COALESCE({0}, 0)",
+				sm.purchasePrice
+		);
+
+		// 최종 계산: SUM( (count / safeConvRate) * safePurchasePrice )
 		return Expressions.numberTemplate(
 				BigDecimal.class,
 				"SUM( ({0} / {1}) * {2} )",
 				log.count,
-				convDec,
-				sm.purchasePrice
+				safeConvRate,
+				safePurchasePrice
 		);
 	}
 
