@@ -1,5 +1,6 @@
 package com.boot.ict05_final_user.domain.attendance.repository;
 
+import com.boot.ict05_final_user.domain.attendance.dto.AttendanceDetailDTO;
 import com.boot.ict05_final_user.domain.attendance.dto.AttendanceListDTO;
 import com.boot.ict05_final_user.domain.attendance.dto.AttendanceSearchDTO;
 import com.boot.ict05_final_user.domain.staff.entity.AttendanceStatus;
@@ -17,6 +18,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 @RequiredArgsConstructor
@@ -31,7 +33,6 @@ public class AttendanceRepositoryImpl implements AttendanceRepositoryCustom {
             Pageable pageable,
             AttendanceSearchDTO dto
     ) {
-
         QAttendance attendance = QAttendance.attendance;
         QStaffProfile staff = QStaffProfile.staffProfile;
 
@@ -43,16 +44,12 @@ public class AttendanceRepositoryImpl implements AttendanceRepositoryCustom {
             condition.and(staff.store.id.eq(storeId));
         }
 
-        // ===== 검색어 / 타입 처리 =====
         if (dto != null) {
             String keyword = dto.getKeyword();
             String type = dto.getType();
             AttendanceStatus statusFilter = dto.getAttendanceStatus();
 
-            // 🔍 키워드 검색
             if (keyword != null && !keyword.isBlank()) {
-
-                // type 에 따라 분기
                 if ("name".equalsIgnoreCase(type)) {
                     condition.and(staff.staffName.containsIgnoreCase(keyword));
                 } else if ("id".equalsIgnoreCase(type)) {
@@ -65,12 +62,10 @@ public class AttendanceRepositoryImpl implements AttendanceRepositoryCustom {
                 }
             }
 
-            // 🔍 근태 상태 필터 (LATE, NORMAL, ABSENT 등)
             if (statusFilter != null) {
                 condition.and(attendance.status.eq(statusFilter));
             }
         }
-
 
         // 1) 내용 쿼리
         JPAQuery<AttendanceListDTO> contentQuery = queryFactory
@@ -94,7 +89,6 @@ public class AttendanceRepositoryImpl implements AttendanceRepositoryCustom {
                         attendance.checkIn.asc()
                 );
 
-        // 페이징 적용
         if (pageable.isPaged()) {
             contentQuery
                     .offset(pageable.getOffset())
@@ -103,7 +97,6 @@ public class AttendanceRepositoryImpl implements AttendanceRepositoryCustom {
 
         List<AttendanceListDTO> content = contentQuery.fetch();
 
-        // 2) total count 쿼리
         Long total = queryFactory
                 .select(attendance.count())
                 .from(attendance)
@@ -112,5 +105,42 @@ public class AttendanceRepositoryImpl implements AttendanceRepositoryCustom {
                 .fetchOne();
 
         return new PageImpl<>(content, pageable, total == null ? 0 : total);
+    }
+
+    // ✅ 근태 상세 조회 쿼리 (attendance + staff JOIN)
+    @Override
+    public Optional<AttendanceDetailDTO> findAttendanceDetailByIdAndStore(Long attendanceId, Long storeId) {
+
+        QAttendance attendance = QAttendance.attendance;
+        QStaffProfile staff = QStaffProfile.staffProfile;
+
+        BooleanBuilder condition = new BooleanBuilder();
+        condition.and(attendance.id.eq(attendanceId));
+
+        // 로그인한 점주의 매장에 속한 근태만 조회
+        if (storeId != null) {
+            condition.and(staff.store.id.eq(storeId));
+        }
+
+        AttendanceDetailDTO result = queryFactory
+                .select(Projections.constructor(
+                        AttendanceDetailDTO.class,
+                        attendance.id,
+                        attendance.workDate,
+                        attendance.checkIn,
+                        attendance.checkOut,
+                        attendance.status,
+                        attendance.workHours,
+                        attendance.memo,
+                        staff.id,
+                        staff.staffName,
+                        staff.staffEmploymentType
+                ))
+                .from(attendance)
+                .join(attendance.staffProfile, staff)
+                .where(condition)
+                .fetchOne();
+
+        return Optional.ofNullable(result);
     }
 }

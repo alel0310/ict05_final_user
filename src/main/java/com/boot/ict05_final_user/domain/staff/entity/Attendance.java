@@ -2,10 +2,7 @@ package com.boot.ict05_final_user.domain.staff.entity;
 
 import com.boot.ict05_final_user.domain.store.entity.Store;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -16,6 +13,7 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "attendance")
 @Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder

@@ -6,9 +6,7 @@ import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { FormModal } from '../Common/FormModal';
-import {
-  Plus, ChevronLeft, ChevronRight, Search
-} from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 // ===== Types =====
@@ -52,6 +50,34 @@ interface AttendanceItem {
   attendanceCheckOut: string | null;
   attendanceStatus: AttendanceStatusType;
   attendanceWorkHours: number;
+  staffId: number;
+  staffName: string;
+  staffEmploymentType: StaffEmploymentTypeType;
+}
+
+// ✅ 근무상세 모달용 상세 DTO 타입
+interface AttendanceDetail {
+  attendanceId: number;
+  attendanceWorkDate: string;
+  attendanceCheckIn: string | null;
+  attendanceCheckOut: string | null;
+  attendanceStatus: AttendanceStatusType;
+  attendanceWorkHours: number;
+  attendanceMemo: string | null;
+  staffId: number;
+  staffName: string;
+  staffEmploymentType: StaffEmploymentTypeType;
+}
+
+// ⭐ 근태 수정용 DTO 타입
+interface AttendanceModifyForm {
+  attendanceId: number;
+  attendanceWorkDate: string;
+  attendanceCheckIn: string | null;
+  attendanceCheckOut: string | null;
+  attendanceStatus: AttendanceStatusType;
+  attendanceWorkHours: number | null;
+  attendanceMemo: string | null;
   staffId: number;
   staffName: string;
   staffEmploymentType: StaffEmploymentTypeType;
@@ -105,7 +131,7 @@ const formatTime = (dateTime: string | null | undefined) => {
   return dateTime.substring(11, 16);
 };
 
-// ✅ 실제 근무시간(hh.hh)을 "7시간 15분 (7.25시간)" 형태로 변환
+// ✅ 실제 근무시간(hh.hh)을 "7시간 15분" 형태로 변환
 const formatWorkHoursLabel = (hours: number | null | undefined) => {
   if (hours == null || Number.isNaN(hours)) return '-';
 
@@ -131,11 +157,25 @@ export function StaffSchedule() {
   const [attendanceKeyword, setAttendanceKeyword] = useState('');
   const [attendanceSearchType, setAttendanceSearchType] =
     useState<'name' | 'id' | 'all'>('name');
-  const [attendanceStatusFilter, setAttendanceStatusFilter] = useState<string>('ALL');
+  const [attendanceStatusFilter, setAttendanceStatusFilter] =
+    useState<string>('ALL');
 
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
-
   const [selectedStaffForForm, setSelectedStaffForForm] = useState<string>('');
+
+  // ✅ 근무상세 모달 state
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [attendanceDetail, setAttendanceDetail] =
+    useState<AttendanceDetail | null>(null);
+
+  // ⭐ 근태 수정 모달 state
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editTargetId, setEditTargetId] = useState<number | null>(null);
+  const [editInitialData, setEditInitialData] = useState<FormValues | null>(
+    null
+  );
+  const [editLoading, setEditLoading] = useState(false);
 
   // =====================
   // 📌 직원 / 휴일 로딩
@@ -214,7 +254,7 @@ export function StaffSchedule() {
       const res = await axios.get<StoreHoliday[]>(
         `${baseUrl}/api/store-holidays`,
         {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         }
       );
 
@@ -278,7 +318,13 @@ export function StaffSchedule() {
   useEffect(() => {
     setAttendancePage(0);
     loadAttendance(currentDate, 0);
-  }, [currentDate, attendanceKeyword, attendanceSearchType, attendanceStatusFilter, loadAttendance]);
+  }, [
+    currentDate,
+    attendanceKeyword,
+    attendanceSearchType,
+    attendanceStatusFilter,
+    loadAttendance,
+  ]);
 
   const getAttendanceStatusBadge = (status: AttendanceStatusType) => {
     switch (status) {
@@ -317,17 +363,17 @@ export function StaffSchedule() {
   const todayStr = new Date().toISOString().split('T')[0];
 
   // =====================
-  // 📌 근태 등록 함수
+  // 📌 근태 등록 함수 (신규)
   // =====================
   const registerAttendance = async (data: any) => {
     try {
       const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
       const token = localStorage.getItem('accessToken');
 
-      const date = data.date as string;              // "2025-11-22"
+      const date = data.date as string; // "2025-11-22"
       const staffId = data.staffId;
-      const checkInTime = data.attendanceCheckIn;    // "06:30"
-      const checkOutTime = data.attendanceCheckOut;  // "04:30"
+      const checkInTime = data.attendanceCheckIn; // "06:30"
+      const checkOutTime = data.attendanceCheckOut; // "04:30"
       const status = data.attendanceStatus || 'NORMAL';
 
       if (!date || !staffId || !checkInTime || !checkOutTime) {
@@ -346,7 +392,7 @@ export function StaffSchedule() {
         const workDate = new Date(y, m - 1, d);
         const nextDate = new Date(workDate);
         nextDate.setDate(workDate.getDate() + 1);
-        attendanceCheckOutDatePart = formatDateLocal(nextDate);  // "2025-11-23"
+        attendanceCheckOutDatePart = formatDateLocal(nextDate); // "2025-11-23"
       }
 
       const attendanceCheckOut = `${attendanceCheckOutDatePart}T${checkOutTime}:00`;
@@ -368,10 +414,10 @@ export function StaffSchedule() {
 
       const payload = {
         staffId: Number(staffId),
-        attendanceWorkDate,          // "2025-11-22"
-        attendanceCheckIn,           // "2025-11-22T07:00:00"
-        attendanceCheckOut,          // "2025-11-23T04:30:00" 이런 형식
-        attendanceStatus: status,    // 'NORMAL' 같은 enum 값
+        attendanceWorkDate, // "2025-11-22"
+        attendanceCheckIn, // "2025-11-22T07:00:00"
+        attendanceCheckOut, // "2025-11-23T04:30:00" 이런 형식
+        attendanceStatus: status, // 'NORMAL' 같은 enum 값
         attendanceWorkHours: workHours, // 숫자
         attendanceMemo: data.notes || '',
       };
@@ -393,13 +439,96 @@ export function StaffSchedule() {
       console.error('📌 근태 등록 실패', error.response?.data || error);
       toast.error(
         (error.response?.data as any)?.message ||
-        '근태 등록에 실패했습니다.'
+          '근태 등록에 실패했습니다.'
+      );
+    }
+  };
+
+  // ⭐ 근태 수정 함수 (기존 기록 수정)
+  const updateAttendance = async (attendanceId: number, data: any) => {
+    try {
+      const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
+      const token = localStorage.getItem('accessToken');
+
+      const date = data.date as string;
+      const staffId = data.staffId;
+      const checkInTime = data.attendanceCheckIn;
+      const checkOutTime = data.attendanceCheckOut;
+      const status = data.attendanceStatus || 'NORMAL';
+
+      if (!date || !staffId || !checkInTime || !checkOutTime) {
+        toast.error('근무 일자, 출근/퇴근 시간, 직원을 모두 입력해주세요.');
+        return;
+      }
+
+      const attendanceWorkDate = date;
+      let attendanceCheckIn = `${date}T${checkInTime}:00`;
+      let attendanceCheckOutDatePart = date;
+
+      // 🔥 퇴근 시간이 출근 시간보다 이르면 "다음 날 퇴근" 처리
+      if (checkOutTime <= checkInTime) {
+        const [y, m, d] = date.split('-').map(Number);
+        const workDate = new Date(y, m - 1, d);
+        const nextDate = new Date(workDate);
+        nextDate.setDate(workDate.getDate() + 1);
+        attendanceCheckOutDatePart = formatDateLocal(nextDate);
+      }
+
+      const attendanceCheckOut = `${attendanceCheckOutDatePart}T${checkOutTime}:00`;
+
+      let workHours: number;
+      if (
+        data.attendanceWorkHours !== undefined &&
+        data.attendanceWorkHours !== null &&
+        data.attendanceWorkHours !== ''
+      ) {
+        workHours = Number(data.attendanceWorkHours);
+      } else {
+        const start = new Date(attendanceCheckIn);
+        const end = new Date(attendanceCheckOut);
+        const diffHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+        workHours = Number(Math.max(0, diffHours).toFixed(2));
+      }
+
+      const payload = {
+        staffId: Number(staffId),
+        attendanceWorkDate,
+        attendanceCheckIn,
+        attendanceCheckOut,
+        attendanceStatus: status,
+        attendanceWorkHours: workHours,
+        attendanceMemo: data.notes || '',
+      };
+
+      console.log('📌 근태 수정 payload', payload);
+
+      await axios.put(
+        `${baseUrl}/api/attendance/modify/${attendanceId}`,
+        payload,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      toast.success('근태가 수정되었습니다.');
+      setIsEditModalOpen(false);
+      setEditTargetId(null);
+      setEditInitialData(null);
+      setSelectedStaffForForm('');
+
+      // 현재 날짜/페이지 새로고침
+      loadAttendance(currentDate, attendancePage);
+    } catch (error: any) {
+      console.error('📌 근태 수정 실패', error.response?.data || error);
+      toast.error(
+        (error.response?.data as any)?.message ||
+          '근태 수정에 실패했습니다.'
       );
     }
   };
 
   // =====================
-  // 📌 모달 폼 필드 정의 (근무 템플릿 제거 버전)
+  // 📌 모달 폼 필드 정의
   // =====================
   const scheduleFormFields = useMemo(() => {
     const getFields = (selectedStaffId: string): FormField[] => {
@@ -414,8 +543,8 @@ export function StaffSchedule() {
           placeholder: '근무중인 직원을 선택하세요',
           options: staffList.map(st => ({
             value: st.id,
-            label: `${st.name} (${st.employmentType})`
-          }))
+            label: `${st.name} (${st.employmentType})`,
+          })),
         },
         {
           name: 'date',
@@ -426,8 +555,10 @@ export function StaffSchedule() {
             const v = String(value ?? '');
             if (!v) return undefined;
             const h = holidays.find(holiday => holiday.date === v);
-            return h ? `${h.name}은 매장 휴일입니다. 다른 날짜를 선택해주세요.` : undefined;
-          }
+            return h
+              ? `${h.name}은 매장 휴일입니다. 다른 날짜를 선택해주세요.`
+              : undefined;
+          },
         },
         {
           name: 'attendanceCheckIn',
@@ -435,7 +566,7 @@ export function StaffSchedule() {
           type: 'select',
           required: true,
           placeholder: '출근 시간을 선택하세요',
-          options: TIME_OPTIONS
+          options: TIME_OPTIONS,
         },
         {
           name: 'attendanceCheckOut',
@@ -443,9 +574,8 @@ export function StaffSchedule() {
           type: 'select',
           required: true,
           placeholder: '퇴근 시간을 선택하세요',
-          options: TIME_OPTIONS
+          options: TIME_OPTIONS,
         },
-
         {
           name: 'attendanceStatus',
           label: '근태 상태',
@@ -459,27 +589,25 @@ export function StaffSchedule() {
             { value: 'ABSENT', label: '결근' },
             { value: 'VACATION', label: '휴가' },
             { value: 'HOLIDAY', label: '휴일' },
-            { value: 'RESIGN', label: '퇴사' }
-          ]
+            { value: 'RESIGN', label: '퇴사' },
+          ],
         },
         {
           name: 'attendanceWorkHours',
           label: '실제 근무 시간(시간 단위)',
           type: 'number',
           required: false,
-          placeholder: '예: 8.0 (미입력 시 출퇴근 시간으로 자동 계산)'
+          placeholder: '예: 8.0 (미입력 시 출퇴근 시간으로 자동 계산)',
         },
         {
           name: 'notes',
           label: '메모',
           type: 'textarea',
-          required: false
-        }
+          required: false,
+        },
       ];
 
-      // sel 을 지금은 안 쓰지만, 나중에 정규직/파트타임에 따라 필드 바꾸고 싶으면 여기서 분기 가능
       void sel;
-
       return fields;
     };
     return getFields;
@@ -501,18 +629,21 @@ export function StaffSchedule() {
         active: '근무중',
         inactive: '휴직중',
         vacation: '휴가중',
-        resigned: '퇴사'
+        resigned: '퇴사',
       };
-      toast.error(`${staff.name}님은 현재 ${statusText[staff.status]} 상태입니다.`);
+      toast.error(
+        `${staff.name}님은 현재 ${statusText[staff.status]} 상태입니다.`
+      );
       return;
     }
     const holidayInfo = holidays.find(h => h.date === data.date);
     if (holidayInfo) {
-      toast.error(`${holidayInfo.name}은 매장 휴일입니다. 다른 날짜를 선택해주세요.`);
+      toast.error(
+        `${holidayInfo.name}은 매장 휴일입니다. 다른 날짜를 선택해주세요.`
+      );
       return;
     }
 
-    // 실제 근태 등록
     await registerAttendance(data);
 
     setIsScheduleModalOpen(false);
@@ -527,18 +658,112 @@ export function StaffSchedule() {
 
   const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
 
+  // =====================
+  // 📌 근무상세 열기
+  // =====================
+  const handleOpenDetail = async (attendanceId: number) => {
+    try {
+      setIsDetailOpen(true);
+      setDetailLoading(true);
+
+      const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
+      const token = localStorage.getItem('accessToken');
+
+      const res = await axios.get<AttendanceDetail>(
+        `${baseUrl}/api/attendance/detail/${attendanceId}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      setAttendanceDetail(res.data);
+    } catch (e: any) {
+      console.error('📌 근무상세 조회 실패', e?.response?.data || e);
+      toast.error(
+        e?.response?.data?.message || '근무상세 정보를 불러오지 못했습니다.'
+      );
+      setAttendanceDetail(null);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const handleCloseDetail = () => {
+    setIsDetailOpen(false);
+    setAttendanceDetail(null);
+  };
+
+  // ⭐ 근무 수정 폼 열기
+  const handleOpenEdit = async (attendanceId: number) => {
+    try {
+      setEditLoading(true);
+
+      const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
+      const token = localStorage.getItem('accessToken');
+
+      const res = await axios.get<AttendanceModifyForm>(
+        `${baseUrl}/api/attendance/modify/${attendanceId}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      const dto = res.data;
+
+      const toTime = (dt: string | null) =>
+        dt && dt.length >= 16 ? dt.substring(11, 16) : '';
+
+      const initial: FormValues = {
+        staffId: String(dto.staffId),
+        date: dto.attendanceWorkDate,
+        attendanceCheckIn: toTime(dto.attendanceCheckIn),
+        attendanceCheckOut: toTime(dto.attendanceCheckOut),
+        attendanceStatus: dto.attendanceStatus,
+        attendanceWorkHours: dto.attendanceWorkHours ?? '',
+        notes: dto.attendanceMemo ?? '',
+      };
+
+      setEditInitialData(initial);
+      setEditTargetId(attendanceId);
+      setIsEditModalOpen(true);
+    } catch (e: any) {
+      console.error('📌 근태 수정 폼 조회 실패', e?.response?.data || e);
+      toast.error(
+        e?.response?.data?.message || '근태 수정 정보를 불러오지 못했습니다.'
+      );
+      setEditInitialData(null);
+      setEditTargetId(null);
+      setIsEditModalOpen(false);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const handleEditSubmit = async (data: any) => {
+    if (!editTargetId) {
+      toast.error('수정할 근태 정보를 찾을 수 없습니다.');
+      return;
+    }
+    await updateAttendance(editTargetId, data);
+  };
+
   return (
     <div className="space-y-6">
       {/* 헤더 */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">근무 일정 / 근태 관리</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">
+            근무 일정 / 근태 관리
+          </h1>
           <p className="text-sm text-gray-600 mt-1">
             직원들의 출퇴근(근태)과 근무 일정을 함께 관리합니다
           </p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => setIsScheduleModalOpen(true)} className="gap-2">
+          <Button
+            onClick={() => setIsScheduleModalOpen(true)}
+            className="gap-2"
+          >
             <Plus className="w-4 h-4" /> 근태 추가
           </Button>
         </div>
@@ -606,14 +831,22 @@ export function StaffSchedule() {
       <Card>
         <CardContent className="p-4">
           <div className="flex items-center justify-between">
-            <Button variant="outline" onClick={() => navigateDay('prev')} className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => navigateDay('prev')}
+              className="gap-2"
+            >
               <ChevronLeft className="w-4 h-4" /> 이전 날
             </Button>
             <h2 className="font-semibold">
               {currentDate.getFullYear()}년 {currentDate.getMonth() + 1}월{' '}
               {currentDate.getDate()}일 ({dayNames[currentDate.getDay()]})
             </h2>
-            <Button variant="outline" onClick={() => navigateDay('next')} className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => navigateDay('next')}
+              className="gap-2"
+            >
               다음 날 <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
@@ -638,12 +871,15 @@ export function StaffSchedule() {
                     className="p-4 hover:shadow-md transition-shadow"
                   >
                     <div className="flex items-center justify-between">
+                      {/* 왼쪽: 직원 정보 + 근태 정보 */}
                       <div className="flex-1">
                         <div className="flex items-center gap-4 mb-3">
                           <div>
                             <h4 className="font-semibold">{item.staffName}</h4>
                             <p className="text-sm text-dark-gray">
-                              {getEmploymentTypeLabel(item.staffEmploymentType)}
+                              {getEmploymentTypeLabel(
+                                item.staffEmploymentType
+                              )}
                             </p>
                           </div>
                           {getAttendanceStatusBadge(item.attendanceStatus)}
@@ -670,16 +906,31 @@ export function StaffSchedule() {
                           </div>
                           <div>
                             <p className="text-dark-gray">실제 근무시간</p>
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
                               <p className="font-semibold">
-                                {formatWorkHoursLabel(item.attendanceWorkHours)}
+                                {formatWorkHoursLabel(
+                                  item.attendanceWorkHours
+                                )}
                               </p>
                               <Button
                                 size="sm"
                                 variant="outline"
                                 className="ml-3"
+                                onClick={() =>
+                                  handleOpenDetail(item.attendanceId)
+                                }
                               >
-                                근무리포트 상세
+                                근무상세
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  handleOpenEdit(item.attendanceId)
+                                }
+                                disabled={editLoading}
+                              >
+                                수정
                               </Button>
                             </div>
                           </div>
@@ -725,7 +976,7 @@ export function StaffSchedule() {
         </CardContent>
       </Card>
 
-      {/* 근태 입력 모달 (근무 템플릿 제거) */}
+      {/* 근태 입력 모달 (신규 등록) */}
       <FormModal
         key="add-schedule"
         isOpen={isScheduleModalOpen}
@@ -738,9 +989,125 @@ export function StaffSchedule() {
         fields={scheduleFormFields(selectedStaffForForm)}
         initialData={{ date: todayStr }}
         onChange={(field, value) => {
-          if (field === 'staffId') setSelectedStaffForForm(String(value ?? ''));
+          if (field === 'staffId')
+            setSelectedStaffForForm(String(value ?? ''));
         }}
       />
+
+      {/* ⭐ 근태 수정 모달 */}
+      <FormModal
+        key={editTargetId ? `edit-${editTargetId}` : 'edit'}
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditTargetId(null);
+          setEditInitialData(null);
+          setSelectedStaffForForm('');
+        }}
+        onSubmit={handleEditSubmit}
+        title="근무 일정 / 근태 수정"
+        fields={scheduleFormFields(selectedStaffForForm)}
+        initialData={editInitialData || undefined}
+        onChange={(field, value) => {
+          if (field === 'staffId')
+            setSelectedStaffForForm(String(value ?? ''));
+        }}
+      />
+
+      {/* ✅ 근무상세 모달 */}
+      {isDetailOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-lg w-full max-w-lg mx-4 p-6 relative">
+            <button
+              type="button"
+              onClick={handleCloseDetail}
+              className="absolute right-4 top-4 text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <h3 className="text-lg font-semibold mb-4">근무상세</h3>
+
+            {detailLoading ? (
+              <p className="text-sm text-gray-500">
+                상세 정보를 불러오는 중입니다...
+              </p>
+            ) : attendanceDetail ? (
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">직원명</span>
+                  <span className="font-semibold">
+                    {attendanceDetail.staffName} (
+                    {getEmploymentTypeLabel(
+                      attendanceDetail.staffEmploymentType
+                    )}
+                    )
+                  </span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-gray-500">근무일자</span>
+                  <span className="font-semibold">
+                    {attendanceDetail.attendanceWorkDate}
+                  </span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-gray-500">출근시간</span>
+                  <span className="font-semibold">
+                    {formatTime(attendanceDetail.attendanceCheckIn)}
+                  </span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-gray-500">퇴근시간</span>
+                  <span className="font-semibold">
+                    {formatTime(attendanceDetail.attendanceCheckOut)}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500">근태 상태</span>
+                  <span className="font-semibold">
+                    {getAttendanceStatusBadge(
+                      attendanceDetail.attendanceStatus
+                    )}
+                  </span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-gray-500">실제 근무시간</span>
+                  <span className="font-semibold">
+                    {formatWorkHoursLabel(
+                      attendanceDetail.attendanceWorkHours
+                    )}
+                  </span>
+                </div>
+
+                <div>
+                  <p className="text-gray-500 mb-1">근태 메모 / 사유</p>
+                  <p className="text-sm whitespace-pre-wrap border rounded-md px-3 py-2 bg-gray-50 min-h-[60px]">
+                    {attendanceDetail.attendanceMemo &&
+                    attendanceDetail.attendanceMemo.trim().length > 0
+                      ? attendanceDetail.attendanceMemo
+                      : '등록된 메모가 없습니다.'}
+                  </p>
+                </div>
+
+                <div className="flex justify-end mt-4">
+                  <Button variant="outline" onClick={handleCloseDetail}>
+                    닫기
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-red-500">
+                근무상세 정보를 찾을 수 없습니다.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

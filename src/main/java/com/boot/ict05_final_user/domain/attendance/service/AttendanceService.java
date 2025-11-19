@@ -1,14 +1,12 @@
 package com.boot.ict05_final_user.domain.attendance.service;
 
+import com.boot.ict05_final_user.domain.staff.entity.StaffProfile;
 import com.boot.ict05_final_user.config.security.auth.CustomUserDetails;
 import com.boot.ict05_final_user.config.security.principal.AppUser;
-import com.boot.ict05_final_user.domain.attendance.dto.AttendanceListDTO;
-import com.boot.ict05_final_user.domain.attendance.dto.AttendanceSearchDTO;
-import com.boot.ict05_final_user.domain.attendance.dto.AttendanceWriteFormDTO;
+import com.boot.ict05_final_user.domain.attendance.dto.*;
 import com.boot.ict05_final_user.domain.attendance.repository.AttendanceRepository;
 import com.boot.ict05_final_user.domain.staff.entity.Attendance;
 import com.boot.ict05_final_user.domain.staff.entity.AttendanceStatus;
-import com.boot.ict05_final_user.domain.staff.entity.StaffProfile;
 import com.boot.ict05_final_user.domain.store.entity.Store;
 import com.boot.ict05_final_user.domain.staff.repository.StaffRepository;
 import com.boot.ict05_final_user.domain.store.repository.StoreRepository;
@@ -146,6 +144,143 @@ public class AttendanceService {
         return attendance.getId();
     }
 
+    /**
+     * 근태 상세 조회
+     * 로그인한 점주의 storeId 기준으로, 해당 근태(attendanceId)가
+     * 내 매장의 기록인지 검증하고 상세 정보를 반환한다.
+     */
+    @Transactional(readOnly = true)
+    public AttendanceDetailDTO getAttendanceDetail(Long attendanceId) {
+        Long storeId = getCurrentStoreId();
+
+        if (storeId == null) {
+            throw new IllegalStateException("가맹점 정보가 없어 근태 상세 조회를 할 수 없습니다.");
+        }
+
+        return attendanceRepository
+                .findAttendanceDetailByIdAndStore(attendanceId, storeId)
+                .orElseThrow(() -> new IllegalArgumentException("해당 근태 기록을 찾을 수 없습니다."));
+    }
+
+    /* ================== 근태 수정 폼 조회 ================== */
+
+    /**
+     * 근태 수정 화면에서 사용할 기존 데이터 조회
+     * - 로그인한 점주의 storeId 기준으로 본인 매장 데이터만 조회
+     */
+    @Transactional(readOnly = true)
+    public AttendanceModifyFormDTO getAttendanceModifyForm(Long attendanceId) {
+
+        Long storeId = getCurrentStoreId();
+        if (storeId == null) {
+            throw new IllegalStateException("가맹점 정보가 없어 근태 수정 폼을 조회할 수 없습니다.");
+        }
+
+        com.boot.ict05_final_user.domain.staff.entity.Attendance attendance =
+                attendanceRepository.findById(attendanceId)
+                        .orElseThrow(() -> new IllegalArgumentException("근태 정보를 찾을 수 없습니다. id=" + attendanceId));
+
+        // 내 매장 데이터인지 검증
+        if (attendance.getStore() == null
+                || attendance.getStore().getId() == null
+                || !attendance.getStore().getId().equals(storeId)) {
+            throw new IllegalArgumentException("현재 로그인한 매장의 근태 정보가 아닙니다.");
+        }
+
+        // === Entity -> DTO 매핑 ===
+        AttendanceModifyFormDTO dto = new AttendanceModifyFormDTO();
+        dto.setAttendanceId(attendance.getId());
+        dto.setAttendanceWorkDate(attendance.getWorkDate());
+        dto.setAttendanceCheckIn(attendance.getCheckIn());
+        dto.setAttendanceCheckOut(attendance.getCheckOut());
+        dto.setAttendanceStatus(attendance.getStatus());
+        dto.setAttendanceWorkHours(attendance.getWorkHours());
+        dto.setAttendanceMemo(attendance.getMemo());
+
+        StaffProfile staff = attendance.getStaffProfile();
+        if (staff != null) {
+            dto.setStaffId(staff.getId());
+            dto.setStaffName(staff.getStaffName());
+            dto.setStaffEmploymentType(staff.getStaffEmploymentType());
+        }
+
+        return dto;
+    }
+
+    /* ================== 근태 수정 저장 ================== */
+
+    /**
+     * 근태 수정
+     * - 출퇴근 시간/상태/메모/근무시간 등을 변경
+     * - staff 변경 허용 여부는 정책에 따라 선택 (지금은 같은 매장 직원일 때만 변경 가능하게 예시)
+     */
+    public void modifyAttendance(AttendanceModifyFormDTO dto) {
+
+        Long storeId = getCurrentStoreId();
+        if (storeId == null) {
+            throw new IllegalStateException("가맹점 정보가 없어 근태 수정을 할 수 없습니다.");
+        }
+
+        com.boot.ict05_final_user.domain.staff.entity.Attendance attendance =
+                attendanceRepository.findById(dto.getAttendanceId())
+                        .orElseThrow(() -> new IllegalArgumentException("근태 정보를 찾을 수 없습니다. id=" + dto.getAttendanceId()));
+
+        // 내 매장 데이터인지 검증
+        if (attendance.getStore() == null
+                || attendance.getStore().getId() == null
+                || !attendance.getStore().getId().equals(storeId)) {
+            throw new IllegalArgumentException("현재 로그인한 매장의 근태 정보가 아닙니다.");
+        }
+
+        // ===== 직원 변경 허용 (옵션) =====
+        if (dto.getStaffId() != null
+                && (attendance.getStaffProfile() == null
+                || !dto.getStaffId().equals(attendance.getStaffProfile().getId()))) {
+
+            StaffProfile newStaff = staffRepository.findById(dto.getStaffId())
+                    .orElseThrow(() -> new IllegalArgumentException("직원 정보를 찾을 수 없습니다. id=" + dto.getStaffId()));
+
+            // 새 직원도 같은 매장인지 검증
+            if (newStaff.getStore() == null
+                    || newStaff.getStore().getId() == null
+                    || !newStaff.getStore().getId().equals(storeId)) {
+                throw new IllegalArgumentException("해당 매장의 직원이 아니라 근태를 변경할 수 없습니다.");
+            }
+
+            attendance.setStaffProfile(newStaff);
+        }
+
+        // ===== 출퇴근 시간 / 근무 시간 / 상태 / 메모 수정 =====
+
+        LocalDateTime checkIn = dto.getAttendanceCheckIn();
+        LocalDateTime checkOut = dto.getAttendanceCheckOut();
+
+        if (checkIn == null || checkOut == null) {
+            throw new IllegalArgumentException("출근/퇴근 시간은 필수입니다.");
+        }
+        if (checkIn.isAfter(checkOut)) {
+            throw new IllegalArgumentException("출근 시간이 퇴근 시간보다 늦을 수 없습니다.");
+        }
+
+        attendance.setWorkDate(dto.getAttendanceWorkDate());
+        attendance.setCheckIn(checkIn);
+        attendance.setCheckOut(checkOut);
+        attendance.setStatus(dto.getAttendanceStatus() != null
+                ? dto.getAttendanceStatus()
+                : AttendanceStatus.NORMAL);
+        attendance.setMemo(dto.getAttendanceMemo());
+
+        // 근무 시간: 프론트에서 직접 보낸 값이 있으면 우선 사용, 아니면 다시 계산
+        if (dto.getAttendanceWorkHours() != null) {
+            attendance.setWorkHours(dto.getAttendanceWorkHours());
+        } else {
+            attendance.setWorkHours(calculateWorkHours(checkIn, checkOut));
+        }
+
+        // 클래스 전체가 @Transactional 이라서 별도 save() 없이 dirty checking으로 업데이트됨
+        log.info("📌 근태 수정 완료: attendanceId={}, storeId={}", attendance.getId(), storeId);
+    }
+
     /* ================== 공통 유틸 ================== */
 
     private Long getCurrentStoreId() {
@@ -184,4 +319,6 @@ public class AttendanceService {
         return BigDecimal.valueOf(minutes)
                 .divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP);
     }
+
+
 }
