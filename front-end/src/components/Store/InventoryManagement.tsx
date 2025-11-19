@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { DataTable, Column } from '../Common/DataTable';
 import { FormModal } from '../Common/FormModal';
 import { ConfirmDialog, useConfirmDialog } from '../Common/ConfirmDialog';
@@ -52,11 +52,9 @@ type OrderStatus = 'pending' | 'approved' | 'shipping' | 'delivered';
 
 // 백엔드 대신 프론트에서 수량 / 적정수량 기반 재고 상태 계산
 function calcStockStatus(current: number, optimal: number): StockStatus {
-  if (current <= 0) return 'shortage';
-  if (optimal > 0) {
-    if (current <= optimal * 0.5) return 'low';
-  }
-  return 'sufficient';
+  if (current == null || current <= 0) return 'shortage';
+  if (!optimal || optimal <= 0) return 'sufficient';
+  return current < optimal ? 'low' : 'sufficient';
 }
 interface InventoryItem {
   // 테이블 row key / 체크박스용
@@ -146,8 +144,6 @@ const sampleOrders: Order[] = [
     total: 150000
   }
 ];
-
-// src/components/Store/InventoryManagement.tsx
 
 function mapCategoryLabel(cat?: string | null): string {
   switch (cat) {
@@ -255,23 +251,29 @@ export function InventoryManagement() {
 
   // TODO: 실제 로그인 정보에서 매장 ID 읽어오는 쪽으로 교체
   const STORE_ID = 2;
+  
+  // 컴포넌트 내부 (state 선언들 밑에)
+  const didFetchRef = useRef(false);
 
   useEffect(() => {
-    async function load() {
+    // React StrictMode 에서의 두 번째 마운트 때는 그냥 리턴
+    if (didFetchRef.current) return;
+    didFetchRef.current = true;
+
+    const loadInventory = async () => {
       try {
         const list = await fetchStoreInventory(STORE_ID);
-        const mapped = list.map(mapStoreInventoryToInventoryItem); // ✅ 이거
+        const mapped = list.map(mapStoreInventoryToInventoryItem);
         setInventory(mapped);
-      } catch (e: any) {
+        setHasInventory(mapped.length > 0);
+      } catch (e) {
         console.error(e);
         toast.error('가맹점 재고 목록을 불러오지 못했습니다.');
       }
-    }
+    };
 
-    load();
-  }, []);
-
-
+    loadInventory();
+  }, [STORE_ID]);
   
   /* ---------- 선택/전체선택 핸들러 (선언문으로 호이스팅) ---------- */
   function handleItemSelect(itemId: number, checked: boolean) {
@@ -527,11 +529,13 @@ export function InventoryManagement() {
                 ...item,
                 minStock: newMinStock,
                 status:
-                  item.currentStock <= 0
+                  item.currentStock == null || item.currentStock <= 0
                     ? 'shortage'
-                    : item.currentStock <= newMinStock * 0.5
-                    ? 'low'
-                    : 'sufficient'
+                    : !newMinStock || newMinStock <= 0
+                      ? 'sufficient'
+                      : item.currentStock < newMinStock
+                        ? 'low'
+                        : 'sufficient'
               }
             : item
         )
@@ -1034,8 +1038,9 @@ function ItemDetailContent({
   };
 
   const getStockStatus = () => {
-    if (item.currentStock <= 0) return { status: 'shortage', color: 'text-red-600', text: '품절' };
-    if (item.currentStock <= item.minStock * 0.5) return { status: 'low', color: 'text-orange-600', text: '부족' };
+    if (item.currentStock == null || item.currentStock <= 0) return { status: 'shortage', color: 'text-red-600', text: '품절' };
+    if (!item.minStock || item.minStock <= 0) return { status: 'sufficient', color: 'text-green-600', text: '충분' };
+    if (item.currentStock < item.minStock) return { status: 'low', color: 'text-orange-600', text: '부족' };
     return { status: 'sufficient', color: 'text-green-600', text: '충분' };
   };
 
