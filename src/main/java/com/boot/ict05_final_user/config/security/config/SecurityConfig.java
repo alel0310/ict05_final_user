@@ -60,7 +60,14 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
         // 개발/운영 도메인 추가
-        cfg.setAllowedOrigins(List.of("http://localhost:3000", "http://localhost:5173", "http://localhost:8082"));
+        cfg.setAllowedOrigins(List.of(
+                "https://toastlab.duckdns.org",       // ← 추가
+                "http://toastlab.duckdns.org",        // ← 추가
+                "https://toastlabadmin.duckdns.org",  // ← 추가
+                "http://localhost:3000",
+                "http://localhost:5173",
+                "http://localhost:8082"
+        ));
         cfg.setAllowedMethods(List.of("GET","POST","PUT","DELETE","PATCH","OPTIONS"));
         cfg.setAllowedHeaders(List.of("Authorization","Content-Type","X-Requested-With","X-Refresh-Token"));
         cfg.setExposedHeaders(List.of("Authorization","Set-Cookie"));
