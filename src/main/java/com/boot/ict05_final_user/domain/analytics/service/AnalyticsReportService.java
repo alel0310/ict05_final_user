@@ -16,10 +16,18 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 분석 리포트(PDF) 생성을 담당하는 서비스.
+ * 분석 리포트(PDF) 생성 서비스.
  *
- * - AnalyticsService 로부터 분석 데이터를 수집
- * - PythonPdfClient 를 통해 FastAPI로 PDF 생성 요청
+ * <p>AnalyticsService로부터 데이터를 수집하여 Python FastAPI 기반 PDF 서비스에 페이로드를 전송하고,
+ * 생성된 PDF 바이트를 반환합니다.</p>
+ *
+ * <ul>
+ *   <li>KPI / Orders / Menu / TimeDay / Material 리포트 생성</li>
+ *   <li>PythonPdfClient를 통해 외부 PDF 생성 서비스와 통신</li>
+ * </ul>
+ *
+ * @author 이경욱
+ * @since 2025-11-20
  */
 @Service
 @Slf4j
@@ -35,6 +43,19 @@ public class AnalyticsReportService {
     // =========================================
     // KPI 리포트
     // =========================================
+
+    /**
+     * KPI 리포트(PDF) 생성 요청을 수행합니다.
+     *
+     * <p>내부적으로 AnalyticsService에서 KPI 행을 모두 조회한 뒤 PythonPdfClient로 전송합니다.</p>
+     *
+     * @param storeId 점포 ID.
+     * @param startDate 조회 시작일 (YYYY-MM-DD).
+     * @param endDate 조회 종료일 (YYYY-MM-DD).
+     * @param viewBy 집계 단위 (DAY / MONTH).
+     * @return 생성된 PDF 바이트 배열.
+     * @throws RuntimeException PDF 생성 실패 또는 외부 서비스 통신 실패 시 발생할 수 있습니다.
+     */
     public byte[] generateKpiReport(Long storeId,
                                     LocalDate startDate,
                                     LocalDate endDate,
@@ -100,8 +121,21 @@ public class AnalyticsReportService {
     }
 
     // =========================================
-// 주문 분석 리포트
-// =========================================
+    // 주문 분석 리포트
+    // =========================================
+
+    /**
+     * 주문 분석 리포트(PDF) 생성.
+     *
+     * <p>viewBy에 따라 일단위(주문 단위) 또는 월단위 집계 데이터를 Python PDF 서비스로 전송합니다.</p>
+     *
+     * @param storeId 점포 ID.
+     * @param startDate 조회 시작일.
+     * @param endDate 조회 종료일.
+     * @param viewBy DAY 또는 MONTH.
+     * @return 생성된 PDF 바이트 배열.
+     * @throws RuntimeException PDF 생성 또는 외부 통신 실패 시 발생할 수 있습니다.
+     */
     public byte[] generateOrdersReport(Long storeId,
                                        LocalDate startDate,
                                        LocalDate endDate,
@@ -165,7 +199,6 @@ public class AnalyticsReportService {
             List<Map<String, Object>> data = rows.stream()
                     .map(r -> {
                         Map<String, Object> m = new LinkedHashMap<>();
-
                         m.put("date", r.yearMonth());                        // "YYYY-MM"
                         m.put("orderCount", safeInt(r.orderCount()));        // 주문수
                         m.put("totalSales", safeNumber(r.totalSales()));     // 총매출
@@ -184,11 +217,20 @@ public class AnalyticsReportService {
         }
     }
 
-
-
     // =========================================
     // 메뉴 분석 리포트
     // =========================================
+
+    /**
+     * 메뉴 분석 리포트(PDF) 생성.
+     *
+     * @param storeId 점포 ID.
+     * @param startDate 조회 시작일.
+     * @param endDate 조회 종료일.
+     * @param viewBy DAY 또는 MONTH.
+     * @return 생성된 PDF 바이트 배열.
+     * @throws RuntimeException 외부 서비스 통신 실패 시 발생할 수 있습니다.
+     */
     public byte[] generateMenuReport(Long storeId,
                                      LocalDate startDate,
                                      LocalDate endDate,
@@ -265,14 +307,17 @@ public class AnalyticsReportService {
         }
     }
 
-
     /**
-     * 시간/요일 분석 보고서 PDF 생성.
+     * 시간/요일 분석 리포트(PDF) 생성.
      *
-     * @param storeId   점포 ID
-     * @param startDate 조회 시작일 (YYYY-MM-DD)
-     * @param endDate   조회 종료일 (YYYY-MM-DD)
-     * @return PDF 바이트 배열
+     * <p>상단 요약, 차트, 테이블(일/월)을 조합하여 TimeDayReportPayload를 구성하고 Python 서비스로 전송합니다.</p>
+     *
+     * @param storeId 점포 ID.
+     * @param startDate 조회 시작일.
+     * @param endDate 조회 종료일.
+     * @param viewBy DAY 또는 MONTH.
+     * @return 생성된 PDF 바이트 배열.
+     * @throws RuntimeException 외부 서비스 예외 발생 시 전파됩니다.
      */
     public byte[] generateTimeDayReport(
             Long storeId,
@@ -337,13 +382,14 @@ public class AnalyticsReportService {
     }
 
     /**
-     * 재료 분석 보고서 PDF 생성.
+     * 재료 분석 리포트(PDF) 생성.
      *
-     * @param storeId   점포 ID
-     * @param startDate 조회 시작일 (YYYY-MM-DD)
-     * @param endDate   조회 종료일 (YYYY-MM-DD)
-     * @param viewBy    DAY or MONTH
-     * @return PDF 바이트 배열
+     * @param storeId 점포 ID.
+     * @param startDate 조회 시작일.
+     * @param endDate 조회 종료일.
+     * @param viewBy DAY 또는 MONTH.
+     * @return 생성된 PDF 바이트 배열.
+     * @throws RuntimeException 외부 서비스 예외 발생 시 전파됩니다.
      */
     public byte[] generateMaterialReport(
             Long storeId,
@@ -404,16 +450,32 @@ public class AnalyticsReportService {
     // =========================================
     // null 방어용 helper
     // =========================================
+
+    /**
+     * Number를 Double로 안전하게 변환합니다. null이면 0.0 반환.
+     *
+     * @param n 변환 대상 Number.
+     * @return Double 값 또는 0.0.
+     */
     private Double safeNumber(Number n) {
         return n == null ? 0.0 : n.doubleValue();
     }
 
+    /**
+     * Number를 Integer로 안전하게 변환합니다. null이면 0 반환.
+     *
+     * @param n 변환 대상 Number.
+     * @return Integer 값 또는 0.
+     */
     private Integer safeInt(Number n) {
         return n == null ? 0 : n.intValue();
     }
 
     /**
-     * Store ID로 점포명을 조회하고, 없으면 fallback 문자열 반환.
+     * Store ID로 점포명을 조회하고, 없으면 fallback 문자열을 반환합니다.
+     *
+     * @param storeId 점포 ID.
+     * @return 점포명 또는 "Store-{id}" 형태의 fallback.
      */
     private String resolveStoreName(Long storeId) {
         Store store = storeService.findById(storeId);

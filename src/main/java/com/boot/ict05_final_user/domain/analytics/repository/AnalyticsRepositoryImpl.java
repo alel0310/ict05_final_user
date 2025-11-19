@@ -23,32 +23,111 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
+/**
+ * Analytics 도메인 전용 커스텀 리포지토리 구현체.
+ *
+ * <p><b>역할</b>:
+ * <ul>
+ *   <li>KPI, 주문/메뉴/시간·요일/재료 분석에 필요한 집계 쿼리 제공</li>
+ *   <li>커서 기반 페이징(문자열 커서 또는 ID 커서)과 PDF 페이로드 전용 조회 지원</li>
+ * </ul>
+ * </p>
+ *
+ * <p><b>경계</b>:
+ * <ul>
+ *   <li>입력: 서비스에서 KST 기준 {@link LocalDate}·{@link LocalDateTime}가 전달된다고 가정</li>
+ *   <li>상태 필터: 기본적으로 {@code OrderStatus.COMPLETED}만 집계</li>
+ *   <li>점포 스코프: 모든 메서드는 단일 {@code storeId} 기준</li>
+ * </ul>
+ * </p>
+ *
+ * <p><b>성능/인덱스</b>:
+ * <ul>
+ *   <li>핵심 인덱스 권장: {@code customer_order(store_id, status, ordered_at)},
+ *       {@code customer_order_detail(order_id)},
+ *       {@code menu_usage_material_log(order_id, store_material_id)},
+ *       {@code store_inventory_batch(store_id, expiration_date)}</li>
+ *   <li>모든 메인 조회는 {@code readOnly}, {@code flushMode=COMMIT}, 타임아웃 힌트를 사용</li>
+ *   <li>가능한 한 단일 스캔 + GROUP BY로 계산(파생 KPI는 Java에서)</li>
+ * </ul>
+ * </p>
+ *
+ * <p><b>시간대</b>: 날짜 경계는 서비스에서 Asia/Seoul(KST)로 정규화하여 전달하며,
+ * 본 구현은 {@code [start 00:00, end+1 00:00)}(닫힌–열린) 규칙을 따른다.</p>
+ *
+ * <p><b>커서 규칙</b>:
+ * <ul>
+ *   <li>KPI: {@code "YYYY-MM-DD"} 또는 {@code "YYYY-MM"}</li>
+ *   <li>주문 일별: 마지막 주문 ID(Long)</li>
+ *   <li>메뉴 일별/월별: {@code "YYYY-MM-DD|menuId"}, {@code "YYYY-MM|menuId"}</li>
+ *   <li>시간·요일 일별/월별: {@code "YYYY-MM-DD|HH"}, {@code "YYYY-MM|weekday|hour"}</li>
+ * </ul>
+ * </p>
+ *
+ * <p><b>트랜잭션</b>: 모든 조회는 {@code @Transactional(readOnly = true)}. 변경 작업 없음.</p>
+ *
+ * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+ */
 @RequiredArgsConstructor
 @Repository
 public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 
+	/** QueryDSL 엔진. 스레드-세이프하게 싱글턴 주입 사용. */
 	private final JPAQueryFactory query;
 
+	// =========================
+	//         Q-Types
+	// =========================
+	/** 주문(헤더): 상태/점포/주문시각 필터의 메인 소스. */
 	private final QCustomerOrder co = QCustomerOrder.customerOrder;
+	/** 주문상세(라인): 수량/라인금액 집계 시 조인. */
 	private final QCustomerOrderDetail cod = QCustomerOrderDetail.customerOrderDetail;
+	/** 점포: 모든 조회는 단일 store 스코프. */
 	private final QStore s = QStore.store;
+	/** 메뉴/카테고리: 메뉴/카테고리 단위 집계에 사용. */
 	private final QMenu m = QMenu.menu;
 	private final QMenuCategory mc = QMenuCategory.menuCategory;
+	/** 점포-재료(마스터): 단가/단위/환산비율 기준. */
 	private final QStoreMaterial sm = QStoreMaterial.storeMaterial;
+	/** 메뉴-재료 사용 로그: 재료 사용량/원가 계산의 메인 소스. */
 	private final QMenuUsageMaterialLog log = QMenuUsageMaterialLog.menuUsageMaterialLog;
+	/** 공통 재료(옵셔널): 점포-재료명 누락 시 대체 표시용. */
 	private final QMaterial material = QMaterial.material;
+	/** 점포 재고 배치: 유통기한 임박/최근 입고일 계산. */
 	private final QStoreInventoryBatch batch = QStoreInventoryBatch.storeInventoryBatch;
+	/** 점포 재고: 재고 부족 상태 계산. */
 	private final QStoreInventory inv = QStoreInventory.storeInventory;
 
 	// 유통기한 임박 기준 (일 단위)
 	// 실제 FCM 스캐너 설정과 맞추고 싶으면 설정값 주입으로 교체하면 됨.
 	private static final int EXPIRE_SOON_DAYS = 3;
 
-	// =========================
-	//  KPI Summary (카드 4개)
-	// =========================
 	@Override
 	@Transactional(readOnly = true)
+	/**
+	 * KPI 요약 카드(MTD + WoW%)를 집계하여 반환한다.
+	 *
+	 * <p>
+	 * 기준 시각은 KST {@code today 00:00}이며, MTD 구간은
+	 * {@code [thisMonth-01 00:00, today 00:00)}로 해석되어 "이번달 1일 ~ 어제"를 포함한다.
+	 * WoW% 계산을 위해 최근 7일(L7: {@code [D-6, D]})과 그 이전 7일(P7: {@code [D-13, D-7]})
+	 * 구간을 함께 스캔한다. (여기서 D = {@code today-1})
+	 * </p>
+	 *
+	 * <ul>
+	 *   <li>Sales_MTD: MTD 매출 합계(₩).</li>
+	 *   <li>Tx_MTD: MTD 주문수(건).</li>
+	 *   <li>Units_MTD: MTD 판매수량 합계.</li>
+	 *   <li>UPT = {@code Units_MTD / Tx_MTD}.</li>
+	 *   <li>ADS = {@code Sales_MTD / Tx_MTD} (객단가, 반올림).</li>
+	 *   <li>AUR = {@code Sales_MTD / Units_MTD} (단가, 반올림).</li>
+	 *   <li>WoW% = {@code (L7 - P7) / P7 * 100} (P7=0이면 null).</li>
+	 * </ul>
+	 *
+	 * @param storeId 대상 점포 ID.
+	 * @param today   조회 기준일(KST, {@code LocalDate}).
+	 * @return KPI 요약 DTO.
+ */
 	public KpiSummaryDto fetchKpiSummary(Long storeId, LocalDate today) {
 
 		// 기준 시간 (KST 기준 LocalDate 들어온다고 가정)
@@ -142,11 +221,36 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		return new KpiSummaryDto(salesMtd, txMtd, unitsMtd, upt, ads, aur, wow);
 	}
 
-	// =========================
-	//  KPI Rows (일별/월별, 커서 페이징)
-	// =========================
 	@Override
 	@Transactional(readOnly = true)
+	/**
+	 * KPI 테이블(일별/월별)을 커서 기반으로 페이지 조회한다.
+	 *
+	 * <p>
+	 * 기간은 {@code [start, end]} 모두 포함으로 해석되며,
+	 * 내부적으로 {@code [start 00:00, end+1 00:00)}의 열린-닫힘 구간으로 변환한다.
+	 * 라벨은 일별은 {@code YYYY-MM-DD}, 월별은 {@code YYYY-MM}이며
+	 * 내림차순(최근 → 과거) 정렬 기준으로 커서 비교에 사용한다.
+	 * </p>
+	 *
+	 * <p><b>커서 규칙</b></p>
+	 * <ul>
+	 *   <li>요청 커서가 존재하면 {@code label &lt; cursor} 조건으로 이후(과거) 페이지를 조회한다.</li>
+	 *   <li>응답의 {@code nextCursor}는 현재 페이지의 마지막 라벨(문자열)이다.</li>
+	 *   <li>라벨 포맷 특성상 문자열 비교가 시간 역순과 일치한다.</li>
+	 * </ul>
+	 *
+	 * <p><b>집계 규칙</b></p>
+	 * <ul>
+	 *   <li>매출/주문수: 주문 헤더(co) 기준 집계(중복 합계 방지).</li>
+	 *   <li>판매수량(units): 주문 상세(cod) 기준 집계 후 라벨별 매핑.</li>
+	 *   <li>파생지표: {@code UPT=units/tx}, {@code ADS=sales/tx}, {@code AUR=sales/units}.</li>
+	 * </ul>
+	 *
+	 * @param storeId 점포 ID.
+	 * @param cond    조회 조건(시작일/종료일, {@code viewBy=DAY|MONTH}, {@code size}, {@code cursor}).
+	 * @return 커서 페이지(아이템 리스트와 {@code nextCursor}).
+	 */
 	public CursorPage<KpiRowDto> fetchKpiRows(Long storeId, AnalyticsSearchDto cond) {
 		boolean byMonth = cond.viewBy() == ViewBy.MONTH;
 		int size = (cond.size() == null ? 50 : cond.size());
@@ -255,11 +359,25 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		return new CursorPage<>(items, nextCursor);
 	}
 
-	// =========================
-	//  주문 분석 Summary (카드 4개)
-	// =========================
+
 	@Override
 	@Transactional(readOnly = true)
+	/**
+	 * 주문 분석 상단 요약(MTD)을 조회한다.
+	 *
+	 * <p>KST {@code today 00:00} 기준으로 이번 달 1일 00:00부터 오늘 00:00 직전까지
+	 * ({@code [thisMonth-01 00:00, today 00:00)}) 구간의 데이터를 집계한다.
+	 * 주문 상태는 COMPLETED만 포함한다.</p>
+	 *
+	 * <ul>
+	 *   <li>배달/포장/매장 매출(₩) 합계</li>
+	 *   <li>주문수(건) = 주문 헤더 ID 기준 countDistinct</li>
+	 * </ul>
+	 *
+	 * @param storeId 점포 ID.
+	 * @param today   조회 기준일(KST, {@code LocalDate}).
+	 * @return 주문 요약 DTO(배달/포장/매장 매출과 주문수).
+	 */
 	public OrderSummaryDto fetchOrderSummary(Long storeId, LocalDate today) {
 
 		LocalDateTime todayStart = today.atStartOfDay();
@@ -312,11 +430,27 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		);
 	}
 
-	// =========================
-	//  주문 분석 일별 테이블(주문 단위)
-	// =========================
+
 	@Override
 	@Transactional(readOnly = true)
+	/**
+	 * 주문 분석 일별 테이블(주문 1건 = 1 row)을 커서 기반으로 페이지 조회한다.
+	 *
+	 * <p>기간은 {@code [start, end]} 모두 포함으로 해석하며 내부적으로
+	 * {@code [start 00:00, end+1 00:00)}로 변환한다.
+	 * COMPLETED 주문만 대상이며, 메뉴 수량은 주문상세(cod) 합계를 사용한다.</p>
+	 *
+	 * <p><b>정렬/커서 규칙</b></p>
+	 * <ul>
+	 *   <li>정렬: {@code orderedAt DESC, id DESC} (최신 주문 우선).</li>
+	 *   <li>커서: 마지막 주문 ID(Long) 기반, 요청 시 {@code id &lt; cursorId} 조건으로 다음 페이지 조회.</li>
+	 *   <li>{@code nextCursor}: 현재 페이지의 마지막 주문 ID(문자열).</li>
+	 * </ul>
+	 *
+	 * @param storeId 점포 ID.
+	 * @param cond    조회 조건(시작일/종료일, size, cursor).
+	 * @return 커서 페이지(일별 주문행 리스트와 {@code nextCursor}).
+	 */
 	public CursorPage<OrderDailyRowDto> fetchOrderDailyRows(Long storeId, AnalyticsSearchDto cond) {
 		int size = (cond.size() == null ? 50 : cond.size());
 
@@ -354,7 +488,7 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 				)
 				.from(co)
 				.join(co.store, s)
-				// ⭐ 여기 추가: 주문 ↔ 주문상세 조인 (LEFT JOIN)
+				// ⭐ 주문 ↔ 주문상세 조인 (LEFT JOIN) 후 groupBy 집계
 				.leftJoin(cod).on(cod.order.id.eq(co.id))
 				.where(filter)
 				.groupBy(
@@ -415,11 +549,32 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		return new CursorPage<>(items, nextCursor);
 	}
 
-	// =========================
-	//  주문 분석 월별 테이블(월 단위 집계)
-	// =========================
+
 	@Override
 	@Transactional(readOnly = true)
+	/**
+	 * 주문 분석 월별 테이블(월 단위 집계)을 커서 기반으로 페이지 조회한다.
+	 *
+	 * <p>기간은 {@code [start, end]} 모두 포함으로 해석하며 내부적으로
+	 * {@code [start 00:00, end+1 00:00)}로 변환한다.
+	 * 라벨은 {@code YYYY-MM}이며 내림차순(최근월 → 과거월)으로 정렬한다.</p>
+	 *
+	 * <p><b>집계 항목</b></p>
+	 * <ul>
+	 *   <li>총매출(₩), 주문수(건), 평균주문금액(₩/건)</li>
+	 *   <li>주문유형별 매출: 배달/포장/매장</li>
+	 * </ul>
+	 *
+	 * <p><b>커서 규칙</b></p>
+	 * <ul>
+	 *   <li>요청 커서가 존재하면 {@code monthLabel &lt; cursorYm} 조건으로 이후 페이지 조회.</li>
+	 *   <li>{@code nextCursor}: 현재 페이지 마지막 {@code YYYY-MM} 문자열.</li>
+	 * </ul>
+	 *
+	 * @param storeId 점포 ID.
+	 * @param cond    조회 조건(시작일/종료일, size, cursor).
+	 * @return 커서 페이지(월별 집계 행 리스트와 {@code nextCursor}).
+	 */
 	public CursorPage<OrderMonthlyRowDto> fetchOrderMonthlyRows(Long storeId, AnalyticsSearchDto cond) {
 		int size = (cond.size() == null ? 50 : cond.size());
 
@@ -520,13 +675,36 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		return new CursorPage<>(items, nextCursor);
 	}
 
-	// ============================================================================
-	//                            ★ 메뉴 분석 Summary ★
-	// ============================================================================
+
 	@Override
 	@Transactional(readOnly = true)
+	/**
+	 * 메뉴 분석 상단 요약 카드를 조회한다.
+	 *
+	 * <p>KST {@code today 00:00} 기준으로 이번 달 1일 00:00부터 오늘 00:00 직전까지
+	 * ({@code [thisMonth-01 00:00, today 00:00)}) COMPLETED 주문을 대상으로 한다.</p>
+	 *
+	 * <p><b>집계 항목</b></p>
+	 * <ul>
+	 *   <li>판매수량 Top3 메뉴: 주문상세 수량 합계 기준 내림차순</li>
+	 *   <li>카테고리 매출 Top3: 카테고리별 매출 합계 기준 내림차순</li>
+	 *   <li>매출 기여도 Top3 메뉴: (메뉴 매출 / 전체 메뉴 매출) × 100, 소수점 1자리 반올림</li>
+	 *   <li>저성과 메뉴(하위 3개): 메뉴 매출 합계 기준 오름차순</li>
+	 * </ul>
+	 *
+	 * <p><b>주의</b></p>
+	 * <ul>
+	 *   <li>전체 매출 합계가 0일 때 매출 기여도는 0.0으로 처리한다.</li>
+	 *   <li>정렬은 Java 측 스트림에서 Comparator로 수행한다.</li>
+	 * </ul>
+	 *
+	 * @param storeId 점포 ID
+	 * @param today   조회 기준일(KST, {@code LocalDate})
+	 * @return Top/하위 랭킹을 포함한 메뉴 요약 DTO
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	public MenuSummaryDto fetchMenuSummary(Long storeId, LocalDate today) {
-
 		LocalDateTime todayStart = today.atStartOfDay();
 		LocalDateTime monthStart = today.withDayOfMonth(1).atStartOfDay();
 
@@ -670,11 +848,36 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		);
 	}
 
-	// ============================================================================
-	//                         ★ 메뉴 분석 일별 테이블 ★
-	// ============================================================================
+
 	@Override
 	@Transactional(readOnly = true)
+	/**
+	 * 메뉴 분석 일별 테이블을 커서 기반으로 페이지 조회한다.
+	 *
+	 * <p>기간은 {@code [start, end]} 모두 포함으로 해석하며 내부적으로
+	 * {@code [start 00:00, end+1 00:00)}로 변환한다. COMPLETED 주문만 대상.</p>
+	 *
+	 * <p><b>집계 단위</b> : (날짜 YYYY-MM-DD, 메뉴ID) 별</p>
+	 * <ul>
+	 *   <li>판매수량 합계: 주문상세 수량 합</li>
+	 *   <li>매출 합계: 주문상세 lineTotal 합</li>
+	 *   <li>주문수: 주문 헤더 ID countDistinct</li>
+	 * </ul>
+	 *
+	 * <p><b>정렬/커서 규칙</b></p>
+	 * <ul>
+	 *   <li>정렬: {@code orderDate DESC → sales DESC → menuId DESC}</li>
+	 *   <li>커서 형식: {@code "YYYY-MM-DD|menuId"}</li>
+	 *   <li>다음 페이지 조건: {@code (date &lt; cDate) OR (date = cDate AND menuId &lt; cMenuId)}</li>
+	 *   <li>{@code nextCursor}: 현재 페이지 마지막 레코드의 {@code "date|menuId"}</li>
+	 * </ul>
+	 *
+	 * @param storeId 점포 ID
+	 * @param cond    조회 조건(시작일/종료일, size, cursor)
+	 * @return 커서 페이지(일별 메뉴 집계 행 리스트와 {@code nextCursor})
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	public CursorPage<MenuDailyRowDto> fetchMenuDailyRows(Long storeId, AnalyticsSearchDto cond) {
 
 		LocalDateTime startDT = cond.startDate().atStartOfDay();
@@ -688,7 +891,7 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 				"DATE_FORMAT({0}, '%Y-%m-%d')", co.orderedAt
 		);
 
-		NumberExpression<Integer>   qtySumExpr   = cod.quantity.sum();
+		NumberExpression<Integer>   qtySumExpr    = cod.quantity.sum();
 		NumberExpression<BigDecimal> salesSumExpr = cod.lineTotal.sum();
 		NumberExpression<Long>       orderCntExpr = co.id.countDistinct();
 
@@ -740,9 +943,9 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 				break;
 			}
 
-			Integer qtyInt       = t.get(qtySumExpr);
-			BigDecimal salesBD   = nvlBD(t.get(salesSumExpr));
-			Long orderCntLong    = nvlLong(t.get(orderCntExpr));
+			Integer    qtyInt     = t.get(qtySumExpr);
+			BigDecimal salesBD    = nvlBD(t.get(salesSumExpr));
+			Long       orderCnt   = nvlLong(t.get(orderCntExpr));
 
 			result.add(new MenuDailyRowDto(
 					t.get(dayLabel),
@@ -750,18 +953,43 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 					t.get(m.menuName),
 					qtyInt == null ? 0L : qtyInt.longValue(),
 					salesBD.longValue(),
-					orderCntLong
+					orderCnt
 			));
 		}
 
 		return new CursorPage<>(result, nextCursor);
 	}
 
-	// ============================================================================
-	//                         ★ 메뉴 분석 월별 테이블 ★
-	// ============================================================================
+
 	@Override
 	@Transactional(readOnly = true)
+	/**
+	 * 메뉴 분석 월별 테이블을 커서 기반으로 페이지 조회한다.
+	 *
+	 * <p>기간은 {@code [start, end]} 모두 포함으로 해석하며 내부적으로
+	 * {@code [start 00:00, end+1 00:00)}로 변환한다. COMPLETED 주문만 대상.</p>
+	 *
+	 * <p><b>집계 단위</b> : (월 YYYY-MM, 메뉴ID) 별</p>
+	 * <ul>
+	 *   <li>판매수량 합계: 주문상세 수량 합</li>
+	 *   <li>매출 합계: 주문상세 lineTotal 합</li>
+	 *   <li>주문수: 주문 헤더 ID countDistinct</li>
+	 * </ul>
+	 *
+	 * <p><b>정렬/커서 규칙</b></p>
+	 * <ul>
+	 *   <li>정렬: {@code yearMonth DESC → sales DESC → menuId DESC}</li>
+	 *   <li>커서 형식: {@code "YYYY-MM|menuId"}</li>
+	 *   <li>다음 페이지 조건: {@code (ym &lt; cYm) OR (ym = cYm AND menuId &lt; cMenuId)}</li>
+	 *   <li>{@code nextCursor}: 현재 페이지 마지막 레코드의 {@code "YYYY-MM|menuId"}</li>
+	 * </ul>
+	 *
+	 * @param storeId 점포 ID
+	 * @param cond    조회 조건(시작일/종료일, size, cursor)
+	 * @return 커서 페이지(월별 메뉴 집계 행 리스트와 {@code nextCursor})
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	public CursorPage<MenuMonthlyRowDto> fetchMenuMonthlyRows(Long storeId, AnalyticsSearchDto cond) {
 
 		int size = (cond.size() == null ? 50 : cond.size());
@@ -795,7 +1023,7 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 					long   cMenuId = Long.parseLong(parts[1]); // ex) 144
 
 					// 정렬: ym DESC, sales DESC, menuId DESC
-					// WHERE 에서는 ym + menuId만으로 "이후 페이지" 판단
+					// WHERE에서는 ym + menuId만으로 "이후 페이지" 판단
 					cursorFilter =
 							ymLabel.lt(cYm)
 									.or(
@@ -847,13 +1075,12 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		for (Tuple t : pageRows) {
 			String ym = t.get(ymLabel);
 
-			Integer qtyInt       = t.get(qtySumExpr);
-			BigDecimal salesBD   = nvlBD(t.get(salesSumExpr));
-			Long orderCntLong    = nvlLong(t.get(orderCntExpr));
+			Integer    qtyInt   = t.get(qtySumExpr);
+			BigDecimal salesBD  = nvlBD(t.get(salesSumExpr));
+			Long       orders   = nvlLong(t.get(orderCntExpr));
 
-			long qty    = (qtyInt == null) ? 0L : qtyInt.longValue();
-			long sales  = salesBD.longValue();
-			long orders = orderCntLong;
+			long qty   = (qtyInt == null) ? 0L : qtyInt.longValue();
+			long sales = salesBD.longValue();
 
 			result.add(new MenuMonthlyRowDto(
 					ym,
@@ -877,6 +1104,7 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 
 		return new CursorPage<>(result, nextCursor);
 	}
+
 
 	// ============================================================================
 	//                            ★ 재료 분석 Summary ★
@@ -1153,6 +1381,28 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 	}
 
 
+
+	/**
+	 * 재료 사용량 Top 리스트 조회.
+	 *
+	 * <p><b>대상/기간</b>: 단일 점포({@code storeId}), COMPLETED 주문, {@code [startDt, endExDt)}.</p>
+	 * <p><b>집계</b>:
+	 * <ul>
+	 *   <li>사용량: {@code log.count.sum()}</li>
+	 *   <li>원가: {@code materialCostSumExpr()} ( (count / conversionRate) * purchasePrice )</li>
+	 *   <li>재료명: {@code IFNULL(sm.name, material.name)}</li>
+	 * </ul>
+	 * </p>
+	 * <p><b>정렬/한도</b>: 사용량 DESC, 동률 시 sm.id ASC, {@code limit} 개.</p>
+	 *
+	 * @param storeId 점포 ID
+	 * @param startDt 조회 시작 (포함)
+	 * @param endExDt 조회 종료 (배타)
+	 * @param limit   최대 반환 개수
+	 * @return 사용량 기준 상위 재료 리스트
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	private List<MaterialTopItemDto> findMaterialTopByUsage(
 			Long storeId, LocalDateTime startDt, LocalDateTime endExDt, int limit) {
 
@@ -1201,6 +1451,27 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		return result;
 	}
 
+	/**
+	 * 재료 원가 Top 리스트 조회.
+	 *
+	 * <p><b>대상/기간</b>: 단일 점포({@code storeId}), COMPLETED 주문, {@code [startDt, endExDt)}.</p>
+	 * <p><b>집계</b>:
+	 * <ul>
+	 *   <li>사용량: {@code log.count.sum()} (정보 제공용으로 함께 반환)</li>
+	 *   <li>원가: {@code materialCostSumExpr()} (정렬 key)</li>
+	 *   <li>재료명: {@code IFNULL(sm.name, material.name)}</li>
+	 * </ul>
+	 * </p>
+	 * <p><b>정렬/한도</b>: 원가 DESC, 동률 시 sm.id ASC, {@code limit} 개.</p>
+	 *
+	 * @param storeId 점포 ID
+	 * @param startDt 조회 시작 (포함)
+	 * @param endExDt 조회 종료 (배타)
+	 * @param limit   최대 반환 개수
+	 * @return 원가 기준 상위 재료 리스트
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	private List<MaterialTopItemDto> findMaterialTopByCost(
 			Long storeId, LocalDateTime startDt, LocalDateTime endExDt, int limit) {
 
@@ -1249,7 +1520,19 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		return result;
 	}
 
-	// 재료 원가 합계 = SUM( (log.count / conversionRate) * purchasePrice )
+	/**
+	 * 재료 원가 총합 조회.
+	 *
+	 * <p>식: {@code SUM( (log.count / conversionRate) * purchasePrice )}.</p>
+	 * <p>대상 기간: {@code [startDt, endExDt)}, COMPLETED 주문, 단일 점포.</p>
+	 *
+	 * @param storeId 점포 ID
+	 * @param startDt 조회 시작(포함)
+	 * @param endExDt 조회 종료(배타)
+	 * @return 원가 총합(BigDecimal, null 안전 처리)
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	private BigDecimal fetchMaterialCostTotal(Long storeId, LocalDateTime startDt, LocalDateTime endExDt) {
 		NumberExpression<BigDecimal> costExpr = materialCostSumExpr();
 
@@ -1273,6 +1556,18 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		return nvlBD(result);
 	}
 
+	/**
+	 * 매출 총합 조회.
+	 *
+	 * <p>식: {@code SUM(co.totalPrice)}. 기간은 {@code [startDt, endExDt)}.</p>
+	 *
+	 * @param storeId 점포 ID
+	 * @param startDt 조회 시작(포함)
+	 * @param endExDt 조회 종료(배타)
+	 * @return 매출 총합(원, long; null이면 0)
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	private long fetchSalesTotal(Long storeId, LocalDateTime startDt, LocalDateTime endExDt) {
 		BigDecimal salesBD = query
 				.select(co.totalPrice.sum())
@@ -1290,6 +1585,19 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		return salesBD == null ? 0L : salesBD.longValue();
 	}
 
+	/**
+	 * 재료 분석용 일자별 매출 맵 조회.
+	 *
+	 * <p>키: {@code 'YYYY-MM-DD'}, 값: 해당 일자의 매출 합(원).</p>
+	 * <p>대상: COMPLETED 주문, {@code [startDt, endExDt)}, 단일 점포.</p>
+	 *
+	 * @param storeId 점포 ID
+	 * @param startDt 조회 시작(포함)
+	 * @param endExDt 조회 종료(배타)
+	 * @return {@code Map<날짜문자열, 매출(원)>}
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	private Map<String, Long> fetchSalesByDayForMaterials(Long storeId, LocalDateTime startDt, LocalDateTime endExDt) {
 		StringExpression dayExpr = Expressions.stringTemplate("DATE_FORMAT({0}, '%Y-%m-%d')", co.orderedAt);
 		NumberExpression<BigDecimal> salesExpr = co.totalPrice.sum();
@@ -1316,6 +1624,19 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		return map;
 	}
 
+	/**
+	 * 재료 분석용 월별 매출 맵 조회.
+	 *
+	 * <p>키: {@code 'YYYY-MM'}, 값: 해당 월의 매출 합(원).</p>
+	 * <p>대상: COMPLETED 주문, {@code [startDt, endExDt)}, 단일 점포.</p>
+	 *
+	 * @param storeId 점포 ID
+	 * @param startDt 조회 시작(포함)
+	 * @param endExDt 조회 종료(배타)
+	 * @return {@code Map<연월문자열, 매출(원)>}
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	private Map<String, Long> fetchSalesByMonthForMaterials(Long storeId, LocalDateTime startDt, LocalDateTime endExDt) {
 		StringExpression ymExpr = Expressions.stringTemplate("DATE_FORMAT({0}, '%Y-%m')", co.orderedAt);
 		NumberExpression<BigDecimal> salesExpr = co.totalPrice.sum();
@@ -1342,6 +1663,18 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		return map;
 	}
 
+	/**
+	 * 점포-재료별 최근 입고일 조회.
+	 *
+	 * <p>식: {@code MAX(batch.receivedDate)}.</p>
+	 * <p>대상: 단일 점포의 인벤토리 배치 기준으로 StoreMaterial 별 최신 입고일.</p>
+	 * <p>반환: {@code Map<storeMaterialId, LocalDate>} (없으면 미포함).</p>
+	 *
+	 * @param storeId 점포 ID
+	 * @return 최근 입고일 맵
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	private Map<Long, LocalDate> fetchLastInboundDateByStoreMaterial(Long storeId) {
 		DateTimeExpression<LocalDateTime> lastReceivedExpr = batch.receivedDate.max();
 
@@ -1370,13 +1703,20 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 	}
 
 
-
-
-
-
-
-
-
+	/**
+	 * 재고 부족(LOW/SHORTAGE) 인벤토리 개수 조회.
+	 *
+	 * <p><b>대상</b>: 단일 점포 {@code storeId}의 StoreInventory.</p>
+	 * <p><b>조건</b>: {@code InventoryStatus.LOW} 또는 {@code InventoryStatus.SHORTAGE} 상태.</p>
+	 * <p><b>반환</b>: 중복 없는 인벤토리 행 수(Long), null 안전(없으면 0).</p>
+	 *
+	 * <p><b>성능</b>: readOnly/flushMode/timeout 힌트 설정.</p>
+	 *
+	 * @param storeId 점포 ID
+	 * @return 부족 재고 개수
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	private long fetchLowStockCount(Long storeId) {
 		QStoreInventory inv = QStoreInventory.storeInventory;
 
@@ -1397,10 +1737,22 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		return result != null ? result : 0L;
 	}
 
-	// 최근 입고일 / 재고 부족 / 유통기한 임박
+	/**
+	 * 유통기한 임박 배치 수 조회.
+	 *
+	 * <p><b>기간</b>: {@code [today, today + EXPIRE_SOON_DAYS]} (양끝 포함).</p>
+	 * <p><b>대상</b>: 단일 점포 {@code storeId}의 {@code StoreInventoryBatch} 기준.</p>
+	 * <p><b>반환</b>: 임박 구간에 포함되는 배치 기준 중복 없는 인벤토리 수(Long), null 안전(없으면 0).</p>
+	 *
+	 * <p><b>주의</b>: 임박 기준(EXPIRE_SOON_DAYS)은 FCM 알림 로직과 일관되게 유지.</p>
+	 *
+	 * @param storeId 점포 ID
+	 * @param today   기준일(LocalDate, KST 가정)
+	 * @return 유통기한 임박 개수
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	private long fetchExpireSoonCount(Long storeId, LocalDate today) {
-
-
 		LocalDate endDate = today.plusDays(EXPIRE_SOON_DAYS);
 
 		JPAQuery<Long> jpaQuery = query
@@ -1423,11 +1775,23 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 	}
 
 	/**
-	 * 재료 원가 합계 식: SUM( (log.count / conversionRate) * purchasePrice )
+	 * 재료 원가 합계 식 생성.
 	 *
-	 * 1. conversionRate가 0이거나 null인 경우 1로 대체
-	 * 2. purchasePrice가 null인 경우 0으로 대체
-	 * 3. COALESCE 사용으로 안전성 강화
+	 * <p><b>정의</b>: {@code SUM( (log.count / conversionRate) * purchasePrice )}.</p>
+	 * <p><b>null/0 보호</b>:
+	 * <ul>
+	 *   <li>{@code conversionRate}: NULL 또는 0 → 1.0 대체</li>
+	 *   <li>{@code purchasePrice}: NULL → 0 대체</li>
+	 *   <li>{@code COALESCE / NULLIF}로 SQL 레벨에서 안전성 확보</li>
+	 * </ul>
+	 * </p>
+	 *
+	 * <p>재사용 가능한 QueryDSL {@code NumberExpression<BigDecimal>}을 반환하며,
+	 * SUM 까지를 포함한 누적 식으로 구성되어 그룹바이 문맥에서도 사용 가능합니다.</p>
+	 *
+	 * @return 원가 합계 식(BigDecimal)
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
 	 */
 	private NumberExpression<BigDecimal> materialCostSumExpr() {
 		// conversionRate: NULL이면 1, 0이면 1로 대체
@@ -1455,20 +1819,41 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 	}
 
 
-
-
-
-	// ============================================================
-	//                      ★ 시간/요일 분석 (신규) ★
-	// ============================================================
-
+	/**
+	 * 주문 시각의 "시(hour)"를 추출하는 식 생성.
+	 *
+	 * <p><b>정의</b>: {@code HOUR(co.orderedAt)} → 0~23 범위 정수.</p>
+	 * <p><b>용도</b>: 시간대별 집계(예: 07~20시 영업시간 필터)에서 공통으로 사용.</p>
+	 * <p><b>주의</b>: DB 함수 {@code HOUR()} 사용(MySQL 호환). 타 DB 사용 시 대응 필요.</p>
+	 *
+	 * @return 0~23 범위를 갖는 시간(시) NumberExpression
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	private NumberExpression<Integer> hourOfDay() {
 		return Expressions.numberTemplate(Integer.class, "HOUR({0})", co.orderedAt);
 	}
 
 	/**
-	 * 요일: 1~7, 월=1, …, 일=7 로 변환.
-	 * DAYOFWEEK() 결과(1=일, 7=토)를 보정.
+	 * 한국식 요일 정수(월=1, …, 일=7)로 변환하는 식 생성.
+	 *
+	 * <p><b>배경</b>: MySQL {@code DAYOFWEEK()}는 1=일, …, 7=토를 반환.
+	 * 이를 월=1, …, 일=7 체계로 변환하기 위해 {@code ((DAYOFWEEK(x)+5)%7)+1}을 사용.</p>
+	 *
+	 * <p><b>검증</b>:
+	 * <ul>
+	 *   <li>일(1) → ((1+5)%7)+1 = 7 → 일</li>
+	 *   <li>월(2) → ((2+5)%7)+1 = 1 → 월</li>
+	 *   <li>…</li>
+	 *   <li>토(7) → ((7+5)%7)+1 = 6 → 토</li>
+	 * </ul>
+	 * </p>
+	 *
+	 * <p><b>주의</b>: DB 함수 {@code DAYOFWEEK()} 사용(MySQL 호환). 타 DB 사용 시 변환식 조정 필요.</p>
+	 *
+	 * @return 1~7 범위를 갖는 요일 NumberExpression (월=1 … 일=7)
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
 	 */
 	private NumberExpression<Integer> weekDayKorean() {
 		return Expressions.numberTemplate(
@@ -1478,15 +1863,52 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		);
 	}
 
+	/**
+	 * 영업시간(07~20시) 필터식 생성.
+	 *
+	 * <p><b>정의</b>: {@code 7 <= hour <= 20} 조건을 만족하는 BooleanExpression.</p>
+	 * <p><b>용도</b>: 시간대별/요일별 분석에서 영업시간 구간만 집계할 때 사용.</p>
+	 * <p><b>주의</b>: 입력 {@code hourExpr}는 {@link #hourOfDay()} 등 0~23 정수 범위를 반환해야 함.</p>
+	 *
+	 * @param hourExpr 0~23 범위의 시(hour) 표현식
+	 * @return 영업시간 구간(07~20시) 여부 BooleanExpression
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	private BooleanExpression businessHoursFilter(NumberExpression<Integer> hourExpr) {
 		return hourExpr.goe(7).and(hourExpr.loe(20));
 	}
 
-	// =========================
-	//  시간/요일 요약 카드
-	// =========================
+
 	@Override
 	@Transactional(readOnly = true)
+	/**
+	 * 시간/요일 분석 상단 요약 카드를 조회한다.
+	 *
+	 * <p><b>기간 규칙</b>: today 기준 MTD = {@code [이번달 1일 00:00, 오늘 00:00)} (즉, “이번달 1일 ~ 어제까지”).</p>
+	 * <p><b>영업시간 필터</b>: 시간대는 07~20시만 집계한다(브라우저/리포트 표준과 일치).</p>
+	 * <p><b>산출 항목</b>:
+	 * <ul>
+	 *   <li>피크 시간대: 매출 최댓값의 시간(h), 매출액</li>
+	 *   <li>비수 시간대: 매출 &gt; 0 인 구간 중 최솟값의 시간(h), 매출액</li>
+	 *   <li>최고 매출 요일: 요일 인덱스(1~7, 월=1) 및 해당 매출액</li>
+	 *   <li>주중/주말 매출 합계(주중=월~금, 주말=토/일)</li>
+	 * </ul>
+	 * </p>
+	 *
+	 * <p><b>엣지 케이스</b>:
+	 * <ul>
+	 *   <li>today가 1일이면 집계 구간이 비어 결과는 모두 0/NULL 로 처리됨</li>
+	 *   <li>영업시간 내 데이터가 없으면 피크/비수/최고요일이 NULL 이 될 수 있음</li>
+	 * </ul>
+	 * </p>
+	 *
+	 * @param storeId 점포 ID
+	 * @param today   기준일(LocalDate, KST 가정)
+	 * @return {@link TimeDaySummaryDto} (NULL 허용 필드는 명세 참고)
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	public TimeDaySummaryDto fetchTimeDaySummary(Long storeId, LocalDate today) {
 
 		// 이번달 1일
@@ -1595,9 +2017,29 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 	}
 
 
-	// =========================
-	//  시간대별 차트
-	// =========================
+
+	/**
+	 * 시간대별(07~20시) 매출/주문수/채널별 주문수를 집계한다.
+	 *
+	 * <p><b>기간 규칙</b>: {@code [startDate 00:00, endDate+1 00:00)}.</p>
+	 * <p><b>영업시간 필터</b>: 07~20시 범위만 집계하며, 누락된 시간대는 0 값으로 보정하여 7~20의 연속 구간을 항상 반환한다.</p>
+	 * <p><b>산출 항목</b>:
+	 * <ul>
+	 *   <li>sales: 총매출(완료 주문 기준)</li>
+	 *   <li>orders: 주문수(중복 제거)</li>
+	 *   <li>visit/takeout/delivery: 채널별 주문수</li>
+	 * </ul>
+	 * </p>
+	 *
+	 * <p><b>성능</b>: 단일 GROUP BY(HOUR) 집계 1회. 인덱스: {@code (store_id, status, ordered_at)} 권장.</p>
+	 *
+	 * @param storeId   점포 ID
+	 * @param startDate 조회 시작일(포함)
+	 * @param endDate   조회 종료일(포함)
+	 * @return 07~20시 구간의 {@link TimeHourlyPointDto} 목록(누락 시간대는 0으로 채움)
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	@Override
 	@Transactional(readOnly = true)
 	public List<TimeHourlyPointDto> fetchTimeHourlyChart(Long storeId, LocalDate startDate, LocalDate endDate) {
@@ -1673,9 +2115,23 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		return result;
 	}
 
-	// =========================
-	//  요일별 차트
-	// =========================
+	/**
+	 * 요일별 매출/주문수를 집계한다.
+	 *
+	 * <p><b>기간 규칙</b>: {@code [startDate 00:00, endDate+1 00:00)}.</p>
+	 * <p><b>요일 인덱스</b>: 1~7, 월=1 … 일=7. 내부적으로 {@code DAYOFWEEK()} 보정식을 사용.</p>
+	 * <p><b>영업시간 필터</b>: 07~20시만 집계.</p>
+	 * <p><b>반환 규칙</b>: 1~7 모든 요일을 반환하며, 데이터가 없는 요일은 매출/주문수가 0인 포인트로 채움.</p>
+	 *
+	 * <p><b>성능</b>: 단일 GROUP BY(weekday) 집계 1회. 인덱스: {@code (store_id, status, ordered_at)} 권장.</p>
+	 *
+	 * @param storeId   점포 ID
+	 * @param startDate 조회 시작일(포함)
+	 * @param endDate   조회 종료일(포함)
+	 * @return 요일(1~7)별 {@link WeekdaySalesPointDto} 목록(빈 요일은 0 보정)
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	@Override
 	@Transactional(readOnly = true)
 	public List<WeekdaySalesPointDto> fetchWeekdayChart(Long storeId, LocalDate startDate, LocalDate endDate) {
@@ -1727,9 +2183,43 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		return result;
 	}
 
-	// =========================
-	//  일별 테이블 (날짜+요일+시간대)
-	// =========================
+	/**
+	 * 시간/요일 분석의 일별 테이블(1행 = {@code [날짜, 요일, 시간대]})을 커서 기반으로 조회한다.
+	 *
+	 * <p><b>기간 규칙</b>: {@code [cond.startDate 00:00, cond.endDate+1 00:00)} (닫힌–열린 구간).</p>
+	 * <p><b>영업시간 필터</b>: 07~20시만 집계한다.</p>
+	 * <p><b>정렬</b>: 날짜 내림차순, 동일 날짜 내에서는 시간 오름차순.</p>
+	 * <p><b>커서</b>: 문자열 {@code "YYYY-MM-DD|HH"} 형식.
+	 *   <ul>
+	 *     <li>다음 페이지 조건: {@code dayLabel &lt; cDate} OR ({@code dayLabel = cDate} AND {@code hour &gt; cHour})</li>
+	 *     <li>{@code nextCursor}는 현재 페이지의 마지막 행 기준으로 동일 형식으로 반환</li>
+	 *   </ul>
+	 * </p>
+	 *
+	 * <p><b>집계 항목</b>:
+	 * <ul>
+	 *   <li>sales: 매출 합계</li>
+	 *   <li>orderCount: 주문수(중복 제거)</li>
+	 *   <li>visit/takeout/delivery: 채널별 주문수</li>
+	 *   <li>visitRate/takeoutRate/deliveryRate: {@code 채널별주문수 / orderCount} (분모 0이면 0.0)</li>
+	 * </ul>
+	 * </p>
+	 *
+	 * <p><b>엣지 케이스</b>:
+	 * <ul>
+	 *   <li>집계 구간/영업시간에 데이터가 없으면 빈 페이지 및 {@code nextCursor = null}</li>
+	 *   <li>요일 인덱스는 1~7(월=1)로 변환되며, NULL 방어를 위해 0으로 대체될 수 있다</li>
+	 * </ul>
+	 * </p>
+	 *
+	 * <p><b>성능</b>: GROUP BY(날짜, 요일, 시간) 1회. 권장 인덱스: {@code (store_id, status, ordered_at)}.</p>
+	 *
+	 * @param storeId 점포 ID
+	 * @param cond    조회 조건(기간, 사이즈, 커서)
+	 * @return 커서 페이지 {@link CursorPage}&lt;{@link TimeDayDailyRowDto}&gt;
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	@Override
 	@Transactional(readOnly = true)
 	public CursorPage<TimeDayDailyRowDto> fetchTimeDayDailyRows(Long storeId, AnalyticsSearchDto cond) {
@@ -1853,9 +2343,43 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 		return new CursorPage<>(result, nextCursor);
 	}
 
-	// =========================
-	//  월별 테이블 (월+요일+시간대)
-	// =========================
+	/**
+	 * 시간/요일 분석의 월별 테이블(1행 = {@code [월, 요일, 시간대]})을 커서 기반으로 조회한다.
+	 *
+	 * <p><b>기간 규칙</b>: {@code [cond.startDate 00:00, cond.endDate+1 00:00)} (닫힌–열린 구간).</p>
+	 * <p><b>영업시간 필터</b>: 07~20시만 집계한다.</p>
+	 * <p><b>정렬</b>: 월(YYYY-MM) 내림차순 → 요일 오름차순(1~7, 월=1) → 시간 오름차순.</p>
+	 * <p><b>커서</b>: 문자열 {@code "YYYY-MM|weekday|hour"} 형식.
+	 *   <ul>
+	 *     <li>다음 페이지 조건: {@code ym &lt; cYm} OR ({@code ym = cYm} AND ({@code weekday &gt; cWd} OR ({@code weekday = cWd} AND {@code hour &gt; cHour})))</li>
+	 *     <li>{@code nextCursor}는 현재 페이지의 마지막 행 기준으로 동일 형식으로 반환</li>
+	 *   </ul>
+	 * </p>
+	 *
+	 * <p><b>집계 항목</b>:
+	 * <ul>
+	 *   <li>sales: 매출 합계</li>
+	 *   <li>orderCount: 주문수(중복 제거)</li>
+	 *   <li>visit/takeout/delivery: 채널별 주문수</li>
+	 *   <li>visitRate/takeoutRate/deliveryRate: {@code 채널별주문수 / orderCount} (분모 0이면 0.0)</li>
+	 * </ul>
+	 * </p>
+	 *
+	 * <p><b>엣지 케이스</b>:
+	 * <ul>
+	 *   <li>집계 구간/영업시간에 데이터가 없으면 빈 페이지 및 {@code nextCursor = null}</li>
+	 *   <li>요일/시간이 NULL인 경우 0으로 대체하여 반환</li>
+	 * </ul>
+	 * </p>
+	 *
+	 * <p><b>성능</b>: GROUP BY(월, 요일, 시간) 1회. 권장 인덱스: {@code (store_id, status, ordered_at)}.</p>
+	 *
+	 * @param storeId 점포 ID
+	 * @param cond    조회 조건(기간, 사이즈, 커서)
+	 * @return 커서 페이지 {@link CursorPage}&lt;{@link TimeDayMonthlyRowDto}&gt;
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	@Override
 	@Transactional(readOnly = true)
 	public CursorPage<TimeDayMonthlyRowDto> fetchTimeDayMonthlyRows(Long storeId, AnalyticsSearchDto cond) {
@@ -1996,35 +2520,116 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 
 
 	// ===== Helpers =====
+
+	/**
+	 * BigDecimal null-safe 치환 유틸리티.
+	 *
+	 * <p><b>정의</b>: 입력이 {@code null}이면 {@link BigDecimal#ZERO} 반환, 그렇지 않으면 원본 값 반환.</p>
+	 * <p><b>용도</b>: SUM/AVG 등 집계 결과가 {@code null}일 수 있는 경우의 방어 코드.</p>
+	 *
+	 * @param v 입력 BigDecimal (null 가능)
+	 * @return null이면 0, 아니면 원본 값
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	private static BigDecimal nvlBD(BigDecimal v) {
 		return v == null ? BigDecimal.ZERO : v;
 	}
 
+	/**
+	 * Long null-safe 치환 유틸리티.
+	 *
+	 * <p><b>정의</b>: 입력이 {@code null}이면 0L 반환.</p>
+	 * <p><b>용도</b>: COUNT 결과나 캐스팅 과정에서 {@code null} 가능성이 있는 경우.</p>
+	 *
+	 * @param v 입력 Long (null 가능)
+	 * @return null이면 0L, 아니면 원본 값
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	private static long nvlLong(Long v) {
 		return v == null ? 0L : v;
 	}
 
+	/**
+	 * 0으로 나누기 방지용 안전 나눗셈.
+	 *
+	 * <p><b>정의</b>: {@code den == 0}이면 0.0, 아니면 {@code num / den}의 double 결과.</p>
+	 * <p><b>용도</b>: UPT/ADS/AUR 등 파생지표 계산 시 분모 0 방어.</p>
+	 *
+	 * @param num 분자
+	 * @param den 분모
+	 * @return 안전한 실수 나눗셈 결과
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	private static double safeDiv(long num, long den) {
 		return den == 0L ? 0.0 : (double) num / (double) den;
 	}
 
+	/**
+	 * 소수점 첫째 자리 반올림 유틸리티.
+	 *
+	 * <p><b>정의</b>: {@code Math.round(v * 10.0) / 10.0}.</p>
+	 * <p><b>용도</b>: % 지표(예: WoW%)와 같이 한 자리 소수 표현.</p>
+	 *
+	 * @param v 입력 값
+	 * @return 소수점 1자리로 반올림된 값
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	private static double round1(double v) {
 		return Math.round(v * 10.0) / 10.0;
 	}
 
+	/**
+	 * 주문 상태 COMPLETED 필터식.
+	 *
+	 * <p><b>정의</b>: {@code co.status = COMPLETED}.</p>
+	 * <p><b>용도</b>: 모든 분석 쿼리의 기본 WHERE 조건.</p>
+	 *
+	 * @return COMPLETED 상태 비교 BooleanExpression
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	private BooleanExpression statusCompleted() {
 		return co.status.eq(OrderStatus.COMPLETED);
 	}
 
+	/**
+	 * 단일 점포 스코프 필터식.
+	 *
+	 * <p><b>정의</b>: {@code s.id = :storeId}.</p>
+	 * <p><b>용도</b>: 멀티테넌시/매장별 격리를 위한 기본 WHERE 조건.</p>
+	 *
+	 * @param storeId 점포 ID (null 불가 가정)
+	 * @return 점포 ID 일치 BooleanExpression
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
+	 */
 	private BooleanExpression eqStore(Long storeId) {
 		return s.id.eq(storeId);
 	}
 
 	/**
-	 * 닫힌–열린(>=, <) 기간 필터 (LocalDateTime 기준)
+	 * 닫힌–열린 구간(Closed-Open) 기간 필터 생성기.
+	 *
+	 * <p><b>정의</b>: {@code start <= col < endEx}.</p>
+	 * <p><b>권장</b>: 일자 구간을 시간 경계(자정)로 다룰 때 중복/누락 없이 안정적.</p>
+	 *
+	 * @param col   비교 대상 컬럼 (예: {@code co.orderedAt})
+	 * @param start 포함 시작시각 (inclusive)
+	 * @param endEx 배타 종료시각 (exclusive)
+	 * @return 기간 필터 BooleanExpression
+	 *
+	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
 	 */
-	private BooleanExpression betweenClosedOpen(DateTimePath<LocalDateTime> col,
-												LocalDateTime start, LocalDateTime endEx) {
+	private BooleanExpression betweenClosedOpen(
+			DateTimePath<LocalDateTime> col,
+			LocalDateTime start,
+			LocalDateTime endEx
+	) {
 		return col.goe(start).and(col.lt(endEx));
 	}
+
 }
