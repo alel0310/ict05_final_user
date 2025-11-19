@@ -9,6 +9,8 @@ import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +36,9 @@ import java.util.stream.Collectors;
 public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCustom{
 
     private final JPAQueryFactory queryFactory;
+
+    @PersistenceContext
+    private EntityManager em;
 
     @Override
     public Page<PurchaseOrderListDTO> listPurchase(PurchaseOrderSearchDTO purchaseOrderSearchDTO, Pageable pageable) {
@@ -534,6 +539,39 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
         return Optional.ofNullable(code);
     }
 
+    // 상태 변경
+    @Override
+    public int updateStatusById(Long id, PurchaseOrderStatus status) {
+        QPurchaseOrder po = QPurchaseOrder.purchaseOrder;
 
+        // 기존 @Modifying(clearAutomatically = true, flushAutomatically = true) 와 비슷한 효과
+        em.flush();
 
+        long updated = queryFactory
+                .update(po)
+                .set(po.status, status)
+                .where(po.id.eq(id))
+                .execute();
+
+        em.clear();
+
+        return (int) updated;
+    }
+
+    @Override
+    public int updateStatusByOrderCode(String orderCode, PurchaseOrderStatus status) {
+        QPurchaseOrder po = QPurchaseOrder.purchaseOrder;
+
+        em.flush();
+
+        long updated = queryFactory
+                .update(po)
+                .set(po.status, status)
+                .where(po.orderCode.eq(orderCode))
+                .execute();
+
+        em.clear();
+
+        return (int) updated;
+    }
 }

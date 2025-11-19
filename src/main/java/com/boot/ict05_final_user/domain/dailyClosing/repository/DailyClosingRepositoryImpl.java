@@ -1,10 +1,6 @@
 package com.boot.ict05_final_user.domain.dailyClosing.repository;
 
-import com.boot.ict05_final_user.domain.dailyClosing.entity.DailyClosing;
-import com.boot.ict05_final_user.domain.dailyClosing.entity.DailyClosingDenom;
-import com.boot.ict05_final_user.domain.dailyClosing.entity.DailyClosingExpense;
-import com.boot.ict05_final_user.domain.dailyClosing.entity.QDailyClosingDenom;
-import com.boot.ict05_final_user.domain.dailyClosing.entity.QDailyClosingExpense;
+import com.boot.ict05_final_user.domain.dailyClosing.entity.*;
 import com.boot.ict05_final_user.domain.order.entity.OrderStatus;
 import com.boot.ict05_final_user.domain.order.entity.OrderType;
 import com.boot.ict05_final_user.domain.order.entity.PaymentType;
@@ -83,7 +79,7 @@ public class DailyClosingRepositoryImpl implements DailyClosingRepositoryCustom 
      * @param end       조회 종료 일시(미포함)
      * @param orderType 주문 유형 (VISIT/TAKEOUT/DELIVERY). null 이면 전체.
      * @param paymentType 결제 수단 (CARD/CASH/VOUCHER)
-     * @param status    주문 상태 (예: COMPLETED)
+     * @param ignoredStatus    주문 상태 (예: COMPLETED)
      * @return 조건에 해당하는 주문 총금액 합계(원 단위)
      */
     private long sumOrderTotal(
@@ -217,6 +213,20 @@ public class DailyClosingRepositoryImpl implements DailyClosingRepositoryCustom 
                 .selectFrom(denom)
                 .where(denom.closing.eq(closing))
                 .orderBy(denom.denomValue.desc(), denom.id.asc())
+                .fetch();
+    }
+
+    @Override
+    public List<DailyClosing> findDailyClosingHistory(Long storeId, LocalDate from, LocalDate to) {
+        QDailyClosing dc = QDailyClosing.dailyClosing;
+
+        return queryFactory
+                .selectFrom(dc)
+                .where(
+                        dc.storeId.eq(storeId),
+                        dc.closingDate.between(from, to)
+                )
+                .orderBy(dc.closingDate.desc())
                 .fetch();
     }
 }
