@@ -4,8 +4,6 @@ import type {
   StoreInventoryRestockRequest,
 } from '../types/storeInventory';
 
-const BASE_PATH = '/API/store/inventory';
-
 /**
  * 가맹점 재고 초기화
  *
@@ -17,10 +15,8 @@ const BASE_PATH = '/API/store/inventory';
  * @param storeId 매장 ID
  * @returns 새로 생성된 StoreInventory 행 개수
  */
-export async function initStoreInventory(storeId: number): Promise<number> {
-  const res = await api.post<number>(`${BASE_PATH}/init`, null, {
-    params: { storeId },
-  });
+export async function initStoreInventory(): Promise<number> {
+  const res = await api.post<number>('/API/store/inventory/init');
   return res.data;
 }
 
@@ -35,15 +31,8 @@ export async function initStoreInventory(storeId: number): Promise<number> {
  * @param storeId 매장 ID
  * @returns 재고 목록 DTO 배열
  */
-export async function fetchStoreInventory(
-  storeId: number,
-): Promise<StoreInventoryResponse[]> {
-  const res = await api.get<StoreInventoryResponse[]>(
-    `${BASE_PATH}/list`,
-    {
-      params: { storeId },
-    },
-  );
+export async function fetchStoreInventory(): Promise<StoreInventoryResponse[]> {
+  const res = await api.get<StoreInventoryResponse[]>('/API/store/inventory/list');
   return res.data;
 }
 

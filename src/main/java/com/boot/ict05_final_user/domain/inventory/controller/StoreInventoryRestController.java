@@ -30,6 +30,7 @@ public class StoreInventoryRestController {
      */
     @GetMapping("/list")
     public List<StoreInventoryListDTO> getStoreInventoryList(@AuthenticationPrincipal AppUser user) {
+
         return storeInventoryService.getStoreInventoryList(user.getStoreId());
     }
 

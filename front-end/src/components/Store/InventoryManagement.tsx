@@ -286,9 +286,6 @@ export function InventoryManagement() {
     { label: '완료', value: 'delivered', count: orders.filter(o => o.status === 'delivered').length }
   ];
 
-  // TODO: 실제 로그인 정보에서 매장 ID 읽어오는 쪽으로 교체
-  const STORE_ID = 2;
-  
   // 컴포넌트 내부 (state 선언들 밑에)
   const didFetchRef = useRef(false);
 
@@ -299,7 +296,7 @@ export function InventoryManagement() {
 
     const loadInventory = async () => {
       try {
-        const list = await fetchStoreInventory(STORE_ID);
+        const list = await fetchStoreInventory();
         const mapped = list.map(mapStoreInventoryToInventoryItem);
         setInventory(mapped);
         setHasInventory(mapped.length > 0);
@@ -310,7 +307,7 @@ export function InventoryManagement() {
     };
 
     loadInventory();
-  }, [STORE_ID]);
+  }, []);
   
   /* ---------- 선택/전체선택 핸들러 (선언문으로 호이스팅) ---------- */
   function handleItemSelect(itemId: number, checked: boolean) {
@@ -520,15 +517,14 @@ export function InventoryManagement() {
   const handleInitInventory = async () => {
     try {
       setIsLoading(true);
-      const created = await initStoreInventory(STORE_ID);
+      const created = await initStoreInventory();
 
       if (created > 0) {
         toast.success(`초기 재고 ${created}개를 생성했습니다.`);
       } else {
         toast.info('이미 재고가 모두 생성되어 있습니다.');
       }
-
-      const list = await fetchStoreInventory(STORE_ID);
+      const list = await fetchStoreInventory();
       const mapped = list.map(mapStoreInventoryToInventoryItem);
       setInventory(mapped);
       setHasInventory(list.length > 0);
@@ -600,7 +596,7 @@ export function InventoryManagement() {
       if (modalType === 'restock' && selectedItem) {
         // 재고PK 기반 재입고 요청 DTO 생성
         const payload: StoreInventoryRestockRequest = {
-          storeInventoryId: selectedItem.id,
+          storeInventoryId: selectedItem.storeInventoryId ?? selectedItem.id,
           quantity: Number(data.quantity),
           memo: data.memo ?? '',
         };
@@ -609,7 +605,7 @@ export function InventoryManagement() {
         await restockStoreInventory(payload);
 
         // 성공 후 목록 재조회
-        const list = await fetchStoreInventory(STORE_ID);
+        const list = await fetchStoreInventory();
         const mapped = list.map(mapStoreInventoryToInventoryItem);
         setInventory(mapped);
 
@@ -658,11 +654,10 @@ export function InventoryManagement() {
         // storeId는 필요하면 여기서 세션/전역 상태에서 꺼내서 넣기
         // storeId: currentStoreId,
         // 나중에 로그인 세션/전역 상태에서 storeId 끌어오면 여기만 교체하면 됨.
-        const storeId = 2;
+
 
         // 3) payload 구성 – StoreMaterialCreateRequest와 1:1 매핑
         const payload: StoreMaterialCreateRequest = {
-          storeId, 
           name: data.itemName,
           category: data.category ?? null,
           baseUnit: data.baseUnit,
@@ -1019,13 +1014,17 @@ export function InventoryManagement() {
                       count: ci.orderQuantity,
                     })),
                   };
-                  await api.post<number>('/api/purchase/create', dto);
                   
-                  console.table(cartItems.map(ci => ({ id: ci.id, storeMaterialId: ci.storeMaterialId, qty: ci.orderQuantity, name: ci.name })));
-
-
                   // 2) 백엔드 호출
-                  const res = await api.post<number>('/api/purchase/create', dto);
+                  console.table(
+                    cartItems.map(ci => ({
+                      id: ci.id,
+                      storeMaterialId: ci.storeMaterialId,
+                      qty: ci.orderQuantity,
+                      name: ci.name,
+                    })),
+                  );
+                  const res = await api.post<number>('/API/purchase/create', dto);
 
                   // 3) UX 업데이트
                   toast.success(`발주 등록 완료 #${res.data}`);

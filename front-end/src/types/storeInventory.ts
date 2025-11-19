@@ -22,6 +22,7 @@ export interface StoreInventoryResponse {
   // 백엔드 필드명 중 실제 내려오는 걸로 맞춰라.
   // (예: storeInventoryId 또는 id 중 하나)
   storeInventoryId?: number;
+  
   id?: number;
 
   // 가맹점 재료 PK (store_material_id_fk)
