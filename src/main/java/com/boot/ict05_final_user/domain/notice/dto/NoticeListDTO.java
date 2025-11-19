@@ -11,71 +11,68 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
+/**
+ * 공지사항 목록 조회용 DTO.
+ *
+ * <p>공지 목록 테이블 표시 및 리스트 카드용 정보를 제공합니다.</p>
+ *
+ */
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
+@Schema(description = "공지사항 목록 DTO")
 public class NoticeListDTO {
 
-    /**
-     * 공지사항 고유 ID
-     */
+    /** 공지사항 고유 ID */
+    @Schema(description = "공지사항 ID")
     private Long id;
 
-    /**
-     * 작성자(회원) FK
-     */
+    /** 작성자(회원) FK */
+    @Schema(description = "작성자 회원 ID")
     private Long memberIdFk;
 
-    /**
-     * 공지사항 카테고리
-     */
+    /** 공지사항 카테고리 */
+    @Schema(description = "공지사항 카테고리")
     private NoticeCategory noticeCategory;
 
-    /**
-     * 공지사항 우선순위
-     */
+    /** 공지사항 우선순위 */
+    @Schema(description = "공지사항 우선순위")
     private NoticePriority noticePriority;
 
-    /**
-     * 공지사항 상태
-     */
+    /** 공지사항 상태 */
+    @Schema(description = "공지사항 상태")
     private NoticeStatus noticeStatus;
 
-    /**
-     * 공지사항 공개 여부
-     */
+    /** 공지사항 공개 여부 */
+    @Schema(description = "공지사항 공개 여부")
     private boolean isShow;
 
-    /**
-     * 공지사항 제목
-     */
+    /** 공지사항 제목 */
+    @Schema(description = "공지사항 제목")
     private String title;
 
-    /**
-     * 공지사항 내용
-     */
+    /** 공지사항 내용 */
+    @Schema(description = "공지사항 본문 (요약용)")
     private String body;
 
-    /**
-     * 작성자 이름
-     */
+    /** 작성자 이름 */
+    @Schema(description = "작성자 이름")
     private String writer;
 
-    /**
-     * 조회수
-     */
+    /** 조회수 */
+    @Schema(description = "조회수")
     private Integer noticeCount;
 
-    /**
-     * 작성일시
-     */
-    @Schema(type = "string", format = "date-time")
+    /** 작성일시 */
+    @Schema(description = "작성일시", type = "string", format = "date-time")
     private LocalDateTime registeredAt;
 
     /** 첨부파일 존재 여부 */
+    @Schema(description = "첨부파일 존재 여부")
     private boolean hasAttachment;
 
-    /** 첫 번째 첨부파일 URL (목록에서 바로 다운로드용) */
+    /** 첫 번째 첨부파일 URL */
+    @Schema(description = "첫 번째 첨부파일 URL (목록에서 다운로드용)")
     private String firstAttachmentUrl;
 
     /**
