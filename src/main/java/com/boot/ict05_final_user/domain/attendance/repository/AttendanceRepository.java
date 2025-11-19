@@ -3,6 +3,8 @@ package com.boot.ict05_final_user.domain.attendance.repository;
 import com.boot.ict05_final_user.domain.staff.entity.Attendance;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.LocalDate;
+
 /**
  *  Attendance 엔티티용 Spring Data JPA 리포지토리 인터페이스.
  *
@@ -15,5 +17,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface AttendanceRepository
         extends JpaRepository<Attendance, Long>, AttendanceRepositoryCustom {
+
+    // 직원 + 날짜로 이미 근태가 존재하는지 체크
+    boolean existsByStaffProfileIdAndWorkDate(Long staffId, LocalDate workDate);
 
 }
