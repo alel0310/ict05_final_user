@@ -1,4 +1,3 @@
-// src/main/java/com/boot/ict05_final_user/domain/fcm/repository/FcmDeviceTokenQueryRepositoryImpl.java
 package com.boot.ict05_final_user.domain.fcm.repository;
 
 import com.boot.ict05_final_user.domain.fcm.entity.AppType;
@@ -16,6 +15,22 @@ import java.util.Optional;
 
 import static com.boot.ict05_final_user.domain.fcm.entity.QFcmDeviceToken.fcmDeviceToken;
 
+/**
+ * {@link FcmDeviceTokenQueryRepository} 구현체.
+ *
+ * <p>FCM 기기 토큰의 Upsert 및 배치 비활성화 로직을 QueryDSL 기반으로 구현합니다.</p>
+ *
+ * <ul>
+ *   <li>Upsert: (appType, platform, memberId, deviceId) 조합 또는 token 기준으로 신규/갱신 처리</li>
+ *   <li>조회: 활성 토큰 단건 조회</li>
+ *   <li>정리: updatedAt / lastSeenAt 기준 대량 비활성화</li>
+ * </ul>
+ *
+ * <p>읽기 전용 조회 시 성능 최적화를 위해 Hibernate Hint를 사용합니다.</p>
+ *
+ * @author 이경욱
+ * @since 2025-11-20
+ */
 @Repository
 @RequiredArgsConstructor
 public class FcmDeviceTokenQueryRepositoryImpl implements FcmDeviceTokenQueryRepository {
@@ -23,13 +38,27 @@ public class FcmDeviceTokenQueryRepositoryImpl implements FcmDeviceTokenQueryRep
     private final JPAQueryFactory query;
     private final EntityManager em;
 
+    /**
+     * 토큰 또는 (appType, platform, memberId, deviceId) 기준으로 Upsert 수행.
+     *
+     * <p>1) 토큰 존재 시: 기존 행 재활성화 및 정보 갱신<br>
+     * 2) 토큰 미존재 시: 동일 디바이스 존재 여부 확인 후 삽입 또는 갱신</p>
+     *
+     * @param appType   앱 구분 (HQ / STORE)
+     * @param platform  플랫폼 (WEB / ANDROID / IOS)
+     * @param storeIdFk 매장 ID
+     * @param memberIdFk 회원 ID
+     * @param deviceId  디바이스 식별자
+     * @param token     FCM 등록 토큰
+     * @param seenAt    최근 접속 시각
+     * @return 저장 또는 갱신된 {@link FcmDeviceToken}
+     */
     @Override
     public FcmDeviceToken upsert(AppType appType, PlatformType platform,
                                  Long storeIdFk, Long memberIdFk,
                                  String deviceId, String token,
                                  LocalDateTime seenAt) {
 
-        // 1) token 일치 우선
         FcmDeviceToken found = query
                 .selectFrom(fcmDeviceToken)
                 .where(fcmDeviceToken.token.eq(token))
@@ -39,7 +68,6 @@ public class FcmDeviceTokenQueryRepositoryImpl implements FcmDeviceTokenQueryRep
                 .fetchFirst();
 
         if (found == null) {
-            // 2) 같은 (app, platform, member, device) 로 기존 행 유무
             FcmDeviceToken byDevice = query
                     .selectFrom(fcmDeviceToken)
                     .where(allOf(
@@ -54,7 +82,6 @@ public class FcmDeviceTokenQueryRepositoryImpl implements FcmDeviceTokenQueryRep
                     .fetchFirst();
 
             if (byDevice == null) {
-                // insert
                 FcmDeviceToken row = FcmDeviceToken.builder()
                         .appType(appType)
                         .platform(platform)
@@ -68,7 +95,6 @@ public class FcmDeviceTokenQueryRepositoryImpl implements FcmDeviceTokenQueryRep
                 em.persist(row);
                 return row;
             } else {
-                // update on same device
                 byDevice.setToken(token);
                 byDevice.setStoreIdFk(storeIdFk);
                 byDevice.setMemberIdFk(memberIdFk);
@@ -77,7 +103,6 @@ public class FcmDeviceTokenQueryRepositoryImpl implements FcmDeviceTokenQueryRep
                 return byDevice;
             }
         } else {
-            // token 재활성화
             found.setAppType(appType);
             found.setPlatform(platform);
             found.setStoreIdFk(storeIdFk);
@@ -89,6 +114,12 @@ public class FcmDeviceTokenQueryRepositoryImpl implements FcmDeviceTokenQueryRep
         }
     }
 
+    /**
+     * 활성 상태의 토큰 단건 조회.
+     *
+     * @param token FCM 토큰 문자열
+     * @return 활성 토큰 Optional
+     */
     @Override
     public Optional<FcmDeviceToken> findActiveByToken(String token) {
         FcmDeviceToken row = query.selectFrom(fcmDeviceToken)
@@ -100,6 +131,12 @@ public class FcmDeviceTokenQueryRepositoryImpl implements FcmDeviceTokenQueryRep
         return Optional.ofNullable(row);
     }
 
+    /**
+     * updatedAt 기준으로 오래된 토큰 일괄 비활성화.
+     *
+     * @param cutoff 기준 시각
+     * @return 비활성화된 행 수
+     */
     @Override
     public int deactivateAllByUpdatedAtBefore(LocalDateTime cutoff) {
         long affected = new JPAUpdateClause(em, fcmDeviceToken)
@@ -110,6 +147,12 @@ public class FcmDeviceTokenQueryRepositoryImpl implements FcmDeviceTokenQueryRep
         return (int) affected;
     }
 
+    /**
+     * lastSeenAt 기준으로 오래된 토큰 일괄 비활성화.
+     *
+     * @param cutoff 기준 시각
+     * @return 비활성화된 행 수
+     */
     @Override
     public int deactivateAllByLastSeenAtBefore(LocalDateTime cutoff) {
         long affected = new JPAUpdateClause(em, fcmDeviceToken)
@@ -121,7 +164,7 @@ public class FcmDeviceTokenQueryRepositoryImpl implements FcmDeviceTokenQueryRep
         return (int) affected;
     }
 
-    // helpers
+    /** 다중 BooleanExpression 조합 유틸리티 */
     private static BooleanExpression allOf(BooleanExpression... exps) {
         BooleanExpression acc = null;
         for (BooleanExpression e : exps) {
@@ -130,6 +173,8 @@ public class FcmDeviceTokenQueryRepositoryImpl implements FcmDeviceTokenQueryRep
         }
         return acc;
     }
+
+    /** 값이 null이 아닐 경우 eq 조건 생성 */
     private static <T> BooleanExpression eqOrNull(com.querydsl.core.types.dsl.SimpleExpression<T> col, T v) {
         return (v == null) ? null : col.eq(v);
     }

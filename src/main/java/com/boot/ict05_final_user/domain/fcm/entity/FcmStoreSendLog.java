@@ -2,14 +2,22 @@ package com.boot.ict05_final_user.domain.fcm.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 가맹점용 FCM 발송 로그.
- * - 본사 fcm_send_log 와 별도 테이블 (fcm_store_send_log)
- * - 공지 / 재고부족 / 유통임박 / 테스트 공용으로 사용.
+ * 가맹점 단위 FCM 발송 로그 엔티티.
+ *
+ * <p>공지사항, 재고부족, 유통임박, 테스트 등 모든 가맹점 발송 내역을 기록합니다.</p>
+ *
+ * <ul>
+ *   <li>테이블명: {@code fcm_store_send_log}</li>
+ *   <li>로그 범위: NOTICE / STOCK_LOW / EXPIRE_SOON / TEST</li>
+ *   <li>본사용 {@code fcm_send_log} 와 분리 저장</li>
+ * </ul>
+ *
+ * @author 이경욱
+ * @since 2025-11-20
  */
 @Entity
 @Table(
@@ -33,82 +41,75 @@ public class FcmStoreSendLog {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long fcmStoreSendLogId;
 
-    /** HQ/STORE 구분 (여기서는 주로 STORE) */
+    /** 앱 구분 (대부분 STORE) */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     private AppType appType;
 
-    /** NOTICE / STOCK_LOW / EXPIRE_SOON / TEST / 기타 */
+    /** 알림 카테고리 (NOTICE / STOCK_LOW / EXPIRE_SOON / TEST 등) */
     @Column(nullable = false, length = 32)
     private String category;
 
-    /** 알림 기준이 되는 스토어/멤버 */
+    /** 매장 및 사용자 참조키 */
     @Column(name = "store_id_fk")
     private Long storeIdFk;
 
     @Column(name = "member_id_fk")
     private Long memberIdFk;
 
-    /** 토픽 또는 토큰 */
+    /** 토픽명 또는 단일 토큰 */
     @Column(length = 255)
-    private String topic; // isTopic=true 일 때 채움
+    private String topic;
 
     @Column(length = 512)
-    private String token; // isTopic=false 일 때 채움
+    private String token;
 
-    /** 표시되는 타이틀/본문 */
+    /** 알림 제목 및 본문 */
     @Column(nullable = false, length = 255)
     private String title;
 
     @Column(nullable = false, length = 1000)
     private String body;
 
-    /** data.link / WebpushFcmOptions link */
+    /** 클릭 이동 링크 (data.link, WebpushFcmOptions) */
     @Column(length = 1024)
     private String link;
 
-    /** 비즈니스 기준 (예: NOTICE / INVENTORY 등) */
+    /** 참조 비즈니스 타입 (예: NOTICE, INVENTORY 등) */
     @Column(name = "ref_type", length = 32)
     private String refType;
 
-    /** ref_type 에 따라 notice_id / 기타 PK */
+    /** 참조 ID (예: notice_id 등) */
     @Column(name = "ref_id")
     private Long refId;
 
-    /** 재고/유통 스캔 기준일 등 */
+    /** 스캔 기준일 등 추가 정보 */
     @Column(name = "ref_date")
     private LocalDate refDate;
 
-    /** Firebase 가 리턴하는 messageId */
+    /** Firebase 메시지 ID */
     @Column(name = "result_message_id", length = 255)
     private String resultMessageId;
 
-    /** 에러 메시지(있다면) */
+    /** 오류 메시지 (있을 경우) */
     @Column(name = "result_error", length = 512)
     private String resultError;
 
-    /** 실제 발송 시각 */
+    /** 발송 시각 */
     @Column(nullable = false)
     private LocalDateTime sentAt;
 
-    /** 로우 생성시각 */
+    /** 로그 생성 시각 */
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
+    /** 생성 시 기본값 자동 설정 */
     @PrePersist
     void onCreate() {
         LocalDateTime now = LocalDateTime.now();
-        if (sentAt == null) {
-            sentAt = now;
-        }
-        if (createdAt == null) {
-            createdAt = now;
-        }
-        if (appType == null) {
-            appType = AppType.STORE;
-        }
-        if (category == null) {
-            category = "GENERAL";
-        }
+        if (sentAt == null) sentAt = now;
+        if (createdAt == null) createdAt = now;
+        if (appType == null) appType = AppType.STORE;
+        if (category == null) category = "GENERAL";
     }
 }
