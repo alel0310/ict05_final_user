@@ -118,8 +118,9 @@ export function OrderList() {
   // 탭은 상태 필터와 동일하게 사용
   const currentTab = statusFilter;
 
-  // 서버 페이징 상태 (지금은 백엔드에서 잘 안 쓰더라도 UI용으로 유지)
+  // 서버 페이징 상태
   const PAGE_SIZE = 20;
+  const MAX_PAGE_BUTTONS = 10;
   const [page, setPage] = useState(0); // 0-based
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -243,7 +244,39 @@ export function OrderList() {
      주문 목록 조회
   ========================= */
 
-  // 필터 바뀌면 0페이지로 리셋 (예전 동작)
+  // UI 상태값 → 백엔드 enum 이름
+  const toBackendStatus = (v: string) => {
+    if (!v || v === 'all') return undefined;
+    return v.toUpperCase(); // pending -> PENDING
+  };
+
+  const toBackendPaymentType = (v: string) => {
+    switch (v) {
+      case '카드결제':
+        return 'CARD';
+      case '현금결제':
+        return 'CASH';
+      case '상품권결제':
+        return 'VOUCHER';
+      default:
+        return undefined; // 'all' 포함
+    }
+  };
+
+  const toBackendOrderType = (v: string) => {
+    switch (v) {
+      case '방문':
+        return 'VISIT';
+      case '포장':
+        return 'TAKEOUT';
+      case '배달':
+        return 'DELIVERY';
+      default:
+        return undefined; // 'all' 포함
+    }
+  };
+
+  // 필터 바뀌면 0페이지로 리셋
   useEffect(() => {
     setPage(0);
   }, [searchTerm, statusFilter, paymentFilter, orderTypeFilter, dateFilter]);
@@ -259,11 +292,9 @@ export function OrderList() {
               page,
               size: PAGE_SIZE,
               keyword: searchTerm || undefined,
-              status: statusFilter === 'all' ? undefined : statusFilter,
-              paymentType:
-                paymentFilter === 'all' ? undefined : paymentFilter,
-              orderType:
-                orderTypeFilter === 'all' ? undefined : orderTypeFilter,
+              status: toBackendStatus(statusFilter),
+              paymentType: toBackendPaymentType(paymentFilter),
+              orderType: toBackendOrderType(orderTypeFilter),
               period: dateFilter || 'all',
             },
           },
@@ -271,7 +302,7 @@ export function OrderList() {
 
         const data: any = res.data;
 
-        // 🔥 응답이 리스트(List) 인지 Page 인지 둘 다 대응
+        // 응답이 리스트(List) 인지 Page 인지 둘 다 대응
         const raw: BackendOrder[] = Array.isArray(data)
           ? data
           : data.content ?? [];
@@ -399,6 +430,25 @@ export function OrderList() {
   const todayCount = totalCount;
   const startIndex = totalCount === 0 ? 0 : page * PAGE_SIZE + 1;
   const endIndex = Math.min(totalCount, (page + 1) * PAGE_SIZE);
+
+  // 🔥 여기 추가: 페이지 버튼 최대 10개만 보이도록 계산
+  const getPageNumbers = () => {
+    if (totalPages <= MAX_PAGE_BUTTONS) {
+      // 전체 페이지 수가 10개 이하이면 전부 표시
+      return Array.from({ length: totalPages }, (_, i) => i);
+    }
+
+    const half = Math.floor(MAX_PAGE_BUTTONS / 2);
+    let start = Math.max(0, page - half);
+    let end = start + MAX_PAGE_BUTTONS - 1;
+
+    if (end >= totalPages) {
+      end = totalPages - 1;
+      start = Math.max(0, end - MAX_PAGE_BUTTONS + 1);
+    }
+
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  };
 
   /* =========================
      JSX
@@ -700,7 +750,7 @@ export function OrderList() {
                   </table>
                 </div>
 
-                {/* 페이지네이션 (예전처럼) */}
+                {/* 페이지네이션 */}
                 {totalCount > 0 && (
                   <div className="flex items-center justify-between px-6 py-4 border-t">
                     <div className="text-sm text-gray-500">
@@ -717,18 +767,17 @@ export function OrderList() {
                         이전
                       </Button>
 
-                      {Array.from({ length: totalPages }, (_, i) => i).map(
-                        (p) => (
-                          <Button
-                            key={p}
-                            variant={p === page ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={() => setPage(p)}
-                          >
-                            {p + 1}
-                          </Button>
-                        ),
-                      )}
+                      {/* 🔥 여기만 수정: getPageNumbers 사용 */}
+                      {getPageNumbers().map((p) => (
+                        <Button
+                          key={p}
+                          variant={p === page ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setPage(p)}
+                        >
+                          {p + 1}
+                        </Button>
+                      ))}
 
                       <Button
                         variant="outline"

@@ -97,51 +97,51 @@ public class CustomerOrderService {
     // ─────────────────────
     // 주문 리스트 검색/필터
     // ─────────────────────
-    public List<CustomerOrderListDTO> searchOrderList(
-            Long storeId,                    // ✅ 로그인 가맹점 ID
-            String keyword,
-            String statusText,
-            String paymentTypeText,
-            String orderTypeText,
-            String period // all / today / week / month
-    ) {
-        // 1) 해당 가맹점의 주문을 최신순으로 가져온다
-        List<CustomerOrder> orders =
-                orderRepository.findByStore_Id(storeId, Sort.by(Sort.Direction.DESC, "id"));
-
-        // 2) 기간(period) 필터링
-        LocalDate today = LocalDate.now();
-
-        List<CustomerOrder> filtered = orders.stream()
-                .filter(o -> {
-                    LocalDate createdDate = o.getOrderedAt().toLocalDate();
-
-                    if (period == null || period.isBlank() || "today".equalsIgnoreCase(period)) {
-                        return createdDate.isEqual(today);
-                    } else if ("week".equalsIgnoreCase(period)) {
-                        LocalDate aWeekAgo = today.minusDays(6);
-                        return !createdDate.isBefore(aWeekAgo) && !createdDate.isAfter(today);
-                    } else if ("month".equalsIgnoreCase(period)) {
-                        LocalDate firstDay = today.withDayOfMonth(1);
-                        return !createdDate.isBefore(firstDay) && !createdDate.isAfter(today);
-                    } else {
-                        return true; // all
-                    }
-                })
-                .toList();
-
-        int MAX_SIZE = 100;
-        if (filtered.size() > MAX_SIZE) {
-            log.warn("orders api result size = {}, limit to {}", filtered.size(), MAX_SIZE);
-            filtered = filtered.subList(0, MAX_SIZE);
-        } else {
-            log.info("orders api result size = {}", filtered.size());
-        }
-
-        return filtered.stream()
-                .map(CustomerOrderListDTO::from)
-                .toList();
-    }
+//    public List<CustomerOrderListDTO> searchOrderList(
+//            Long storeId,                    // ✅ 로그인 가맹점 ID
+//            String keyword,
+//            String statusText,
+//            String paymentTypeText,
+//            String orderTypeText,
+//            String period // all / today / week / month
+//    ) {
+//        // 1) 해당 가맹점의 주문을 최신순으로 가져온다
+//        List<CustomerOrder> orders =
+//                orderRepository.findByStore_Id(storeId, Sort.by(Sort.Direction.DESC, "id"));
+//
+//        // 2) 기간(period) 필터링
+//        LocalDate today = LocalDate.now();
+//
+//        List<CustomerOrder> filtered = orders.stream()
+//                .filter(o -> {
+//                    LocalDate createdDate = o.getOrderedAt().toLocalDate();
+//
+//                    if (period == null || period.isBlank() || "today".equalsIgnoreCase(period)) {
+//                        return createdDate.isEqual(today);
+//                    } else if ("week".equalsIgnoreCase(period)) {
+//                        LocalDate aWeekAgo = today.minusDays(6);
+//                        return !createdDate.isBefore(aWeekAgo) && !createdDate.isAfter(today);
+//                    } else if ("month".equalsIgnoreCase(period)) {
+//                        LocalDate firstDay = today.withDayOfMonth(1);
+//                        return !createdDate.isBefore(firstDay) && !createdDate.isAfter(today);
+//                    } else {
+//                        return true; // all
+//                    }
+//                })
+//                .toList();
+//
+//        int MAX_SIZE = 100;
+//        if (filtered.size() > MAX_SIZE) {
+//            log.warn("orders api result size = {}, limit to {}", filtered.size(), MAX_SIZE);
+//            filtered = filtered.subList(0, MAX_SIZE);
+//        } else {
+//            log.info("orders api result size = {}", filtered.size());
+//        }
+//
+//        return filtered.stream()
+//                .map(CustomerOrderListDTO::from)
+//                .toList();
+//    }
 
     // ─────────────────────
     // 주문 상세 조회 (로그인한 가맹점 기준)

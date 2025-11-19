@@ -52,7 +52,7 @@ public class CustomerOrderController {
      * 검색/필터는 모두 쿼리 파라미터로 받아서 서비스에서 처리
      */
     @GetMapping
-    public ResponseEntity<List<CustomerOrderListDTO>> listForStore(
+    public ResponseEntity<Page<CustomerOrderListDTO>> listForStore(
             @AuthenticationPrincipal AppUser user,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status,
@@ -63,27 +63,30 @@ public class CustomerOrderController {
                     sort = "id", direction = Sort.Direction.DESC)
             Pageable pageable
     ) {
-        try {
-            if (user == null) {
-                log.warn("Unauthenticated GET /api/customer-orders 요청");
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-            }
-
-            Long storeId = user.getStoreId();
-            log.info("list orders for storeId={}", storeId);
-
-            List<CustomerOrderListDTO> list =
-                    orderService.searchOrderList(storeId, keyword, status, paymentType, orderType, period);
-
-            log.info("orders api result size = {}", list.size());
-            return ResponseEntity.ok(list);
-        } catch (Exception e) {
-            log.error("[GET /api/customer-orders] 주문 리스트 조회 중 오류", e);
-            return ResponseEntity.ok(Collections.emptyList());
+        if (user == null) {
+            log.warn("Unauthenticated GET /api/customer-orders");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
+
+        Long storeId = user.getStoreId();
+        log.info("list orders for storeId={}", storeId);
+
+        // 🔥 프론트에서 넘어온 값으로 검색 DTO 직접 만들어 주기
+        CustomerOrderSearchDTO search = new CustomerOrderSearchDTO();
+        search.setKeyword(keyword);
+        search.setStatus(status);
+        search.setPaymentType(paymentType);
+        search.setOrderType(orderType);
+        search.setPeriod(period);
+
+        Page<CustomerOrderListDTO> pageResult =
+                orderService.searchOrderListPage(storeId, search, pageable);
+
+        log.info("orders api result size = {}, totalElements={}",
+                pageResult.getNumberOfElements(), pageResult.getTotalElements());
+
+        return ResponseEntity.ok(pageResult);
     }
-
-
 
 
     @PatchMapping("/{orderId}/status")
