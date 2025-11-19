@@ -280,6 +280,8 @@ export function InventoryManagement() {
   const [isLoading, setIsLoading] = useState(false);
   const { dialog } = useConfirmDialog();
 
+  const submitOrderRef = useRef(false);
+
   const inventoryFilters = [
     { label: '충분', value: 'sufficient', count: inventory.filter(i => i.status === 'sufficient').length },
     { label: '부족', value: 'low', count: inventory.filter(i => i.status === 'low').length },
@@ -1067,7 +1069,9 @@ export function InventoryManagement() {
                 setCartItems(prev => prev.filter(item => item.id !== itemId));
                 setSelectedItems(prev => prev.filter(id => id !== itemId));
               }}
-              onSubmitOrder={async ({ priority, notes }) => {
+              onSubmitOrder={async ({ priority, notes }) => {               
+                if (submitOrderRef.current) return; // 재진입 차단
+                submitOrderRef.current = true;
                 try {
                   if (cartItems.length === 0) {
                     toast.error('발주 품목을 추가해주세요.');
@@ -1078,41 +1082,43 @@ export function InventoryManagement() {
                     return;
                   }
 
-                  // 1) DTO 구성
                   const dto: PurchaseOrderRequestsDTO = {
                     priority: (priority as 'NORMAL' | 'URGENT') ?? 'NORMAL',
-                    notes: notes?.trim() || '',
-                    items: cartItems.map(ci => ({
-                      storeMaterialId: ci.storeMaterialId,  // ← 핵심
-                      count: ci.orderQuantity,
-                    })),
+                    notes: (notes ?? '').trim(),
+                    items: cartItems
+                      .map(ci => ({
+                        storeMaterialId: Number(ci.storeMaterialId ?? ci.id),
+                        count: Number(ci.orderQuantity),
+                      }))
+                      .filter(it =>
+                        Number.isFinite(it.storeMaterialId) && it.storeMaterialId > 0 &&
+                        Number.isFinite(it.count) && it.count > 0
+                      ),
                   };
-                  
-                  // 2) 백엔드 호출
-                  console.table(
-                    cartItems.map(ci => ({
-                      id: ci.id,
-                      storeMaterialId: ci.storeMaterialId,
-                      qty: ci.orderQuantity,
-                      name: ci.name,
-                    })),
-                  );
+                  if (!dto.items.length) {
+                    toast.error('유효한 발주 품목이 없습니다.');
+                    return;
+                  }
+
                   const res = await api.post<number>('/api/purchase/create', dto);
 
-                  // 3) UX 업데이트
                   toast.success(`발주 등록 완료 #${res.data}`);
                   setIsCartModalOpen(false);
                   setSelectedItems([]);
                   setCartItems([]);
 
-                  // 상단 카드(처리 중 발주) 숫자만 즉시 반영하고 싶으면 임시로 pending 추가
                   setOrders(prev => [
                     {
                       id: String(res.data),
-                      items: cartItems.map(ci => ({ name: ci.name, quantity: ci.orderQuantity, unit: ci.unit, unitPrice: ci.unitPrice })),
+                      items: cartItems.map(ci => ({
+                        name: ci.name,
+                        quantity: ci.orderQuantity,
+                        unit: ci.unit,
+                        unitPrice: ci.unitPrice,
+                      })),
                       supplier: (cartItems[0] as any)?.supplier ?? '미지정',
                       orderDate: new Date().toISOString().split('T')[0],
-                      expectedDate: '', // 서버에서 관리
+                      expectedDate: '',
                       status: 'pending',
                       total: cartItems.reduce((s, ci) => s + ci.totalPrice, 0),
                     },
@@ -1121,6 +1127,8 @@ export function InventoryManagement() {
                 } catch (e: any) {
                   console.error(e);
                   toast.error(e?.response?.data?.message || '발주 등록 중 오류가 발생했습니다.');
+                } finally {
+                  submitOrderRef.current = false; // 가드 해제
                 }
               }}
             />
@@ -1296,8 +1304,14 @@ function OrderCartContent({
   items: CartItem[];
   onUpdateQuantity: (itemId: number, quantity: number) => void;
   onRemoveItem: (itemId: number) => void;
-  onSubmitOrder: (orderData: { supplier: string; expectedDate: string; priority: string; notes: string }) => void;
+  onSubmitOrder: (orderData: { 
+    supplier: string; 
+    expectedDate: string; 
+    priority: string; 
+    notes: string 
+  }) => void;
 }) {
+  const [submitting, setSubmitting] = useState(false);
   const [orderForm, setOrderForm] = useState<{ priority: string; notes: string }>({
     priority: 'NORMAL',
     notes: '',
@@ -1322,23 +1336,30 @@ function OrderCartContent({
     return hasAny ? '여러 공급처' : '미지정';
   };
 
-  const handleSubmit = () => {
-    if (items.length === 0) {
-      toast.error('발주 품목을 추가해주세요.');
-      return;
-    }
-    if (items.some((item) => item.orderQuantity <= 0)) {
-      toast.error('발주 수량을 확인해주세요.');
-      return;
-    }
+  const handleSubmit = async () => {
+    if (submitting) return;          // 재클릭 차단
+    setSubmitting(true);
+    try {
+      if (items.length === 0) {
+        toast.error('발주 품목을 추가해주세요.');
+        return;
+      }
+      if (items.some((item) => item.orderQuantity <= 0)) {
+        toast.error('발주 수량을 확인해주세요.');
+        return;
+      }
 
-    onSubmitOrder({
-      supplier: inferSupplier(),   // 위에 정의한 보조 함수
-      expectedDate: '',            // 입력 제거로 빈값 전달
-      priority: orderForm.priority,
-      notes: orderForm.notes,
-    });
+      await onSubmitOrder({
+        supplier: inferSupplier(),
+        expectedDate: '',
+        priority: orderForm.priority,
+        notes: orderForm.notes,
+      });
+    } finally {
+      setSubmitting(false);
+    }
   }
+  
 
   return (
     <div className="space-y-6">
@@ -1456,9 +1477,13 @@ function OrderCartContent({
           >
             초기화
           </Button>
-          <Button onClick={handleSubmit} className="flex-1 bg-kpi-red hover:bg-red-600 text-white">
+          <Button
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="flex-1 bg-kpi-red hover:bg-red-600 text-white"
+          >
             <ShoppingCart className="w-4 h-4 mr-2" />
-            발주 등록
+            {submitting ? '등록 중…' : '발주 등록'}
           </Button>
         </div>
       </Card>
