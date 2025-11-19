@@ -157,7 +157,6 @@ export default function App() {
       case "staff":
       case "staff-list": return <ErrorBoundary><StaffList /></ErrorBoundary>;
     
-      case "staff-reports": return <ErrorBoundary><StaffWorkReports /></ErrorBoundary>;
       // renderContent() 내부 switch
       case "staff-schedule": return <ErrorBoundary><StaffSchedule /></ErrorBoundary>;
       case "notice": return <ErrorBoundary><NoticeEducation /></ErrorBoundary>;
