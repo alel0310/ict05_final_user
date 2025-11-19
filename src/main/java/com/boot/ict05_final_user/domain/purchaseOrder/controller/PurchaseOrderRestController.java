@@ -1,5 +1,6 @@
 package com.boot.ict05_final_user.domain.purchaseOrder.controller;
 
+import com.boot.ict05_final_user.config.security.principal.AppUser;
 import com.boot.ict05_final_user.domain.purchaseOrder.dto.*;
 import com.boot.ict05_final_user.domain.purchaseOrder.entity.PurchaseOrderStatus;
 import com.boot.ict05_final_user.domain.purchaseOrder.repository.PurchaseOrderRepository;
@@ -15,6 +16,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -49,10 +51,14 @@ public class PurchaseOrderRestController {
             description = "검색 조건과 페이징 정보를 이용하여 가맹점 발주 목록을 조회한다."
     )
     public ResponseEntity<Page<PurchaseOrderListDTO>> listPurchase(
+            @AuthenticationPrincipal AppUser appUser,
             @ModelAttribute PurchaseOrderSearchDTO purchaseOrderSearchDTO,
             @RequestParam(value = "status", required = false) PurchaseOrderStatus status,
             @PageableDefault(page = 0, size = 10, sort = "id", direction = Sort.Direction.DESC)
             Pageable pageable) {
+
+        Long storeId = appUser.getStoreId();
+        purchaseOrderSearchDTO.setStoreId(storeId);
 
         if (status != null) purchaseOrderSearchDTO.setPurchaseOrderStatus(status);
         Page<PurchaseOrderListDTO> result = purchaseOrderService.selectAllPurchase(purchaseOrderSearchDTO, pageable);

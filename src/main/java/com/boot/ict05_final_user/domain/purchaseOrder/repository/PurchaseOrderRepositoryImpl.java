@@ -81,6 +81,7 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
                 .from(po)
                 .where(
                         eqOrderCode(purchaseOrderSearchDTO, po),
+                        eqStoreId(purchaseOrderSearchDTO.getStoreId(), po),
                         po.details.isNotEmpty()
                 )
                 .orderBy(po.id.desc())
@@ -94,6 +95,7 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
                 .from(po)
                 .where(
                         eqOrderCode(purchaseOrderSearchDTO, po),
+                        eqStoreId(purchaseOrderSearchDTO.getStoreId(), po),
                         po.details.isNotEmpty()
                 )
                 .fetchOne();
@@ -155,6 +157,10 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
         return condition;
     }
 
+    private BooleanExpression eqStoreId(Long storeId, QPurchaseOrder po) {
+        return storeId != null ? po.store.id.eq(storeId) : null;
+    }
+
     /**
      * 조건에 맞는 발주 총 건수를 반환한다.
      *
@@ -174,7 +180,8 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
                 .select(purchaseOrder.count())
                 .from(purchaseOrder)
                 .where(
-                        eqOrderCode(purchaseOrderSearchDTO, purchaseOrder)
+                        eqOrderCode(purchaseOrderSearchDTO, purchaseOrder),
+                        eqStoreId(purchaseOrderSearchDTO.getStoreId(), purchaseOrder)
                 )
                 .fetchOne();
 
