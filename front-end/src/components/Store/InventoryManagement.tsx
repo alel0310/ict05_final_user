@@ -1097,7 +1097,7 @@ export function InventoryManagement() {
                       name: ci.name,
                     })),
                   );
-                  const res = await api.post<number>('/API/purchase/create', dto);
+                  const res = await api.post<number>('/api/purchase/create', dto);
 
                   // 3) UX 업데이트
                   toast.success(`발주 등록 완료 #${res.data}`);
