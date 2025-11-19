@@ -16,8 +16,8 @@ class PdfGenerator:
         self.styles = self._build_styles()
 
     def _register_fonts(self):
-        font_path_reg = "/usr/share/fonts/truetype/noto/NotoSansKR-Regular.ttf"
-        font_path_bold = "/usr/share/fonts/truetype/noto/NotoSansKR-Bold.ttf"
+        font_path_reg = "/usr/share/fonts/opentype/noto/NotoSansKR-Regular.ttf"
+        font_path_bold = "/usr/share/fonts/opentype/noto/NotoSansKR-Bold.ttf"
 
         if os.name == "nt":  # Windows
             font_path_reg = "c:/Windows/Fonts/malgun.ttf"

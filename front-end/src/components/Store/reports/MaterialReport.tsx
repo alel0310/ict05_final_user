@@ -75,7 +75,6 @@ function formatDateLocal(date: Date): string {
 // 메인 컴포넌트
 // ==========================
 export default function MaterialReport() {
-  const [storeId] = useState<number>(1);
 
   const today = new Date();
   const [end, setEnd] = useState<Date>(() => today);
@@ -91,7 +90,6 @@ export default function MaterialReport() {
   const [summary, setSummary] = useState<MaterialSummary | null>(null);
   const [rows, setRows] = useState<MaterialRow[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
-
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
 
@@ -103,9 +101,7 @@ export default function MaterialReport() {
   // ==========================
   async function loadSummary() {
     try {
-      const { data } = await api.get<MaterialSummary>('/api/analytics/materials/summary', {
-        params: { storeId },
-      });
+      const { data } = await api.get<MaterialSummary>('/api/analytics/materials/summary');
       setSummary(data);
     } catch (e) {
       console.error('재료 요약 조회 실패', e);
@@ -126,7 +122,6 @@ export default function MaterialReport() {
 
       const { data } = await api.get<PageResp<MaterialRow>>(url, {
         params: {
-          storeId,         // ✅ 400 방지: storeId 반드시 포함
           start: startStr,
           end: endStr,
           size: pageSize,
@@ -163,7 +158,6 @@ export default function MaterialReport() {
 
       const { data } = await api.get<PageResp<MaterialRow>>(url, {
         params: {
-          storeId,         // ✅ 여기도 storeId 포함
           start: startStr,
           end: endStr,
           size: pageSize,
@@ -199,8 +193,7 @@ export default function MaterialReport() {
         } as any
       );
 
-      const blob = new Blob([data], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
+      const url = window.URL.createObjectURL(data);
 
       const link = document.createElement('a');
       const viewLabel = viewBy === 'DAY' ? 'day' : 'month';
@@ -218,11 +211,9 @@ export default function MaterialReport() {
     }
   }
 
-  // 최초 1회 + storeId 변경 시 자동 조회 (주문분석과 동일)
   useEffect(() => {
     loadFirst();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storeId]);
+  }, []);
 
   return (
     <div className="space-y-6">

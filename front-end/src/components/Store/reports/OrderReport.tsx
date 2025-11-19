@@ -68,7 +68,6 @@ function formatDateLocal(date: Date): string {
 }
 
 export default function OrderReport() {
-  const [storeId] = useState<number>(1);
 
   const today = new Date();
   const [end, setEnd] = useState<Date>(() => today);
@@ -90,12 +89,10 @@ export default function OrderReport() {
   const startStr = useMemo(() => formatDateLocal(start), [start]);
   const endStr   = useMemo(() => formatDateLocal(end),   [end]);
 
-  // 상단 카드만 따로 로드
+  // 상단 카드 로드(백엔드가 로그인 사용자 기준으로 처리)
   async function loadSummary() {
     try {
-      const { data } = await api.get<OrderSummary>('/api/analytics/orders/summary', {
-        params: { storeId },
-      });
+      const { data } = await api.get<OrderSummary>('/api/analytics/orders/summary');
       setSummary(data);
     } catch {
       setSummary(null);
@@ -105,35 +102,44 @@ export default function OrderReport() {
   // 테이블 조회 (일별/월별 공용)
   async function loadFirst() {
     setLoading(true);
+    let alive = true;
     try {
       const url =
         viewBy === 'DAY'
           ? '/api/analytics/orders/day-rows'
           : '/api/analytics/orders/month-rows';
 
-      const { data } = await api.get<PageResp<OrderRow>>(url, {
-        params: {
-          storeId,
-          start: startStr,
-          end: endStr,
-          size: pageSize,
-          cursor: null,
-        },
-      });
-
-      setRows(data.items);
-      setCursor(data.nextCursor);
+      // 표 + 요약카드를 동시에 불러 속도 최적화
+      const [rowsRes, summaryRes] = await Promise.all([
+        api.get<PageResp<OrderRow>>(url, {
+          params: {
+            start: startStr,
+            end: endStr,
+            size: pageSize,
+            cursor: null,
+          },
+        }),
+        api.get<OrderSummary>('/api/analytics/orders/summary'),
+      ]);
+      if (!alive) return;
+      setRows(rowsRes.data.items);
+      setCursor(rowsRes.data.nextCursor);
+      setSummary(summaryRes.data);
+    } catch {
+      if (!alive) return;
+      setRows([]);
+      setCursor(null);
+      setSummary(null);
     } finally {
-      setLoading(false);
+      if (alive) setLoading(false);
     }
-
-    // 카드 동시 갱신
-    loadSummary();
+    return () => { alive = false; };
   }
 
   async function loadMore() {
     if (!cursor) return;
     setLoading(true);
+    let alive = true;
     try {
       const url =
         viewBy === 'DAY'
@@ -142,7 +148,6 @@ export default function OrderReport() {
 
       const { data } = await api.get<PageResp<OrderRow>>(url, {
         params: {
-          storeId,
           start: startStr,
           end: endStr,
           size: pageSize,
@@ -150,11 +155,13 @@ export default function OrderReport() {
         },
       });
 
+      if (!alive) return;
       setRows((prev) => [...prev, ...data.items]);
       setCursor(data.nextCursor);
     } finally {
-      setLoading(false);
+      if (alive) setLoading(false);
     }
+    return () => { alive = false; };
   }
 
   // ==========================
@@ -175,8 +182,7 @@ export default function OrderReport() {
         } as any
       );
 
-      const blob = new Blob([data], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
+      const url = window.URL.createObjectURL(data);
 
       const link = document.createElement('a');
       const viewLabel = viewBy === 'DAY' ? 'day' : 'month';
@@ -199,7 +205,7 @@ export default function OrderReport() {
   useEffect(() => {
     loadFirst();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storeId]);
+  }, []);
 
   const deliveryMtd = summary?.deliverySalesMtd ?? 0;
   const takeoutMtd  = summary?.takeoutSalesMtd ?? 0;

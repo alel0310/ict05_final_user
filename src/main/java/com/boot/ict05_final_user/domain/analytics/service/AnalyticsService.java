@@ -113,6 +113,7 @@ public class AnalyticsService {
 	 */
 	public MaterialSummaryDto getMaterialSummary(Long storeId) {
 		LocalDate today = LocalDate.now(KST);
+		System.out.println("재료 카드 쿼리 나오나?" + repo.fetchMaterialSummary(storeId, today));
 		return repo.fetchMaterialSummary(storeId, today);
 	}
 
@@ -120,6 +121,7 @@ public class AnalyticsService {
 	 * 재료 분석 일별 테이블 조회.
 	 */
 	public CursorPage<MaterialDailyRowDto> getMaterialDailyRows(Long storeId, AnalyticsSearchDto cond) {
+		System.out.println("재료 일별 쿼리 나오나?" + repo.fetchMaterialDailyRows(storeId, cond));
 		return repo.fetchMaterialDailyRows(storeId, cond);
 	}
 
@@ -127,6 +129,7 @@ public class AnalyticsService {
 	 * 재료 분석 월별 테이블 조회.
 	 */
 	public CursorPage<MaterialMonthlyRowDto> getMaterialMonthlyRows(Long storeId, AnalyticsSearchDto cond) {
+		System.out.println("재료 월별 쿼리 나오나?" + repo.fetchMaterialMonthlyRows(storeId, cond));
 		return repo.fetchMaterialMonthlyRows(storeId, cond);
 	}
 
