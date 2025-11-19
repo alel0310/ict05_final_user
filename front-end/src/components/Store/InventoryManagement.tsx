@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { DataTable, Column } from '../Common/DataTable';
 import { FormModal } from '../Common/FormModal';
 import { ConfirmDialog, useConfirmDialog } from '../Common/ConfirmDialog';
@@ -42,6 +42,14 @@ import type {
   StoreInventoryResponse,
   StoreInventoryRestockRequest
 } from '../../types/storeInventory';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationPrevious,
+  PaginationNext,
+} from '../ui/pagination';
 
 /* =======================
    타입 정의
@@ -284,6 +292,10 @@ export function InventoryManagement() {
     { label: '배송중', value: 'shipping', count: orders.filter(o => o.status === 'shipping').length },
     { label: '완료', value: 'delivered', count: orders.filter(o => o.status === 'delivered').length }
   ];
+
+  // 페이지 관련
+  const PAGE_SIZE = 10;
+  const [page, setPage] = useState(1);
 
   // 컴포넌트 내부 (state 선언들 밑에)
   const didFetchRef = useRef(false);
@@ -794,16 +806,39 @@ export function InventoryManagement() {
     return '새 자재 등록';
   };
 
-  // 통계
+  // 통계 + 페이징
   const totalItems = inventory.length;
-  const lowStockItems = inventory.filter(i => i.status === 'low' || i.status === 'shortage').length;
-  const pendingOrders = orders.filter(o => o.status === 'pending' || o.status === 'approved').length;
-  const expiringItems = inventory.filter(item => {
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+
+  const pagedInventory = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return inventory.slice(start, start + PAGE_SIZE);
+  }, [inventory, page]);
+
+  // 재고가 줄어들어서 page가 넘치는 경우 정리
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [totalPages, page]);
+
+  const lowStockItems = inventory.filter(
+    (i) => i.status === 'low' || i.status === 'shortage',
+  ).length;
+
+  const pendingOrders = orders.filter(
+    (o) => o.status === 'pending' || o.status === 'approved',
+  ).length;
+
+  const expiringItems = inventory.filter((item) => {
     const expiryDate = new Date(item.expiryDate);
     const today = new Date();
-    const daysUntilExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    const daysUntilExpiry = Math.ceil(
+      (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+    );
     return daysUntilExpiry <= 7 && daysUntilExpiry > 0;
   }).length;
+
 
   return (
     <div className="space-y-6">
@@ -916,13 +951,58 @@ export function InventoryManagement() {
 
       {/* 테이블 */}
       <DataTable
-        data={inventory}
+        data={pagedInventory}
         columns={inventoryColumns}
         title="재고 현황"
         searchPlaceholder="품목명, 카테고리로 검색"
         filters={inventoryFilters}
         showActions={false}
       />
+      <Pagination className="mt-4">
+        <PaginationContent>
+          <PaginationItem>
+            <PaginationPrevious
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                if (page > 1) setPage(page - 1);
+              }}
+              className={page === 1 ? 'pointer-events-none opacity-50' : ''}
+            />
+          </PaginationItem>
+
+          {Array.from({ length: totalPages }).map((_, idx) => {
+            const p = idx + 1;
+            return (
+              <PaginationItem key={p}>
+                <PaginationLink
+                  href="#"
+                  isActive={p === page}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setPage(p);
+                  }}
+                >
+                  {p}
+                </PaginationLink>
+              </PaginationItem>
+            );
+          })}
+
+          <PaginationItem>
+            <PaginationNext
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                if (page < totalPages) setPage(page + 1);
+              }}
+              className={
+                page === totalPages ? 'pointer-events-none opacity-50' : ''
+              }
+            />
+          </PaginationItem>
+        </PaginationContent>
+      </Pagination>
 
       {/* 폼 모달 */}
       <FormModal
