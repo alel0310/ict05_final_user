@@ -44,14 +44,11 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  // ✅ 로그인 시 localStorage 에 저장하는 키 이름과 똑같이!
   const token = localStorage.getItem('accessToken'); // 또는 'storeAccessToken'
-
   if (token) {
     config.headers = config.headers ?? {};
     config.headers.Authorization = `Bearer ${token}`;
   }
-
   return config;
 });
 
@@ -79,7 +76,13 @@ interface Order {
   total: number;
   originalTotal: number;
   discount: number;
-  status: 'pending' | 'preparing' | 'cooking' | 'ready' | 'completed' | 'cancelled';
+  status:
+    | 'pending'
+    | 'preparing'
+    | 'cooking'
+    | 'ready'
+    | 'completed'
+    | 'cancelled';
   orderTime: Date;
   customer?: string;
   paymentMethod: string;
@@ -92,6 +95,14 @@ interface Order {
 // 백엔드 응답은 필드명이 조금씩 다를 수 있으니 any로 받아서 매핑
 type BackendOrder = any;
 
+type PageResponse<T> = {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  number: number; // 현재 페이지 (0-based)
+  size: number;
+};
+
 export function OrderList() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -99,26 +110,19 @@ export function OrderList() {
 
   // 상단 검색/필터
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');      // pending, preparing...
-  const [paymentFilter, setPaymentFilter] = useState<string>('all');    // 카드결제, 현금결제...
-  const [orderTypeFilter, setOrderTypeFilter] = useState<string>('all'); // 방문/포장/배달
-  const [dateFilter, setDateFilter] = useState<string>('all');          // all/today/week/month
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [paymentFilter, setPaymentFilter] = useState<string>('all');
+  const [orderTypeFilter, setOrderTypeFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<string>('all'); // all/today/week/month
 
-  // 탭은 상태 필터와 동일하게 사용 (값 똑같이 유지)
+  // 탭은 상태 필터와 동일하게 사용
   const currentTab = statusFilter;
 
-  // ===== 페이징 상태 =====
+  // 서버 페이징 상태 (지금은 백엔드에서 잘 안 쓰더라도 UI용으로 유지)
   const PAGE_SIZE = 20;
-  const [currentPage, setCurrentPage] = useState(1);
-  const totalPages = Math.max(1, Math.ceil(orders.length / PAGE_SIZE));
-  const startIndex = (currentPage - 1) * PAGE_SIZE;
-  const endIndex = startIndex + PAGE_SIZE;
-  const paginatedOrders = orders.slice(startIndex, endIndex);
-
-  // 필터가 바뀌어서 목록이 새로 로딩될 때는 항상 1페이지부터
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, statusFilter, paymentFilter, orderTypeFilter, dateFilter]);
+  const [page, setPage] = useState(0); // 0-based
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
   /* =========================
      백엔드 → 화면 타입 매핑
@@ -178,27 +182,22 @@ export function OrderList() {
   };
 
   const mapBackendOrderToOrder = (o: BackendOrder): Order => {
-    // 백엔드 PK
     const pk: number = Number(o.id ?? o.customerOrderId ?? 0);
 
-    // 화면용 주문번호
     const orderCode: string =
-      o.orderCode ??
-      o.customerOrderCode ??
-      `#${String(pk).padStart(4, '0')}`;
+      o.orderCode ?? o.customerOrderCode ?? `#${String(pk).padStart(4, '0')}`;
 
-    // 가격/할인
     const total = Number(o.totalPrice ?? o.customerOrderTotalPrice ?? 0);
     const discount = Number(o.discount ?? o.customerOrderDiscount ?? 0);
 
-    // 상태 / 타입 / 결제
-    const status = mapStatus(o.status ?? o.orderStatus ?? o.customerOrderStatus);
+    const status = mapStatus(
+      o.status ?? o.orderStatus ?? o.customerOrderStatus,
+    );
     const orderType = mapOrderType(o.orderType ?? o.customerOrderType);
     const paymentMethod = mapPaymentMethod(
       o.paymentType ?? o.customerOrderPaymentType,
     );
 
-    // 날짜
     const dateStr =
       o.orderDate ??
       o.customerOrderDate ??
@@ -207,19 +206,10 @@ export function OrderList() {
       new Date().toISOString();
     const orderTime = new Date(dateStr);
 
-    // 고객 / 연락처 / 주소
     const customerName = o.customerName ?? o.memo ?? o.customer ?? null;
-    const phone =
-      o.customerPhone ??
-      o.phone ??
-      o.contact ??
-      null;
-    const address =
-      o.deliveryAddress ??
-      o.address ??
-      null;
+    const phone = o.customerPhone ?? o.phone ?? o.contact ?? null;
+    const address = o.deliveryAddress ?? o.address ?? null;
 
-    // 백엔드에서 내려온 items 사용
     const items: OrderItem[] = Array.isArray(o.items)
       ? o.items.map((i: any, idx: number) => ({
           id: i.menuId ?? idx,
@@ -250,59 +240,66 @@ export function OrderList() {
   };
 
   /* =========================
-     주문 목록 조회 (★ 전부 백엔드 필터)
+     주문 목록 조회
   ========================= */
+
+  // 필터 바뀌면 0페이지로 리셋 (예전 동작)
+  useEffect(() => {
+    setPage(0);
+  }, [searchTerm, statusFilter, paymentFilter, orderTypeFilter, dateFilter]);
 
   useEffect(() => {
     const fetchOrders = async () => {
+      setLoading(true);
       try {
-        setLoading(true);
-
-        const res = await api.get<BackendOrder[]>('/api/customer-orders', {
-          params: {
-            keyword: searchTerm || undefined,
-            status: statusFilter === 'all' ? undefined : statusFilter,
-            paymentType: paymentFilter === 'all' ? undefined : paymentFilter,
-            orderType: orderTypeFilter === 'all' ? undefined : orderTypeFilter,
-            period: dateFilter || 'all', // all / today / week / month
+        const res = await api.get<PageResponse<BackendOrder>>(
+          '/api/customer-orders',
+          {
+            params: {
+              page,
+              size: PAGE_SIZE,
+              keyword: searchTerm || undefined,
+              status: statusFilter === 'all' ? undefined : statusFilter,
+              paymentType:
+                paymentFilter === 'all' ? undefined : paymentFilter,
+              orderType:
+                orderTypeFilter === 'all' ? undefined : orderTypeFilter,
+              period: dateFilter || 'all',
+            },
           },
-        });
+        );
 
-        // 응답이 배열 or Page 형태 모두 대응
-        const raw = Array.isArray(res.data)
-          ? res.data
-          : Array.isArray((res.data as any)?.content)
-          ? (res.data as any).content
-          : [];
+        const data: any = res.data;
 
-        // 백엔드 → 화면용 Order 타입으로 변환
-        const mapped: Order[] = raw.map(mapBackendOrderToOrder);
+        // 🔥 응답이 리스트(List) 인지 Page 인지 둘 다 대응
+        const raw: BackendOrder[] = Array.isArray(data)
+          ? data
+          : data.content ?? [];
 
-        // 주문시간 기준 최신순 정렬 (최근 주문이 위로 오게)
-        mapped.sort((a, b) => {
-          const tA = new Date(a.orderTime).getTime();
-          const tB = new Date(b.orderTime).getTime();
+        const mapped = raw.map(mapBackendOrderToOrder);
 
-          if (tA === tB) {
-            // 같은 시간일 때는 주문번호로 한 번 더 정렬
-            return b.id.localeCompare(a.id);
-          }
-          return tB - tA; // 최근 시간 먼저
-        });
+        const totalPages =
+          Array.isArray(data) ? 1 : data.totalPages ?? 1;
+
+        const totalElements =
+          Array.isArray(data) ? raw.length : data.totalElements ?? raw.length;
 
         setOrders(mapped);
-      } catch (error) {
-        console.error('주문 목록 조회 오류:', error);
+        setTotalPages(totalPages);
+        setTotalCount(totalElements);
+      } catch (e) {
+        console.error('주문 목록 조회 오류:', e);
         toast.error('주문 목록을 불러오지 못했습니다.');
         setOrders([]);
+        setTotalPages(1);
+        setTotalCount(0);
       } finally {
         setLoading(false);
       }
     };
 
-    // 필터 값이 바뀔 때마다 서버에서 다시 조회
     fetchOrders();
-  }, [searchTerm, statusFilter, paymentFilter, orderTypeFilter, dateFilter]);
+  }, [page, searchTerm, statusFilter, paymentFilter, orderTypeFilter, dateFilter]);
 
   /* =========================
      유틸 함수들
@@ -341,14 +338,13 @@ export function OrderList() {
     }
   };
 
-  // ★ 이제는 상태 변경도 백엔드 PATCH 호출
   const updateOrderStatus = async (order: Order, newStatus: string) => {
     try {
       await api.patch(`/api/customer-orders/${order.orderPk}/status`, {
         status: newStatus,
       });
 
-        setOrders((prev) =>
+      setOrders((prev) =>
         prev.map((o) =>
           o.orderPk === order.orderPk
             ? { ...o, status: newStatus as Order['status'] }
@@ -400,13 +396,12 @@ export function OrderList() {
     return d.toLocaleString('ko-KR');
   };
 
-  const todayCount = orders.filter(
-    (o) =>
-      o.orderTime >= new Date(new Date().setHours(0, 0, 0, 0)),
-  ).length;
+  const todayCount = totalCount;
+  const startIndex = totalCount === 0 ? 0 : page * PAGE_SIZE + 1;
+  const endIndex = Math.min(totalCount, (page + 1) * PAGE_SIZE);
 
   /* =========================
-     JSX 렌더링
+     JSX
   ========================= */
 
   return (
@@ -437,7 +432,7 @@ export function OrderList() {
             </div>
           </div>
 
-          {/* 상태 필터 (탭과 동일 값 사용) */}
+          {/* 상태 필터 */}
           <Select
             value={statusFilter}
             onValueChange={(v) => setStatusFilter(v)}
@@ -456,7 +451,7 @@ export function OrderList() {
             </SelectContent>
           </Select>
 
-          {/* 결제 방법 필터 */}
+          {/* 결제 필터 */}
           <Select
             value={paymentFilter}
             onValueChange={setPaymentFilter}
@@ -472,7 +467,7 @@ export function OrderList() {
             </SelectContent>
           </Select>
 
-          {/* 주문 유형 필터 */}
+          {/* 유형 필터 */}
           <Select
             value={orderTypeFilter}
             onValueChange={setOrderTypeFilter}
@@ -488,7 +483,7 @@ export function OrderList() {
             </SelectContent>
           </Select>
 
-          {/* 날짜 필터 */}
+          {/* 기간 필터 */}
           <Select value={dateFilter} onValueChange={setDateFilter}>
             <SelectTrigger className="w-32">
               <SelectValue placeholder="기간" />
@@ -507,7 +502,7 @@ export function OrderList() {
       <Card>
         <Tabs
           value={currentTab}
-          onValueChange={(value) => setStatusFilter(value)} // 탭 바꾸면 statusFilter도 같이 변경
+          onValueChange={(value) => setStatusFilter(value)}
           className="w-full"
         >
           <TabsList className="grid w-full grid-cols-7">
@@ -551,7 +546,6 @@ export function OrderList() {
                         <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
                           주문시간
                         </th>
-                        {/* 🔥 고객정보 컬럼 제거 */}
                         <th className="px-6 py-4 text-left text-sm font-medium text-gray-600">
                           주문내역
                         </th>
@@ -573,11 +567,8 @@ export function OrderList() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {paginatedOrders.map((order) => (
-                        <tr
-                          key={order.orderPk}
-                          className="hover:bg-gray-50"
-                        >
+                      {orders.map((order) => (
+                        <tr key={order.orderPk} className="hover:bg-gray-50">
                           <td className="px-6 py-4">
                             <div className="font-medium text-gray-900">
                               {order.id}
@@ -593,7 +584,6 @@ export function OrderList() {
                               </div>
                             </div>
                           </td>
-                          {/* 🔥 여기 있던 고객정보 셀 통째로 삭제 */}
                           <td className="px-6 py-4">
                             <div className="space-y-1">
                               {order.items.slice(0, 2).map((item, index) => (
@@ -710,37 +700,32 @@ export function OrderList() {
                   </table>
                 </div>
 
-                {/* 페이지네이션 */}
-                {orders.length > 0 && (
+                {/* 페이지네이션 (예전처럼) */}
+                {totalCount > 0 && (
                   <div className="flex items-center justify-between px-6 py-4 border-t">
                     <div className="text-sm text-gray-500">
-                      총 {orders.length}건 중{' '}
-                      {orders.length === 0
-                        ? 0
-                        : `${startIndex + 1}–${Math.min(endIndex, orders.length)}건`}
-                      표시
+                      총 {totalCount}건 중{' '}
+                      {totalCount === 0 ? 0 : `${startIndex}–${endIndex}건`} 표시
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() =>
-                          setCurrentPage((p) => Math.max(1, p - 1))
-                        }
-                        disabled={currentPage === 1}
+                        onClick={() => setPage((p) => Math.max(0, p - 1))}
+                        disabled={page === 0}
                       >
                         이전
                       </Button>
 
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(
-                        (page) => (
+                      {Array.from({ length: totalPages }, (_, i) => i).map(
+                        (p) => (
                           <Button
-                            key={page}
-                            variant={page === currentPage ? 'default' : 'outline'}
+                            key={p}
+                            variant={p === page ? 'default' : 'outline'}
                             size="sm"
-                            onClick={() => setCurrentPage(page)}
+                            onClick={() => setPage(p)}
                           >
-                            {page}
+                            {p + 1}
                           </Button>
                         ),
                       )}
@@ -749,11 +734,9 @@ export function OrderList() {
                         variant="outline"
                         size="sm"
                         onClick={() =>
-                          setCurrentPage((p) =>
-                            Math.min(totalPages, p + 1),
-                          )
+                          setPage((p) => Math.min(totalPages - 1, p + 1))
                         }
-                        disabled={currentPage === totalPages}
+                        disabled={page >= totalPages - 1}
                       >
                         다음
                       </Button>
@@ -761,7 +744,7 @@ export function OrderList() {
                   </div>
                 )}
 
-                {orders.length === 0 && !loading && (
+                {totalCount === 0 && !loading && (
                   <div className="text-center py-16">
                     <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-gray-900 mb-2">

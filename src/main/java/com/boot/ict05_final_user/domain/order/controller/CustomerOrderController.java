@@ -2,14 +2,15 @@ package com.boot.ict05_final_user.domain.order.controller;
 
 import com.boot.ict05_final_user.config.security.auth.CustomUserDetails; // ✅ 추가
 import com.boot.ict05_final_user.config.security.principal.AppUser;
-import com.boot.ict05_final_user.domain.order.dto.CreateOrderRequestDTO;
-import com.boot.ict05_final_user.domain.order.dto.CreateOrderResponseDTO;
-import com.boot.ict05_final_user.domain.order.dto.CustomerOrderListDTO;
-import com.boot.ict05_final_user.domain.order.dto.UpdateStatusRequestDTO;
+import com.boot.ict05_final_user.domain.order.dto.*;
 import com.boot.ict05_final_user.domain.order.service.CustomerOrderService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal; // ✅ 추가
@@ -57,7 +58,10 @@ public class CustomerOrderController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String paymentType,
             @RequestParam(required = false) String orderType,
-            @RequestParam(required = false, defaultValue = "all") String period
+            @RequestParam(required = false, defaultValue = "all") String period,
+            @PageableDefault(page = 0, size = 20,
+                    sort = "id", direction = Sort.Direction.DESC)
+            Pageable pageable
     ) {
         try {
             if (user == null) {
@@ -79,10 +83,40 @@ public class CustomerOrderController {
         }
     }
 
+
+
+
     @PatchMapping("/{orderId}/status")
     public ResponseEntity<Void> updateStatus(@PathVariable Long orderId,
                                              @RequestBody UpdateStatusRequestDTO body) {
         orderService.updateStatus(orderId, body.getStatus());
         return ResponseEntity.noContent().build();
     }
+
+    /** 주문 상세 (로그인 가맹점 기준) */
+    @GetMapping("/{orderId}")
+    public ResponseEntity<CustomerOrderDetailDTO> getOrderDetail(
+            @AuthenticationPrincipal AppUser user,
+            @PathVariable Long orderId
+    ) {
+        if (user == null) {
+            log.warn("Unauthenticated GET /api/customer-orders/{} 요청", orderId);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        Long storeId = user.getStoreId();
+        log.info("get order detail orderId={}, storeId={}", orderId, storeId);
+
+        try {
+            CustomerOrderDetailDTO dto = orderService.getOrderDetail(storeId, orderId);
+            return ResponseEntity.ok(dto);
+        } catch (IllegalStateException e) {
+            // 다른 매장 주문 접근
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        } catch (IllegalArgumentException e) {
+            // 주문 없음
+            return ResponseEntity.notFound().build();
+        }
+    }
+
 }

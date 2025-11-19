@@ -2,9 +2,7 @@ package com.boot.ict05_final_user.domain.order.service;
 
 import com.boot.ict05_final_user.domain.menu.entity.Menu;
 import com.boot.ict05_final_user.domain.menu.repository.MenuRepository;
-import com.boot.ict05_final_user.domain.order.dto.CreateOrderRequestDTO;
-import com.boot.ict05_final_user.domain.order.dto.CreateOrderResponseDTO;
-import com.boot.ict05_final_user.domain.order.dto.CustomerOrderListDTO;
+import com.boot.ict05_final_user.domain.order.dto.*;
 import com.boot.ict05_final_user.domain.order.entity.CustomerOrder;
 import com.boot.ict05_final_user.domain.order.entity.CustomerOrderDetail;
 import com.boot.ict05_final_user.domain.order.entity.OrderStatus;
@@ -17,6 +15,8 @@ import com.boot.ict05_final_user.domain.store.repository.StoreRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
@@ -141,6 +141,32 @@ public class CustomerOrderService {
         return filtered.stream()
                 .map(CustomerOrderListDTO::from)
                 .toList();
+    }
+
+    // ─────────────────────
+    // 주문 상세 조회 (로그인한 가맹점 기준)
+    // ─────────────────────
+    public CustomerOrderDetailDTO getOrderDetail(Long storeId, Long orderId) {
+        CustomerOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+
+        // 🔐 로그인한 가맹점의 주문인지 확인
+        if (!order.getStore().getId().equals(storeId)) {
+            throw new IllegalStateException("다른 매장의 주문에 접근할 수 없습니다.");
+        }
+
+        List<CustomerOrderDetail> details = detailRepository.findByOrder_Id(orderId);
+
+        return CustomerOrderDetailDTO.from(order, details);
+    }
+
+    public Page<CustomerOrderListDTO> searchOrderListPage(
+            Long storeId,
+            CustomerOrderSearchDTO cond,
+            Pageable pageable
+    ) {
+        var page = orderRepository.searchOrders(storeId, cond, pageable);
+        return page.map(CustomerOrderListDTO::from);
     }
 
     private String generateOrderCode() {
