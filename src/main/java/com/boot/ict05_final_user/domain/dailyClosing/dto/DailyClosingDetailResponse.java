@@ -19,30 +19,62 @@ import java.util.List;
 @Builder
 public class DailyClosingDetailResponse {
 
+    /** 마감 일자 */
     private LocalDate closingDate;
 
+    /** 현금 방문 매출 */
     private Long cashVisitSales;
+
+    /** 금 포장 매출 */
     private Long cashTakeoutSales;
+
+    /** 현금 배달 매출 */
     private Long cashDeliverySales;
 
+    /** 카드 방문 매출 */
     private Long cardVisitSales;
+
+    /** 카드 포장 매출 */
     private Long cardTakeoutSales;
+
+    /** 카드 배달 매출 */
     private Long cardDeliverySales;
 
+    /** 상품권 매출 합계 */
     private Long voucherSales;
 
+    /** 현금 지출 총액 */
     private Long totalExpense;
+
+    /** 시재 차액 (실제 - 계산) */
     private Long differenceAmount;
 
+    /**
+     * 마감 여부
+     * <ul>
+     *     <li>true  - 마감 완료</li>
+     *     <li>false - 아직 마감 전</li>
+     * </ul>
+     */
     private boolean closed;
 
-    // 권종·지출은 이미 쓰고 있는 DTO 재사용
+    /** 권종별 시재 목록 */
     private List<DailyClosingDenomDto> denoms;
+
+    /** 현금 지출 내역 목록 */
     private List<DailyClosingExpenseDto> expenses;
 
-    // 프론트의 memo 는 differenceMemo 와 매핑
+    /** 차액 사유 메모 */
     private String memo;
 
+    /**
+     * 일일 마감 엔티티와 관련 엔티티 목록을 기반으로 상세 응답 DTO 를 생성한다.
+     *
+     * @param closing         일일 마감 헤더 엔티티
+     * @param denomEntities   권종별 시재 엔티티 목록
+     * @param expenseEntities 지출 내역 엔티티 목록
+     * @return 매핑이 완료된 {@link DailyClosingDetailResponse} 인스턴스
+     */
     public static DailyClosingDetailResponse from(
             DailyClosing closing,
             List<DailyClosingDenom> denomEntities,

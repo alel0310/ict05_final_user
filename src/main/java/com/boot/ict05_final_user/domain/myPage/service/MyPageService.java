@@ -26,6 +26,20 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.UUID;
 
+/**
+ * 마이페이지 도메인의 비즈니스 로직을 담당하는 서비스 클래스.
+ *
+ * <p>
+ * 주요 역할:
+ * </p>
+ * <ul>
+ *     <li>회원/직원 정보를 기반으로 마이페이지 프로필 데이터 구성</li>
+ *     <li>프로필 이미지 업로드, 조회, 초기화</li>
+ *     <li>기본 프로필 정보 수정 (이름, 연락처 등)</li>
+ *     <li>비밀번호 검증 및 변경</li>
+ *     <li>회원 탈퇴 처리 및 JWT Refresh 토큰 정리</li>
+ * </ul>
+ */
 @RequiredArgsConstructor
 @Service
 @Slf4j
@@ -39,6 +53,19 @@ public class MyPageService {
     @Value("${file.upload-dir.profile}")
     private String profileImageDir;
 
+    /**
+     * 로그인한 회원의 마이페이지 정보를 조회한다.
+     *
+     * <p>
+     * - 기본값은 Member 엔티티를 사용하고,<br>
+     *   StaffProfile 이 존재하는 경우 staffName, staffEmail, 소속 점포명으로 오버라이드한다.<br>
+     * - 점포(지점) 이름은 StaffProfile.store 기준으로 채운다.
+     * </p>
+     *
+     * @param memberId 현재 로그인한 회원 ID
+     * @return 화면에서 사용할 마이페이지 DTO
+     * @throws AccessDeniedException 회원이 존재하지 않을 경우
+     */
     @Transactional(readOnly = true)
     public MyPageDTO getMyPro(Long memberId) {
 
@@ -76,7 +103,21 @@ public class MyPageService {
                 .build();
     }
 
-    // 프로필 이미지
+    /**
+     * 프로필 이미지를 업로드하거나 변경한다.
+     *
+     * <p>
+     * - 실제 파일은 file.upload-dir.profile 설정 경로에 저장된다.<br>
+     * - DB 에는 파일명만 저장하며, 경로나 URL 은 저장하지 않는다.<br>
+     * - 기존 파일 삭제는 이 메서드에서 다루지 않고, 필요 시 별도 정리 로직에서 처리할 수 있다.
+     * </p>
+     *
+     * @param memberId   현재 로그인한 회원 ID
+     * @param file       업로드할 Multipart 파일
+     * @return 변경된 프로필 이미지 정보가 반영된 MyPageDTO
+     * @throws IllegalArgumentException 업로드할 파일이 없거나 회원이 존재하지 않는 경우
+     * @throws RuntimeException         파일 저장 중 IO 오류 발생 시
+     */
     @Transactional
     public MyPageDTO updateProfileImage(Long memberId, MultipartFile file) {
         if (file == null || file.isEmpty()) {
@@ -118,7 +159,15 @@ public class MyPageService {
 
     /**
      * 회원 프로필 이미지 파일을 Resource 로 반환한다.
-     * DB 에 memberImagePath 가 없거나 파일이 실제로 없으면 null 을 반환한다.
+     *
+     * <p>
+     * - DB 에 memberImagePath 가 없거나, 실제 파일이 존재하지 않으면 null 을 반환한다.<br>
+     * - 컨트롤러에서는 null 인 경우 404 를 반환하고 프론트는 기본 이미지를 사용한다.
+     * </p>
+     *
+     * @param memberId 현재 로그인한 회원 ID
+     * @return 프로필 이미지 Resource, 없으면 null
+     * @throws IllegalArgumentException 회원이 존재하지 않을 경우
      */
     @Transactional(readOnly = true)
     public Resource loadProfileImage(Long memberId) {
@@ -148,7 +197,18 @@ public class MyPageService {
         }
     }
 
-    // 프로필 이미지 기본값으로 초기화
+    /**
+     * 회원의 프로필 이미지를 기본 상태로 초기화한다.
+     *
+     * <p>
+     * - DB 의 memberImagePath 를 null 로 설정하여,<br>
+     *   이후 조회 시 기본 이미지를 사용하도록 만든다.<br>
+     * - 파일 시스템상의 실제 이미지 삭제는 별도 처리에 맡긴다.
+     * </p>
+     *
+     * @param memberId 현재 로그인한 회원 ID
+     * @throws IllegalArgumentException 회원이 존재하지 않을 경우
+     */
     @Transactional
     public void resetProfileImage(Long memberId) {
         Member member = myPageRepository.findById(memberId)
@@ -158,7 +218,19 @@ public class MyPageService {
         member.setMemberImagePath(null);
     }
 
-    // 마이페이지 수정
+    /**
+     * 마이페이지 기본 정보를 수정한다.
+     *
+     * <p>
+     * - 클라이언트가 보낸 id, email 은 무시하고 이름/전화번호/이미지 경로만 반영한다.<br>
+     * - 실제 비즈니스 정책상 수정 가능한 필드를 이 메서드에서 제한한다.
+     * </p>
+     *
+     * @param memberId 현재 로그인한 회원 ID
+     * @param dto      수정 요청 DTO (이름, 전화번호, 이미지 경로 등)
+     * @return 수정 결과가 반영된 MyPageDTO
+     * @throws IllegalArgumentException 회원이 존재하지 않을 경우
+     */
     @Transactional
     public MyPageDTO updateMyPage(Long memberId, MyPageDTO dto) {
         Member member = myPageRepository.findById(memberId)

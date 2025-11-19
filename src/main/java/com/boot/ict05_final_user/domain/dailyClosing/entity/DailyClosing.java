@@ -162,22 +162,40 @@ public class DailyClosing {
         this.isClosed = isClosed;
     }
 
-    // 지출 컬렉션 조작 편의 메서드
+    /**
+     * 지출 컬렉션을 모두 비운다.
+     *
+     * <p>orphanRemoval 설정으로 인해 DB 에서도 함께 삭제된다.</p>
+     */
     public void clearExpenses() {
         this.expenses.clear();
     }
 
+    /**
+     * 지출 항목을 추가하고 연관관계를 설정한다.
+     *
+     * @param expense 추가할 지출 엔티티 (null 이면 무시)
+     */
     public void addExpense(DailyClosingExpense expense) {
         if (expense == null) return;
         expense.setClosing(this);
         this.expenses.add(expense);
     }
 
-    // 권종 컬렉션 조작 편의 메서드
+    /**
+     * 권종 컬렉션을 모두 비운다.
+     *
+     * <p>orphanRemoval 설정으로 인해 DB 에서도 함께 삭제된다.</p>
+     */
     public void clearDenoms() {
         this.denoms.clear();
     }
 
+    /**
+     * 권종 정보를 추가하고 연관관계를 설정한다.
+     *
+     * @param denom 추가할 권종 엔티티 (null 이면 무시)
+     */
     public void addDenom(DailyClosingDenom denom) {
         if (denom == null) return;
         denom.setClosing(this);
