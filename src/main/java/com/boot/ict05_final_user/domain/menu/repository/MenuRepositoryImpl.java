@@ -30,52 +30,58 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
 
     private final JPAQueryFactory queryFactory;
 
+    // com.boot.ict05_final_user.domain.menu.repository.MenuRepositoryImpl
+
     @Override
-    public Page<MenuListDTO> listMenu(MenuSearchDTO dto, Pageable pageable) {
+    public Page<MenuListDTO> listMenu(Long storeId, MenuSearchDTO dto, Pageable pageable) {
         if (dto == null) dto = new MenuSearchDTO();
 
         QMenu menu = QMenu.menu;
         QMenuCategory category = QMenuCategory.menuCategory;
         QStoreMenu storeMenu = QStoreMenu.storeMenu;
 
-        // WHERE 조건 (menu 기준)
+        // WHERE 조건 (menu + storeMenu 기준)
         BooleanExpression where = andAll(
                 eqNameOrInfo(dto, menu),
-                eqCategory(dto, menu)
-                // 품절 필터는 나중에 storeMenuSoldout 필요하면 추가
+                eqCategory(dto, menu, category)
         );
 
-        // 본사 메뉴 쇼 상태: 기본 SHOW만
+        // 본사 메뉴 SHOW/HIDE 필터
         if (dto.getMenuShow() != null) {
             where = andAll(where, menu.menuShow.eq(dto.getMenuShow()));
         } else {
             where = andAll(where, menu.menuShow.eq(MenuShow.SHOW));
         }
 
+        // 🔹 품절 필터 (가맹점별)
+        where = andAll(where, eqSoldOutStatus(dto, storeMenu));
+
         // 정렬 (기본: menuId DESC)
         Sort sort = (pageable.getSort().isSorted())
                 ? pageable.getSort()
                 : Sort.by(Sort.Direction.DESC, "menuId");
 
-        // 1) 페이지 대상 menuId만 먼저 조회 (menu 기준)
+        // 1) page 대상 menuId 먼저 조회
         List<Long> pageIds = queryFactory
                 .select(menu.menuId)
                 .from(menu)
                 .leftJoin(menu.menuCategory, category)
+                .leftJoin(storeMenu)
+                .on(storeMenu.menu.eq(menu)
+                        .and(storeMenu.store.id.eq(storeId)))  // 🔹 로그인한 가맹점 기준
                 .where(where)
                 .orderBy(toOrderSpec(menu, sort))
                 .offset(pageable.getOffset())
                 .limit(pageable.getPageSize())
                 .fetch();
 
-        log.info("[listMenu] pageIds size={}, ids={}", pageIds.size(), pageIds);
+        log.info("[listMenu] storeId={}, pageIds size={}, ids={}", storeId, pageIds.size(), pageIds);
 
         if (pageIds.isEmpty()) {
-            log.info("[listMenu] pageIds empty -> return empty page");
             return new PageImpl<>(List.of(), pageable, 0);
         }
 
-        // 2) 메뉴 + 가맹점별 상태 조회 (menu 기준 + LEFT JOIN store_menu)
+        // 2) 실제 행 조회 (메뉴 + 가맹점별 품절 상태)
         var rows = queryFactory
                 .select(Projections.tuple(
                         menu.menuId,
@@ -87,12 +93,14 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
                         menu.menuKcal,
                         menu.menuInformation,
                         menu.menuCode,
-                        storeMenu.storeMenuSoldout,   // 가맹점별 품절 (nullable)
+                        storeMenu.storeMenuSoldout,   // 가맹점별 품절
                         menu.menuShow
                 ))
                 .from(menu)
                 .leftJoin(menu.menuCategory, category)
-                .leftJoin(storeMenu).on(storeMenu.menu.eq(menu))
+                .leftJoin(storeMenu)
+                .on(storeMenu.menu.eq(menu)
+                        .and(storeMenu.store.id.eq(storeId)))  // 🔹 로그인한 가맹점 기준
                 .where(menu.menuId.in(pageIds))
                 .orderBy(toOrderSpec(menu, sort))
                 .fetch();
@@ -120,18 +128,19 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
         }
         List<MenuListDTO> content = new ArrayList<>(map.values());
 
-        // 3) Count (menu 기준)
+        // 3) Count (storeId 기준)
         Long total = queryFactory
                 .select(menu.menuId.count())
                 .from(menu)
                 .leftJoin(menu.menuCategory, category)
+                .leftJoin(storeMenu)
+                .on(storeMenu.menu.eq(menu)
+                        .and(storeMenu.store.id.eq(storeId)))
                 .where(where)
                 .fetchOne();
 
         return new PageImpl<>(content, pageable, total != null ? total : 0L);
     }
-
-
 
     // ====== 검색 조건 헬퍼들 ======
 
@@ -148,16 +157,24 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
     }
 
     /** 카테고리 필터 */
-    private BooleanExpression eqCategory(MenuSearchDTO dto, QMenu menu) {
-        if (dto.getMenuCategoryId() == null || dto.getMenuCategoryId() == 0) return null;
-        return menu.menuCategory.menuCategoryId.eq(dto.getMenuCategoryId());
+    private BooleanExpression eqCategory(MenuSearchDTO dto, QMenu menu, QMenuCategory category) {
+        // 1) menuCategoryId 우선 사용
+        if (dto.getMenuCategoryId() != null && dto.getMenuCategoryId() != 0) {
+            return menu.menuCategory.menuCategoryId.eq(dto.getMenuCategoryId());
+        }
+        // 2) 없으면 카테고리 이름으로 필터
+        if (StringUtils.hasText(dto.getCategoryName())) {
+            return category.menuCategoryName.containsIgnoreCase(dto.getCategoryName());
+        }
+        return null;
     }
 
-    /** 품절상태 필터 – 이제 StoreMenu 기준 */
+    /** 품절상태 필터 – StoreMenu 기준 */
     private BooleanExpression eqSoldOutStatus(MenuSearchDTO dto, QStoreMenu storeMenu) {
         if (dto.getStoreMenuSoldout() == null) return null;
         return storeMenu.storeMenuSoldout.eq(dto.getStoreMenuSoldout());
     }
+
 
     /** 여러 조건 and 결합 */
     private BooleanExpression andAll(BooleanExpression... exps) {

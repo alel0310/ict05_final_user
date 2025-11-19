@@ -1,12 +1,13 @@
 package com.boot.ict05_final_user.domain.inventory.controller;
 
+import com.boot.ict05_final_user.config.security.principal.AppUser;
 import com.boot.ict05_final_user.domain.inventory.dto.StoreInventoryListDTO;
 import com.boot.ict05_final_user.domain.inventory.dto.StoreInventoryRestockRequest;
-import com.boot.ict05_final_user.domain.inventory.dto.StoreInventoryRestockResponse;
 import com.boot.ict05_final_user.domain.inventory.service.StoreInventoryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -28,8 +29,9 @@ public class StoreInventoryRestController {
      * GET /API/store/inventory/list?storeId=2
      */
     @GetMapping("/list")
-    public List<StoreInventoryListDTO> getStoreInventoryList(@RequestParam Long storeId) {
-        return storeInventoryService.getStoreInventoryList(storeId);
+    public List<StoreInventoryListDTO> getStoreInventoryList(@AuthenticationPrincipal AppUser user) {
+
+        return storeInventoryService.getStoreInventoryList(user.getStoreId());
     }
 
     /**
@@ -37,8 +39,8 @@ public class StoreInventoryRestController {
      * POST /API/store/inventory/init?storeId=2
      */
     @PostMapping("/init")
-    public ResponseEntity<Integer> initInventory(@RequestParam Long storeId) {
-        int created = storeInventoryService.initInventoryForStore(storeId);
+    public ResponseEntity<Integer> initInventory(@AuthenticationPrincipal AppUser user) {
+        int created = storeInventoryService.initInventoryForStore(user.getStoreId());
         return ResponseEntity.ok(created);
     }
 

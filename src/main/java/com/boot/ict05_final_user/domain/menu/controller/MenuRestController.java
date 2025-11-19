@@ -15,6 +15,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 
@@ -26,17 +27,20 @@ import org.springframework.web.bind.annotation.*;
 public class MenuRestController {
 
     private final MenuService menuService;
-    private final MenuRepository menuRepository;
-    private final MenuCategoryRepository menuCategoryRepository;
 
-    /** 메뉴 목록 API */
+    /** 메뉴 목록 API (로그인 가맹점 기준 + 서버 페이징/검색/필터) */
     @GetMapping("/menu/list")
     public Page<MenuListDTO> getMenuList(
             MenuSearchDTO menuSearchDTO,
             @PageableDefault(page = 0, size = 10, sort = "menuId", direction = Sort.Direction.DESC)
-            Pageable pageable
+            Pageable pageable,
+            // 🔹 로그인한 사용자 객체에서 storeId 뽑기 (UserDetails에 storeId 필드가 있다고 가정)
+            @AuthenticationPrincipal(expression = "storeId") Long storeId
     ) {
-        return menuService.selectAllStoreMenu(menuSearchDTO, pageable);
+        if (storeId == null) {
+            throw new IllegalStateException("로그인한 가맹점(storeId)을 찾을 수 없습니다.");
+        }
+        return menuService.selectAllStoreMenu(storeId, menuSearchDTO, pageable);
     }
 
     /** 메뉴 상세 API */
@@ -55,15 +59,18 @@ public class MenuRestController {
         private StoreMenuSoldout storeMenuSoldout;
     }
 
-    @PatchMapping("/stores/{storeId}/menus/{menuId}/sold-out")
+    /** 품절 상태 변경 (로그인 가맹점 기준) */
+    @PatchMapping("/menu/{menuId}/sold-out")
     public ResponseEntity<Void> updateSoldOutStatus(
-            @PathVariable Long storeId,
             @PathVariable Long menuId,
-            @RequestBody SoldOutUpdateRequest request
+            @RequestBody SoldOutUpdateRequest request,
+            @AuthenticationPrincipal(expression = "storeId") Long storeId
     ) {
+        if (storeId == null) {
+            throw new IllegalStateException("로그인한 가맹점(storeId)을 찾을 수 없습니다.");
+        }
         menuService.updateSoldOutStatus(storeId, menuId, request.getStoreMenuSoldout());
         return ResponseEntity.noContent().build();
     }
-
 
 }

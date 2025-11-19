@@ -7,7 +7,6 @@ import com.boot.ict05_final_user.domain.dailyClosing.entity.DailyClosingExpense;
 import com.boot.ict05_final_user.domain.dailyClosing.repository.DailyClosingRepository;
 import com.boot.ict05_final_user.domain.dailyClosing.repository.DailyClosingRepositoryCustom;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

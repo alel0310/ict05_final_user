@@ -40,7 +40,6 @@ import java.util.stream.Collectors;
 @Repository
 @RequiredArgsConstructor
 @Slf4j
-@Transactional
 public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCustom{
 
     private final JPAQueryFactory queryFactory;
@@ -82,6 +81,7 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
                 .from(po)
                 .where(
                         eqOrderCode(purchaseOrderSearchDTO, po),
+                        eqStoreId(purchaseOrderSearchDTO.getStoreId(), po),
                         po.details.isNotEmpty()
                 )
                 .orderBy(po.id.desc())
@@ -95,6 +95,7 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
                 .from(po)
                 .where(
                         eqOrderCode(purchaseOrderSearchDTO, po),
+                        eqStoreId(purchaseOrderSearchDTO.getStoreId(), po),
                         po.details.isNotEmpty()
                 )
                 .fetchOne();
@@ -156,6 +157,10 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
         return condition;
     }
 
+    private BooleanExpression eqStoreId(Long storeId, QPurchaseOrder po) {
+        return storeId != null ? po.store.id.eq(storeId) : null;
+    }
+
     /**
      * 조건에 맞는 발주 총 건수를 반환한다.
      *
@@ -175,7 +180,8 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
                 .select(purchaseOrder.count())
                 .from(purchaseOrder)
                 .where(
-                        eqOrderCode(purchaseOrderSearchDTO, purchaseOrder)
+                        eqOrderCode(purchaseOrderSearchDTO, purchaseOrder),
+                        eqStoreId(purchaseOrderSearchDTO.getStoreId(), purchaseOrder)
                 )
                 .fetchOne();
 
@@ -261,35 +267,43 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
     /**
      * 신규 발주를 생성한다. (헤더 + 상세 일괄 생성)
      *
-     * <p>
-     * 처리 순서<br>
-     * 1. 발주 코드 생성 (ORD + yyyyMMdd + 랜덤 4자리)<br>
-     * 2. 첫 번째 품목의 StoreMaterial 로부터 공급업체명, 대표품목명 설정<br>
-     * 3. 발주 헤더 insert<br>
-     * 4. 각 품목에 대해 StoreMaterial 단가를 이용해 상세 insert<br>
-     * 5. 총액 및 품목 수를 발주 헤더에 업데이트
-     * </p>
+     * <p>처리 순서</p>
+     * <ol>
+     *   <li>발주 코드 생성 (ORD + yyyyMMdd + 랜덤 4자리)</li>
+     *   <li>첫 품목의 {@code StoreMaterial} 로부터 가맹점/공급업체/대표품목명 결정</li>
+     *   <li>발주 헤더 {@link PurchaseOrder} 영속화</li>
+     *   <li>각 품목에 대해 단가/합계를 계산해 상세 {@link PurchaseOrderDetail} 영속화</li>
+     *   <li>총액/품목수 헤더 갱신</li>
+     * </ol>
      *
-     * <p>
-     * 예외 상황<br>
-     * - 첫 번째 품목의 StoreMaterial 이 없으면 IllegalArgumentException<br>
-     * - StoreMaterial 이 본사 재료(Material)와 매핑되지 않았으면 IllegalStateException
-     * </p>
+     * <p>예외</p>
+     * <ul>
+     *   <li>요청 DTO 또는 품목이 비어 있으면 {@link IllegalArgumentException}</li>
+     *   <li>첫 품목 {@code StoreMaterial} 미존재 시 {@link IllegalArgumentException}</li>
+     *   <li>{@code StoreMaterial.material} 미매핑 시 {@link IllegalStateException}</li>
+     * </ul>
      *
      * @param dto 발주 생성 요청 DTO
-     * @return 생성된 발주의 ID
+     * @return 생성된 발주 ID
+     * @since 2025-11-19
      */
     @Override
     public long createPurchaseOrder(PurchaseOrderRequestsDTO dto) {
 
+        // QueryDSL Q타입(다른 메서드에서 사용할 수 있어 유지)
         QPurchaseOrder po = QPurchaseOrder.purchaseOrder;
         QPurchaseOrderDetail pod = QPurchaseOrderDetail.purchaseOrderDetail;
         QStoreMaterial storeMaterial = QStoreMaterial.storeMaterial;
 
-        // 발주 코드 생성
+        // 0) 방어 로직
+        if (dto == null || dto.getItems() == null || dto.getItems().isEmpty()) {
+            throw new IllegalArgumentException("발주 품목이 비어 있습니다.");
+        }
+
+        // 1) 발주 코드 생성
         String orderCode = generateOrderCode();
 
-        // 첫 번째 품목의 StoreMaterial 기준으로 대표 품목, 공급업체 설정
+        // 2) 첫 품목 기준 정보 로드(가맹점/대표명/공급업체)
         Long firstStoreMaterialId = dto.getItems().get(0).getStoreMaterialId();
         StoreMaterial firstStoreMaterial = queryFactory
                 .selectFrom(storeMaterial)
@@ -299,80 +313,69 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
         if (firstStoreMaterial == null) {
             throw new IllegalArgumentException("첫 번째 품목 StoreMaterial이 존재하지 않습니다. id=" + firstStoreMaterialId);
         }
-        // 본사 재료 매핑 검사
         if (firstStoreMaterial.getMaterial() == null || firstStoreMaterial.getMaterial().getId() == null) {
             throw new IllegalStateException("본사 재료와 매핑되지 않은 가맹점 재료입니다. id=" + firstStoreMaterialId);
         }
 
-        // 발주 헤더 insert
+        // 3) 헤더 persist (JPQL INSERT 제거 → 엔티티 영속화로 전환)
         PurchaseOrder purchaseOrder = PurchaseOrder.builder()
+                .store(firstStoreMaterial.getStore())
                 .orderCode(orderCode)
-                .supplier(firstStoreMaterial.getSupplier())
+                .supplier(firstStoreMaterial.getSupplier() != null ? firstStoreMaterial.getSupplier() : "미지정")
                 .mainItemName(firstStoreMaterial.getName())
                 .priority(dto.getPriority())
                 .remark(dto.getNotes())
-                .status(PurchaseOrderStatus.RECEIVED)
+                .status(PurchaseOrderStatus.RECEIVED) // 기존 상태 유지
                 .orderDate(LocalDate.now())
                 .build();
+        em.persist(purchaseOrder);
 
-        queryFactory.insert(po)
-                .set(po.orderCode, purchaseOrder.getOrderCode())
-                .set(po.supplier, purchaseOrder.getSupplier())
-                .set(po.mainItemName, purchaseOrder.getMainItemName())
-                .set(po.priority, purchaseOrder.getPriority())
-                .set(po.remark, purchaseOrder.getRemark())
-                .set(po.status, purchaseOrder.getStatus())
-                .set(po.orderDate, purchaseOrder.getOrderDate())
-                .execute();
-
-        // 방금 insert한 발주 ID 조회
-        Long purchaseOrderId = queryFactory
-                .select(po.id.max())
-                .from(po)
-                .fetchOne();
-
-        // 발주 상세 품목 insert
+        // 4) 상세 persist + 총액 집계
         BigDecimal totalPrice = BigDecimal.ZERO;
+        int itemCount = 0;
 
         for (PurchaseOrderItemDTO itemDTO : dto.getItems()) {
             Long storeMaterialId = itemDTO.getStoreMaterialId();
-            if (storeMaterialId == null) continue;
+            Integer cnt = itemDTO.getCount();
+
+            if (storeMaterialId == null || cnt == null || cnt <= 0) continue;
 
             StoreMaterial sm = queryFactory
                     .selectFrom(storeMaterial)
                     .where(storeMaterial.id.eq(storeMaterialId))
                     .fetchOne();
 
-            if (sm == null) throw new IllegalArgumentException("StoreMaterial 없음 id=" + storeMaterialId);
-
-            // 본사 재료 매핑 검사
+            if (sm == null) {
+                throw new IllegalArgumentException("StoreMaterial 없음 id=" + storeMaterialId);
+            }
             if (sm.getMaterial() == null || sm.getMaterial().getId() == null) {
                 throw new IllegalStateException("본사 재료와 매핑되지 않은 가맹점 재료입니다. id=" + storeMaterialId);
             }
 
-            BigDecimal itemTotal = sm.getPurchasePrice().multiply(BigDecimal.valueOf(itemDTO.getCount()));
+            BigDecimal unitPrice = sm.getPurchasePrice() != null ? sm.getPurchasePrice() : BigDecimal.ZERO;
+            BigDecimal lineTotal = unitPrice.multiply(BigDecimal.valueOf(cnt));
 
-            queryFactory.insert(pod)
-                    .set(pod.purchaseOrder.id, purchaseOrderId)
-                    .set(pod.material.id, sm.getId())      // StoreMaterial FK
-                    .set(pod.unitPrice, sm.getPurchasePrice())
-                    .set(pod.count, itemDTO.getCount())
-                    .set(pod.totalPrice, itemTotal)
-                    .execute();
+            PurchaseOrderDetail detail = PurchaseOrderDetail.builder()
+                    .purchaseOrder(purchaseOrder)
+                    .material(sm)                 // StoreMaterial 연관
+                    .unitPrice(unitPrice)
+                    .count(cnt)
+                    .totalPrice(lineTotal)
+                    .build();
 
-            totalPrice = totalPrice.add(itemTotal);
+            em.persist(detail);
+
+            totalPrice = totalPrice.add(lineTotal);
+            itemCount++;
         }
 
-        // 총 금액, 품목 수 업데이트
-        int itemCount = dto.getItems().size();
-        queryFactory.update(po)
-                .set(po.totalPrice, totalPrice)
-                .set(po.itemCount, itemCount)
-                .where(po.id.eq(purchaseOrderId))
-                .execute();
+        // 5) 헤더 합계/품목수 반영
+        purchaseOrder.setTotalPrice(totalPrice);
+        purchaseOrder.setItemCount(itemCount);
 
-        return purchaseOrderId;
+        return purchaseOrder.getId();
     }
+
 
     /**
      * 발주 코드를 생성한다.

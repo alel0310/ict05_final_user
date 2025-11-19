@@ -1,10 +1,8 @@
 package com.boot.ict05_final_user.domain.attendance.controller;
 
 import com.boot.ict05_final_user.config.security.principal.AppUser;
+import com.boot.ict05_final_user.domain.attendance.dto.*;
 import com.boot.ict05_final_user.domain.attendance.service.AttendanceService;
-import com.boot.ict05_final_user.domain.attendance.dto.AttendanceListDTO;
-import com.boot.ict05_final_user.domain.attendance.dto.AttendanceSearchDTO;
-import com.boot.ict05_final_user.domain.attendance.dto.AttendanceWriteFormDTO;
 import com.boot.ict05_final_user.domain.staff.entity.AttendanceStatus;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -23,9 +21,9 @@ import java.time.LocalDate;
 @RestController
 @RequestMapping("/api/attendance")
 @RequiredArgsConstructor
-@Tag(name = "직원근태 API", description = "직원근태 조회/등록/수정/삭제 기능 제공")
 @Slf4j
 @CrossOrigin(origins = "http://localhost:3000")
+@Tag(name = "직원근태 API", description = "직원근태 조회/등록/수정/삭제 기능 제공")
 public class AttendanceRestController {
 
     private final AttendanceService attendanceService;
@@ -76,5 +74,49 @@ public class AttendanceRestController {
         log.info("근태 등록 완료 id={}", attendanceId);
         return ResponseEntity.ok(attendanceId);  // 생성된 근태의 ID 반환
     }
-    
+
+    /**
+     * 근태 상세 조회
+     * GET /api/attendance/detail/{attendanceId}
+     */
+    @GetMapping("/detail/{attendanceId}")
+    public ResponseEntity<AttendanceDetailDTO> getAttendanceDetail(
+            @PathVariable Long attendanceId
+    ) {
+        log.info("📌 AttendanceRestController - 근태 상세 조회: id={}", attendanceId);
+        AttendanceDetailDTO detail = attendanceService.getAttendanceDetail(attendanceId);
+        return ResponseEntity.ok(detail);
+    }
+
+    /**
+     * 근태 수정 폼 조회
+     * GET /api/attendance/modify/{attendanceId}
+     */
+    @GetMapping("/modify/{attendanceId}")
+    public ResponseEntity<AttendanceModifyFormDTO> getAttendanceModifyForm(
+            @PathVariable Long attendanceId,
+            @AuthenticationPrincipal AppUser user
+    ) {
+        log.info("📌 AttendanceRestController - 근태 수정 폼 조회: id={}, storeId={}", attendanceId, user.getStoreId());
+        AttendanceModifyFormDTO dto = attendanceService.getAttendanceModifyForm(attendanceId);
+        return ResponseEntity.ok(dto);
+    }
+
+    /**
+     * 근태 수정 저장
+     * PUT /api/attendance/modify/{attendanceId}
+     */
+    @PutMapping("/modify/{attendanceId}")
+    public ResponseEntity<Void> updateAttendance(
+            @PathVariable Long attendanceId,
+            @Valid @RequestBody AttendanceModifyFormDTO dto,
+            @AuthenticationPrincipal AppUser user
+    ) {
+        log.info("📌 AttendanceRestController - 근태 수정 요청: pathId={}, dto={}, storeId={}",
+                attendanceId, dto, user.getStoreId());
+
+        dto.setAttendanceId(attendanceId);  // path 변수를 DTO에 세팅
+        attendanceService.modifyAttendance(dto);
+        return ResponseEntity.ok().build();
+    }
 }

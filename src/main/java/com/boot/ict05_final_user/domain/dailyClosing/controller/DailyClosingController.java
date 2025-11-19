@@ -5,7 +5,6 @@ import com.boot.ict05_final_user.domain.dailyClosing.dto.*;
 import com.boot.ict05_final_user.domain.dailyClosing.service.DailyClosingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 

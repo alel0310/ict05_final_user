@@ -12,15 +12,13 @@ const BASE_PATH = '/API/store/inventory';
  * - 지정 매장에 대해 StoreMaterial 기준으로 StoreInventory를 0부터 생성한다.
  * - 이미 존재하는 (store, storeMaterial) 조합은 건너뛰고, 없는 것만 새로 추가한다.
  *
- * POST /API/store/inventory/init?storeId=...
+ * POST /API/store/inventory/init
  *
- * @param storeId 매장 ID
+ * JWT(@AuthenticationPrincipal) 기반: 파라미터 없음
  * @returns 새로 생성된 StoreInventory 행 개수
  */
-export async function initStoreInventory(storeId: number): Promise<number> {
-  const res = await api.post<number>(`${BASE_PATH}/init`, null, {
-    params: { storeId },
-  });
+export async function initStoreInventory(): Promise<number> {
+  const res = await api.post<number>(`${BASE_PATH}/init`);
   return res.data;
 }
 
@@ -30,20 +28,13 @@ export async function initStoreInventory(storeId: number): Promise<number> {
  * - InventoryManagement 화면의 메인 그리드 데이터 소스
  * - StoreInventory + StoreMaterial 조인 결과를 내려주는 백엔드 DTO와 1:1로 매핑
  *
- * GET /API/store/inventory/list?storeId=...
- *
- * @param storeId 매장 ID
+ * GET /API/store/inventory/list
+ * 
+ * JWT(@AuthenticationPrincipal) 기반: 파라미터 없음
  * @returns 재고 목록 DTO 배열
  */
-export async function fetchStoreInventory(
-  storeId: number,
-): Promise<StoreInventoryResponse[]> {
-  const res = await api.get<StoreInventoryResponse[]>(
-    `${BASE_PATH}/list`,
-    {
-      params: { storeId },
-    },
-  );
+export async function fetchStoreInventory(): Promise<StoreInventoryResponse[]> {
+  const res = await api.get<StoreInventoryResponse[]>(`${BASE_PATH}/list`);
   return res.data;
 }
 
@@ -54,9 +45,11 @@ export async function fetchStoreInventory(
  *   StoreInventoryBatch를 생성한 뒤, 최종 StoreInventory 스냅샷을 반환한다.
  *
  * POST /API/store/inventory/restock
+ * 
+ * JWT(@AuthenticationPrincipal) 기반: 파라미터 없음
  */
 export async function restockStoreInventory(
   payload: StoreInventoryRestockRequest,
 ): Promise<void> {
-  await api.post('/API/store/inventory/restock', payload);
+  await api.post(`${BASE_PATH}/restock`, payload);
 }

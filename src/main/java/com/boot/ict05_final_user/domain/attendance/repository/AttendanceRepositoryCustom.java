@@ -1,11 +1,13 @@
 package com.boot.ict05_final_user.domain.attendance.repository;
 
+import com.boot.ict05_final_user.domain.attendance.dto.AttendanceDetailDTO;
 import com.boot.ict05_final_user.domain.attendance.dto.AttendanceListDTO;
 import com.boot.ict05_final_user.domain.attendance.dto.AttendanceSearchDTO;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDate;
+import java.util.Optional;
 
 public interface AttendanceRepositoryCustom {
 
@@ -16,4 +18,7 @@ public interface AttendanceRepositoryCustom {
             Pageable pageable,
             AttendanceSearchDTO searchDto
     );
+
+    /**  근태 상세 조회용 */
+    Optional<AttendanceDetailDTO> findAttendanceDetailByIdAndStore(Long attendanceId, Long storeId);
 }

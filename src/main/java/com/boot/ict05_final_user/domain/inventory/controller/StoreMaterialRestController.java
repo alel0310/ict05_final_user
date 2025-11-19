@@ -1,5 +1,6 @@
 package com.boot.ict05_final_user.domain.inventory.controller;
 
+import com.boot.ict05_final_user.config.security.principal.AppUser;
 import com.boot.ict05_final_user.domain.inventory.dto.StoreMaterialCreateDTO;
 import com.boot.ict05_final_user.domain.inventory.dto.StoreMaterialResponse;
 import com.boot.ict05_final_user.domain.inventory.service.StoreMaterialService;
@@ -7,6 +8,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -52,15 +54,13 @@ public class StoreMaterialRestController {
         return ResponseEntity.ok(id);
     }
 
-
-
     /**
      * 가맹점 재료 목록 조회
      * GET /API/store/material/list?storeId=2
      */
     @GetMapping("/list")
-    public List<StoreMaterialResponse> list(@RequestParam Long storeId) {
-        return storeMaterialService.getStoreMaterials(storeId);
+    public List<StoreMaterialResponse> list(@AuthenticationPrincipal AppUser user) {
+        return storeMaterialService.getStoreMaterials(user.getStoreId());
     }
 
     /**
@@ -71,8 +71,8 @@ public class StoreMaterialRestController {
      * @return 새로 생성된 StoreMaterial 개수
      */
     @PostMapping("/sync-hq")
-    public int syncHqMaterials(@RequestParam Long storeId) {
-        return storeMaterialService.mapAllHqMaterialsToStore(storeId);
+    public int syncHqMaterials(@AuthenticationPrincipal AppUser user) {
+        return storeMaterialService.mapAllHqMaterialsToStore(user.getStoreId());
     }
 
     /**
@@ -80,8 +80,8 @@ public class StoreMaterialRestController {
      * 예: POST /API/store/material/init-inventory?storeId=2
      */
     @PostMapping("/init-inventory")
-    public ResponseEntity<Integer> initInventory(@RequestParam Long storeId) {
-        int created = storeMaterialService.initStoreInventoryForStore(storeId);
+    public ResponseEntity<Integer> initInventory(@AuthenticationPrincipal AppUser user) {
+        int created = storeMaterialService.initStoreInventoryForStore(user.getStoreId());
         return ResponseEntity.ok(created);
     }
 }

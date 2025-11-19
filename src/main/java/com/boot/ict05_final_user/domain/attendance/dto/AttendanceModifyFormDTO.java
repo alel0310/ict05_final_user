@@ -11,19 +11,16 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 근태 상세 조회 DTO (AttendanceDetailDTO)
+ * 직원 근태 수정 시 사용하는 요청/응답 DTO.
  *
- * 이 DTO는 "특정 근태 기록 상세 조회"를 위해 사용되는 데이터 전달 객체입니다.
- *
- * ✔ 리스트 조회(AttendanceListDTO)에서는 간단한 요약 정보만 제공하지만
- * ✔ 상세 조회에서는 출퇴근 기록, 근무시간, 근태 사유, 직원 정보까지 모두 보여주기 때문에
- *   별도의 DTO로 분리하여 사용합니다.
+ * - 근무 일자, 출퇴근 시간, 근태 상태, 근무 시간 등을 수정할 때 사용됨
+ * - 기존 Attendance 엔티티 데이터를 기반으로 Form 형태로 전달
+ * - 화면(UI)에서 수정된 값을 다시 백엔드에 전달할 때 매핑되는 객체
  */
-
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class AttendanceDetailDTO {
+public class AttendanceModifyFormDTO {
 
     /** 근무 시퀀스 */
     private Long attendanceId;

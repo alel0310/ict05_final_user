@@ -28,9 +28,6 @@ export type MaterialCategory =
  * - 백엔드 StoreMaterialCreateDTO 와 필드명을 최대한 맞춘다.
  */
 export interface StoreMaterialCreateRequest {
-  // 가맹점 ID (세션/전역 상태에서 가져오지만, 현재는 하드코딩 가능)
-  storeId: number;
-
   // 가맹점 표시명 (재료명)
   name: string;
 

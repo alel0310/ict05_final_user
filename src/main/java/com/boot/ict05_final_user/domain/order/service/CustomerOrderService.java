@@ -2,9 +2,7 @@ package com.boot.ict05_final_user.domain.order.service;
 
 import com.boot.ict05_final_user.domain.menu.entity.Menu;
 import com.boot.ict05_final_user.domain.menu.repository.MenuRepository;
-import com.boot.ict05_final_user.domain.order.dto.CreateOrderRequestDTO;
-import com.boot.ict05_final_user.domain.order.dto.CreateOrderResponseDTO;
-import com.boot.ict05_final_user.domain.order.dto.CustomerOrderListDTO;
+import com.boot.ict05_final_user.domain.order.dto.*;
 import com.boot.ict05_final_user.domain.order.entity.CustomerOrder;
 import com.boot.ict05_final_user.domain.order.entity.CustomerOrderDetail;
 import com.boot.ict05_final_user.domain.order.entity.OrderStatus;
@@ -17,6 +15,8 @@ import com.boot.ict05_final_user.domain.store.repository.StoreRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
@@ -97,50 +97,76 @@ public class CustomerOrderService {
     // ─────────────────────
     // 주문 리스트 검색/필터
     // ─────────────────────
-    public List<CustomerOrderListDTO> searchOrderList(
-            Long storeId,                    // ✅ 로그인 가맹점 ID
-            String keyword,
-            String statusText,
-            String paymentTypeText,
-            String orderTypeText,
-            String period // all / today / week / month
-    ) {
-        // 1) 해당 가맹점의 주문을 최신순으로 가져온다
-        List<CustomerOrder> orders =
-                orderRepository.findByStore_Id(storeId, Sort.by(Sort.Direction.DESC, "id"));
+//    public List<CustomerOrderListDTO> searchOrderList(
+//            Long storeId,                    // ✅ 로그인 가맹점 ID
+//            String keyword,
+//            String statusText,
+//            String paymentTypeText,
+//            String orderTypeText,
+//            String period // all / today / week / month
+//    ) {
+//        // 1) 해당 가맹점의 주문을 최신순으로 가져온다
+//        List<CustomerOrder> orders =
+//                orderRepository.findByStore_Id(storeId, Sort.by(Sort.Direction.DESC, "id"));
+//
+//        // 2) 기간(period) 필터링
+//        LocalDate today = LocalDate.now();
+//
+//        List<CustomerOrder> filtered = orders.stream()
+//                .filter(o -> {
+//                    LocalDate createdDate = o.getOrderedAt().toLocalDate();
+//
+//                    if (period == null || period.isBlank() || "today".equalsIgnoreCase(period)) {
+//                        return createdDate.isEqual(today);
+//                    } else if ("week".equalsIgnoreCase(period)) {
+//                        LocalDate aWeekAgo = today.minusDays(6);
+//                        return !createdDate.isBefore(aWeekAgo) && !createdDate.isAfter(today);
+//                    } else if ("month".equalsIgnoreCase(period)) {
+//                        LocalDate firstDay = today.withDayOfMonth(1);
+//                        return !createdDate.isBefore(firstDay) && !createdDate.isAfter(today);
+//                    } else {
+//                        return true; // all
+//                    }
+//                })
+//                .toList();
+//
+//        int MAX_SIZE = 100;
+//        if (filtered.size() > MAX_SIZE) {
+//            log.warn("orders api result size = {}, limit to {}", filtered.size(), MAX_SIZE);
+//            filtered = filtered.subList(0, MAX_SIZE);
+//        } else {
+//            log.info("orders api result size = {}", filtered.size());
+//        }
+//
+//        return filtered.stream()
+//                .map(CustomerOrderListDTO::from)
+//                .toList();
+//    }
 
-        // 2) 기간(period) 필터링
-        LocalDate today = LocalDate.now();
+    // ─────────────────────
+    // 주문 상세 조회 (로그인한 가맹점 기준)
+    // ─────────────────────
+    public CustomerOrderDetailDTO getOrderDetail(Long storeId, Long orderId) {
+        CustomerOrder order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
 
-        List<CustomerOrder> filtered = orders.stream()
-                .filter(o -> {
-                    LocalDate createdDate = o.getOrderedAt().toLocalDate();
-
-                    if (period == null || period.isBlank() || "today".equalsIgnoreCase(period)) {
-                        return createdDate.isEqual(today);
-                    } else if ("week".equalsIgnoreCase(period)) {
-                        LocalDate aWeekAgo = today.minusDays(6);
-                        return !createdDate.isBefore(aWeekAgo) && !createdDate.isAfter(today);
-                    } else if ("month".equalsIgnoreCase(period)) {
-                        LocalDate firstDay = today.withDayOfMonth(1);
-                        return !createdDate.isBefore(firstDay) && !createdDate.isAfter(today);
-                    } else {
-                        return true; // all
-                    }
-                })
-                .toList();
-
-        int MAX_SIZE = 100;
-        if (filtered.size() > MAX_SIZE) {
-            log.warn("orders api result size = {}, limit to {}", filtered.size(), MAX_SIZE);
-            filtered = filtered.subList(0, MAX_SIZE);
-        } else {
-            log.info("orders api result size = {}", filtered.size());
+        // 🔐 로그인한 가맹점의 주문인지 확인
+        if (!order.getStore().getId().equals(storeId)) {
+            throw new IllegalStateException("다른 매장의 주문에 접근할 수 없습니다.");
         }
 
-        return filtered.stream()
-                .map(CustomerOrderListDTO::from)
-                .toList();
+        List<CustomerOrderDetail> details = detailRepository.findByOrder_Id(orderId);
+
+        return CustomerOrderDetailDTO.from(order, details);
+    }
+
+    public Page<CustomerOrderListDTO> searchOrderListPage(
+            Long storeId,
+            CustomerOrderSearchDTO cond,
+            Pageable pageable
+    ) {
+        var page = orderRepository.searchOrders(storeId, cond, pageable);
+        return page.map(CustomerOrderListDTO::from);
     }
 
     private String generateOrderCode() {

@@ -1,7 +1,6 @@
 package com.boot.ict05_final_user.domain.purchaseOrder.entity;
 
 import com.boot.ict05_final_user.domain.store.entity.Store;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.*;
 import lombok.*;

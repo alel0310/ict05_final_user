@@ -13,7 +13,7 @@ export type StoreInventoryStatus = 'SUFFICIENT' | 'LOW' | 'SHORTAGE';
 /**
  * 가맹점 재고 목록/상세 응답 DTO
  *
- * - GET /API/store/inventory/list?storeId=...
+ * - GET /API/store/inventory/list
  * - StoreInventory + StoreMaterial 조인 결과를 한 번에 내려받는다.
  * 
  * → 백엔드 StoreInventoryListDTO 에 맞춰서 필드명 통일
@@ -22,6 +22,7 @@ export interface StoreInventoryResponse {
   // 백엔드 필드명 중 실제 내려오는 걸로 맞춰라.
   // (예: storeInventoryId 또는 id 중 하나)
   storeInventoryId?: number;
+
   id?: number;
 
   // 가맹점 재료 PK (store_material_id_fk)

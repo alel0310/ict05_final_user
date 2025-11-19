@@ -40,11 +40,10 @@ public class MenuService {
      * @param pageable      페이지 정보 (페이지 번호, 크기, 정렬)
      * @return 페이징 처리된 메뉴 리스트 DTO
      */
-    public Page<MenuListDTO> selectAllStoreMenu(MenuSearchDTO menuSearchDTO, Pageable pageable) {
-        var menus = menuRepository.listMenu(menuSearchDTO, pageable);
+    public Page<MenuListDTO> selectAllStoreMenu(Long storeId, MenuSearchDTO menuSearchDTO, Pageable pageable) {
+        var menus = menuRepository.listMenu(storeId, menuSearchDTO, pageable);
 
-        // 디버깅 로그 추가
-        log.info("rows={}", menus.getNumberOfElements());
+        log.info("storeId={}, rows={}", storeId, menus.getNumberOfElements());
         menus.getContent().forEach(m ->
                 log.info("id={}, name={}", m.getMenuId(), m.getMenuName())
         );

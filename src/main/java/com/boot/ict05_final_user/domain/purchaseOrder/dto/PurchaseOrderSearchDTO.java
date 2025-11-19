@@ -11,4 +11,6 @@ public class PurchaseOrderSearchDTO {
 
     /** 발주 상태 필터 (RECEIVED/SHIPPING/DELIVERED) */
     private PurchaseOrderStatus purchaseOrderStatus;
+
+    private Long storeId;
 }

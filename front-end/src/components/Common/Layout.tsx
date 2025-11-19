@@ -97,7 +97,6 @@ const storeMenuItems: MenuItem[] = [
       { id: 'staff-list', label: '직원 목록', icon: Users },
       { id: 'staff-schedule', label: '근무 일정', icon: Calendar },
       
-      { id: 'staff-reports', label: '근무리포트', icon: BarChart3 }
     ]
   },
         { id: 'notice', label: '공지사항', icon: BookOpen },  { 
