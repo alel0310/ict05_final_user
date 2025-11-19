@@ -4,6 +4,7 @@ import com.boot.ict05_final_user.config.security.principal.AppUser;
 import com.boot.ict05_final_user.domain.inventory.dto.StoreMaterialCreateDTO;
 import com.boot.ict05_final_user.domain.inventory.dto.StoreMaterialResponse;
 import com.boot.ict05_final_user.domain.inventory.service.StoreMaterialService;
+import com.boot.ict05_final_user.domain.purchaseOrder.dto.PurchaseOrderRequestsDTO;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -49,7 +50,11 @@ public class StoreMaterialRestController {
      * }
      */
     @PostMapping
-    public ResponseEntity<Long> createStoreMaterial(@Valid @RequestBody StoreMaterialCreateDTO dto) {
+    public ResponseEntity<Long> createStoreMaterial(
+            @Valid @RequestBody StoreMaterialCreateDTO dto,
+            @AuthenticationPrincipal AppUser user
+    ) {
+        dto.setStoreId(user.getStoreId());
         Long id = storeMaterialService.create(dto);
         return ResponseEntity.ok(id);
     }

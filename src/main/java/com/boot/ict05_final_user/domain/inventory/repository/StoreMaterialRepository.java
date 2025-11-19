@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface StoreMaterialRepository extends JpaRepository<StoreMaterial, Long> {
@@ -21,5 +22,8 @@ public interface StoreMaterialRepository extends JpaRepository<StoreMaterial, Lo
     
     // 가맹점 재료 조회
     List<StoreMaterial> findByStore(Store store);
+
+    // 가맹점 재료 체크
+    Optional<StoreMaterial> findByIdAndStoreId(Long id, Long storeId);
 
 }
