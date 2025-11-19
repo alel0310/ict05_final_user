@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { DataTable, Column } from '../Common/DataTable';
 import { FormModal } from '../Common/FormModal';
 import { ConfirmDialog, useConfirmDialog } from '../Common/ConfirmDialog';
@@ -44,32 +44,61 @@ import type {
 } from '../../types/storeInventory';
 
 /* =======================
-   type / interface / 유틸 함수
+   타입 정의
 ======================= */
-
-type StockStatus = 'sufficient' | 'low' | 'critical' | 'out';
+type StockStatus = 'sufficient' | 'low' | 'shortage';
 type OrderStatus = 'pending' | 'approved' | 'shipping' | 'delivered';
 
-// 백엔드 대신 프론트에서 수량 / 적정수량 기반 재고 상태 계산
-function calcStockStatus(current: number, optimal: number): StockStatus {
-  if (current <= 0) return 'out';
-  if (optimal > 0) {
-    if (current <= optimal * 0.5) return 'critical';
-    if (current < optimal) return 'low';
-  }
-  return 'sufficient';
+// 백엔드 InventoryStatus.from 과 동일한 규칙
+// quantity == null or <= 0 → SHORTAGE
+// optimalQuantity == null → SUFFICIENT
+// quantity < optimalQuantity → LOW, else SUFFICIENT
+function calcStockStatus(
+  current: number | null | undefined,
+  optimal: number | null | undefined,
+): StockStatus {
+  if (current == null || current <= 0) return 'shortage';
+  if (optimal == null || optimal <= 0) return 'sufficient';
+  return current < optimal ? 'low' : 'sufficient';
 }
 
+// 상태별 텍스트/색상 공통 정의
+function getStockStatusDisplay(status: StockStatus) {
+  switch (status) {
+    case 'shortage':
+      return {
+        status,
+        text: '품절',
+        textColor: 'text-red-600',
+        badgeClass: 'bg-red-100 text-red-800',
+      };
+    case 'low':
+      return {
+        status,
+        text: '부족',
+        textColor: 'text-orange-600',
+        badgeClass: 'bg-orange-100 text-orange-800',
+      };
+    case 'sufficient':
+    default:
+      return {
+        status: 'sufficient' as StockStatus,
+        text: '충분',
+        textColor: 'text-green-600',
+        badgeClass: 'bg-green-100 text-green-800',
+      };
+  }
+}
 
 interface InventoryItem {
   // 테이블 row key / 체크박스용
   id: number;
-
-  /** 가맹점 재고 PK (restock API에 보낼 값) */
+  // 재고 PK
   storeInventoryId: number;
-
-  /** 가맹점 재료 PK */
+  // 가맹점 재료 PK
   storeMaterialId: number;
+  // 본사 재료 PK
+  materialId: number;
 
   name: string;
   category: string;
@@ -83,7 +112,6 @@ interface InventoryItem {
   supplier: string;
   status: StockStatus;
   weeklyUsage: number;
-  location: string;
 }
 
 interface OrderItem {
@@ -103,10 +131,15 @@ interface Order {
   total: number;
 }
 
-interface PurchaseOrderItemDTO {
-  materialId: number;   // 재고(자재) ID = item.id
-  count: number;        // 발주 수량
+// 발주 품목 DTO
+interface PurchaseOrderItemDTO { 
+  // 가맹점 재료 ID (StoreMaterial.id)
+  storeMaterialId: number;
+  // 발주 수량
+  count: number;
 }
+
+// 발주 요청 DTO
 interface PurchaseOrderRequestsDTO {
   priority: 'NORMAL' | 'URGENT';
   notes?: string;
@@ -121,11 +154,7 @@ type CartItem = InventoryItem & { orderQuantity: number; totalPrice: number };
 ======================= */
 
 // const sampleInventory: InventoryItem[] = [
-//   { id: 1, name: '치킨패티', category: '주재료', currentStock: 45, minStock: 20, maxStock: 100, unit: '개', unitPrice: 1200, lastRestocked: '2024-12-28', expiryDate: '2025-01-15', supplier: 'ABC 식자재', status: 'sufficient', weeklyUsage: 35, location: '냉동고 A-1' },
-//   { id: 2, name: '감자', category: '주재료', currentStock: 8, minStock: 15, maxStock: 50, unit: 'kg', unitPrice: 2500, lastRestocked: '2024-12-25', expiryDate: '2025-01-10', supplier: 'XYZ 농산', status: 'low', weeklyUsage: 25, location: '냉장고 B-2' },
-//   { id: 3, name: '콜라시럽', category: '음료', currentStock: 2, minStock: 5, maxStock: 20, unit: '통', unitPrice: 15000, lastRestocked: '2024-12-20', expiryDate: '2025-06-20', supplier: '음료 공급업체', status: 'critical', weeklyUsage: 4, location: '저장고 C-1' },
-//   { id: 4, name: '치즈', category: '주재료', currentStock: 12, minStock: 10, maxStock: 30, unit: 'kg', unitPrice: 8000, lastRestocked: '2024-12-29', expiryDate: '2025-01-12', supplier: '유제품 공급업체', status: 'sufficient', weeklyUsage: 8, location: '냉장고 A-3' },
-//   { id: 5, name: '양상추', category: '채소', currentStock: 0, minStock: 5, maxStock: 15, unit: 'kg', unitPrice: 3500, lastRestocked: '2024-12-26', expiryDate: '2025-01-03', supplier: '신선 채소', status: 'out', weeklyUsage: 6, location: '냉장고 B-1' }
+//   { id: 1, name: '치킨패티', category: '주재료', currentStock: 45, minStock: 20, maxStock: 100, unit: '개', unitPrice: 1200, lastRestocked: '2024-12-28', expiryDate: '2025-01-15', supplier: 'ABC 식자재', status: 'sufficient', weeklyUsage: 35 },
 // ];
 
 const sampleOrders: Order[] = [
@@ -152,8 +181,6 @@ const sampleOrders: Order[] = [
   }
 ];
 
-// src/components/Store/InventoryManagement.tsx
-
 function mapCategoryLabel(cat?: string | null): string {
   switch (cat) {
     case 'BASE':     return '주재료(BASE)';
@@ -170,14 +197,14 @@ function mapCategoryLabel(cat?: string | null): string {
 function mapStatus(smStatus: MaterialStatus): StockStatus {
   // 재료 상태와 재고 상태를 단순 매핑
   // STOP 이면 화면에서 '품절' 느낌으로
-  if (smStatus === 'STOP') return 'out';
+  if (smStatus === 'STOP') return 'shortage';
   return 'sufficient';
 }
 
 function toStockStatus(domainStatus: string): StockStatus {
   switch (domainStatus) {
     case 'SHORTAGE':
-      return 'out';         // 또는 'critical' 등 정책에 맞게
+      return 'shortage';
     case 'LOW':
       return 'low';
     case 'SUFFICIENT':
@@ -188,24 +215,26 @@ function toStockStatus(domainStatus: string): StockStatus {
 
 
 
-function mapStoreInventoryToInventoryItem(
-  si: StoreInventoryResponse,
-): InventoryItem {
+// InventoryItem 생성 블록만 교체
+function mapStoreInventoryToInventoryItem(si: StoreInventoryResponse): InventoryItem {
   const optimal = si.optimalQuantity ?? 0;
   const unit = si.baseUnit || '개';
   const quantity = si.quantity ?? 0;
 
-  // 백엔드에서 내려오는 재고 PK 이름이 storeInventoryId 또는 id 둘 중 하나라고 가정
-  const inventoryId =
-    (si as any).storeInventoryId ?? (si as any).id;
+  // ID 정리
+  const storeInventoryId = (si.storeInventoryId ?? si.id)!; // 백엔드가 둘 중 하나를 주는 상황 대비
+  const storeMaterialId  = si.storeMaterialId!;             // 반드시 가맹점 재료 PK
 
-  // 여기서 현재고/적정수량 기준으로 상태 계산
-  const status = calcStockStatus(quantity, optimal);
+  // 백엔드 상태(SHORTAGE/LOW/SUFFICIENT) → 프론트 상태로 매핑
+  const status: StockStatus =
+    si.status === 'SHORTAGE' ? 'shortage' :
+    si.status === 'LOW'      ? 'low'      : 'sufficient';
 
   return {
-    id: inventoryId,               // 테이블 key / 체크박스용
-    storeInventoryId: inventoryId, // 재입고 API에 보낼 재고 PK
-    storeMaterialId: si.storeMaterialId,
+    id: storeInventoryId,        // ← 체크/선택용 키
+    storeInventoryId,            // 보존
+    storeMaterialId,             // ← 발주에 실릴 키
+    materialId: storeMaterialId, // (혹시 남아있는 참조 대비, 필요 없으면 제거해도 됨)
 
     name: si.name,
     category: si.category ?? '기타',
@@ -215,15 +244,13 @@ function mapStoreInventoryToInventoryItem(
     unit,
     unitPrice: si.purchasePrice ?? 0,
     lastRestocked: si.lastUpdated ?? '',
-    expiryDate:
-      si.nearestExpireDate ??
-      new Date().toISOString().split('T')[0],
+    expiryDate: si.nearestExpireDate ?? new Date().toISOString().split('T')[0],
     supplier: si.supplier ?? '',
-    status,                        // ✅ 위에서 계산한 값
+    status,
     weeklyUsage: 0,
-    location: '',
   };
 }
+
 
 
 
@@ -249,8 +276,7 @@ export function InventoryManagement() {
   const inventoryFilters = [
     { label: '충분', value: 'sufficient', count: inventory.filter(i => i.status === 'sufficient').length },
     { label: '부족', value: 'low', count: inventory.filter(i => i.status === 'low').length },
-    { label: '위험', value: 'critical', count: inventory.filter(i => i.status === 'critical').length },
-    { label: '품절', value: 'out', count: inventory.filter(i => i.status === 'out').length }
+    { label: '품절', value: 'shortage', count: inventory.filter(i => i.status === 'shortage').length }
   ];
 
   const orderFilters = [
@@ -262,23 +288,29 @@ export function InventoryManagement() {
 
   // TODO: 실제 로그인 정보에서 매장 ID 읽어오는 쪽으로 교체
   const STORE_ID = 2;
+  
+  // 컴포넌트 내부 (state 선언들 밑에)
+  const didFetchRef = useRef(false);
 
   useEffect(() => {
-    async function load() {
+    // React StrictMode 에서의 두 번째 마운트 때는 그냥 리턴
+    if (didFetchRef.current) return;
+    didFetchRef.current = true;
+
+    const loadInventory = async () => {
       try {
         const list = await fetchStoreInventory(STORE_ID);
-        const mapped = list.map(mapStoreInventoryToInventoryItem); // ✅ 이거
+        const mapped = list.map(mapStoreInventoryToInventoryItem);
         setInventory(mapped);
-      } catch (e: any) {
+        setHasInventory(mapped.length > 0);
+      } catch (e) {
         console.error(e);
         toast.error('가맹점 재고 목록을 불러오지 못했습니다.');
       }
-    }
+    };
 
-    load();
-  }, []);
-
-
+    loadInventory();
+  }, [STORE_ID]);
   
   /* ---------- 선택/전체선택 핸들러 (선언문으로 호이스팅) ---------- */
   function handleItemSelect(itemId: number, checked: boolean) {
@@ -417,12 +449,17 @@ export function InventoryManagement() {
       key: 'status',
       label: '상태',
       sortable: true,
-      render: (value: StockStatus) => (
-        <StatusBadge
-          status={value === 'sufficient' ? 'active' : value === 'low' ? 'warning' : value === 'critical' ? 'warning' : 'closed'}
-          text={value === 'sufficient' ? '충분' : value === 'low' ? '부족' : value === 'critical' ? '위험' : '품절'}
-        />
-      )
+      render: (value: StockStatus) => {
+        const meta = getStockStatusDisplay(value);
+        const badgeVariant =
+          value === 'sufficient'
+            ? 'active'
+            : value === 'low'
+            ? 'warning'
+            : 'closed';
+
+        return <StatusBadge status={badgeVariant} text={meta.text} />;
+      },
     }
   ];
 
@@ -478,7 +515,6 @@ export function InventoryManagement() {
   /* ---------- 액션들 ---------- */
   const handleRestock = (item: InventoryItem) => { setSelectedItem(item); setModalType('restock'); setIsModalOpen(true); };
   const handleAdjust = (item: InventoryItem) => { setSelectedItem(item); setModalType('adjust'); setIsModalOpen(true); };
-  const handleOrder = () => { setSelectedItem(null); setModalType('order'); setIsModalOpen(true); };
   const handleRegisterItem = () => { setSelectedItem(null); setModalType('register'); setIsModalOpen(true); };
 
   const handleInitInventory = async () => {
@@ -507,7 +543,6 @@ export function InventoryManagement() {
     }
   };
 
-
   const handleBulkOrder = () => {
     if (selectedItems.length === 0) {
       toast.error('발주할 품목을 선택해주세요.');
@@ -533,20 +568,25 @@ export function InventoryManagement() {
             ? {
                 ...item,
                 minStock: newMinStock,
-                status:
-                  item.currentStock <= newMinStock
-                    ? item.currentStock === 0
-                      ? 'out'
-                      : item.currentStock <= newMinStock * 0.5
-                      ? 'critical'
-                      : 'low'
-                    : 'sufficient'
+                status: calcStockStatus(item.currentStock, newMinStock),
               }
-            : item
-        )
+            : item,
+        ),
       );
-      setSelectedItem(prev => (prev ? { ...prev, minStock: newMinStock } : prev));
-      toast.success(`${selectedItem.name}의 최소 재고량이 ${newMinStock}${selectedItem.unit}로 설정되었습니다.`);
+
+      setSelectedItem(prev =>
+        prev
+          ? {
+              ...prev,
+              minStock: newMinStock,
+              status: calcStockStatus(prev.currentStock, newMinStock),
+            }
+          : prev,
+      );
+
+      toast.success(
+        `${selectedItem.name}의 최소 재고량이 ${newMinStock}${selectedItem.unit}로 설정되었습니다.`,
+      );
     } catch {
       toast.error('오류가 발생했습니다.');
     }
@@ -558,13 +598,14 @@ export function InventoryManagement() {
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       if (modalType === 'restock' && selectedItem) {
-        // ✅ 재고PK 기반 재입고 요청 DTO 생성
+        // 재고PK 기반 재입고 요청 DTO 생성
         const payload: StoreInventoryRestockRequest = {
-          storeInventoryId: selectedItem.id,           // InventoryItem.id = storeInventoryId
+          storeInventoryId: selectedItem.id,
           quantity: Number(data.quantity),
           memo: data.memo ?? '',
         };
 
+        // 재입고 API는 한 번만 호출
         await restockStoreInventory(payload);
 
         // 성공 후 목록 재조회
@@ -572,25 +613,30 @@ export function InventoryManagement() {
         const mapped = list.map(mapStoreInventoryToInventoryItem);
         setInventory(mapped);
 
-        // ✅ 백엔드 재입고 API 호출
-        await restockStoreInventory({
-          storeInventoryId: selectedItem.storeInventoryId,  // 여기!
-          quantity: Number(data.quantity),
-          memo: data.memo || null,
-        });
-
         toast.success(
           `${selectedItem.name} ${data.quantity}${selectedItem.unit} 재입고 완료`,
         );
       } else if (modalType === 'adjust' && selectedItem) {
-        // 조정 로직
         const newQty = parseInt(data.newStock, 10);
         setInventory(prev =>
           prev.map(item =>
             item.id === selectedItem.id
-              ? { ...item, currentStock: newQty, status: newQty <= item.minStock ? 'low' : 'sufficient' }
-              : item
-          )
+              ? {
+                  ...item,
+                  currentStock: newQty,
+                  status: calcStockStatus(newQty, item.minStock),
+                }
+              : item,
+          ),
+        );
+        setSelectedItem(prev =>
+          prev
+            ? {
+                ...prev,
+                currentStock: newQty,
+                status: calcStockStatus(newQty, prev.minStock),
+              }
+            : prev,
         );
         toast.success(`${selectedItem.name} 재고 조정 완료`);
       } else if (modalType === 'order') {
@@ -762,7 +808,7 @@ export function InventoryManagement() {
 
   // 통계
   const totalItems = inventory.length;
-  const lowStockItems = inventory.filter(i => i.status === 'low' || i.status === 'critical' || i.status === 'out').length;
+  const lowStockItems = inventory.filter(i => i.status === 'low' || i.status === 'shortage').length;
   const pendingOrders = orders.filter(o => o.status === 'pending' || o.status === 'approved').length;
   const expiringItems = inventory.filter(item => {
     const expiryDate = new Date(item.expiryDate);
@@ -841,9 +887,7 @@ export function InventoryManagement() {
           <Button onClick={handleRegisterItem} variant="outline" className="border-kpi-green text-kpi-green hover:bg-green-50">
             <Plus className="w-4 h-4 mr-2" />재료등록
           </Button>
-          <Button onClick={handleOrder} variant="outline" className="border-kpi-orange text-kpi-orange hover:bg-orange-50">
-            <Plus className="w-4 h-4 mr-2" />개별발주
-          </Button>
+          
           <Button onClick={handleBulkOrder} className="bg-kpi-red hover:bg-red-600 text-white relative">
             <ShoppingCart className="w-4 h-4 mr-2" />
             발주 등록 {selectedItems.length > 0 && `(${selectedItems.length})`}
@@ -863,7 +907,7 @@ export function InventoryManagement() {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {inventory
-              .filter(i => i.status === 'low' || i.status === 'critical' || i.status === 'out')
+              .filter(i => i.status === 'low' || i.status === 'shortage')
               .slice(0, 4)
               .map(item => (
                 <Button
@@ -971,10 +1015,14 @@ export function InventoryManagement() {
                     priority: (priority as 'NORMAL' | 'URGENT') ?? 'NORMAL',
                     notes: notes?.trim() || '',
                     items: cartItems.map(ci => ({
-                      materialId: ci.id,       // ⚠️ InventoryItem.id가 StoreMaterial.id와 같다는 전제
+                      storeMaterialId: ci.storeMaterialId,  // ← 핵심
                       count: ci.orderQuantity,
                     })),
                   };
+                  await api.post<number>('/api/purchase/create', dto);
+                  
+                  console.table(cartItems.map(ci => ({ id: ci.id, storeMaterialId: ci.storeMaterialId, qty: ci.orderQuantity, name: ci.name })));
+
 
                   // 2) 백엔드 호출
                   const res = await api.post<number>('/api/purchase/create', dto);
@@ -1045,14 +1093,8 @@ function ItemDetailContent({
     setEditingMinStock(false);
   };
 
-  const getStockStatus = () => {
-    if (item.currentStock === 0) return { status: 'out', color: 'text-red-600', text: '품절' };
-    if (item.currentStock <= item.minStock * 0.5) return { status: 'critical', color: 'text-red-600', text: '위험' };
-    if (item.currentStock <= item.minStock) return { status: 'low', color: 'text-orange-600', text: '부족' };
-    return { status: 'sufficient', color: 'text-green-600', text: '충분' };
-  };
+  const statusMeta = getStockStatusDisplay(item.status);
 
-  const stockStatus = getStockStatus();
   const expiryDate = new Date(item.expiryDate);
   const today = new Date();
   const daysUntilExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
@@ -1076,15 +1118,14 @@ function ItemDetailContent({
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <span className="text-gray-600">현재 재고</span>
-              <span className={`font-semibold ${stockStatus.color}`}>{item.currentStock} {item.unit}</span>
+              <span className={`font-semibold ${statusMeta.textColor}`}>
+                {item.currentStock} {item.unit}
+              </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-gray-600">재고 상태</span>
-              <Badge className={
-                stockStatus.status === 'sufficient' ? 'bg-green-100 text-green-800' :
-                stockStatus.status === 'low' ? 'bg-orange-100 text-orange-800' : 'bg-red-100 text-red-800'
-              }>
-                {stockStatus.text}
+              <Badge className={statusMeta.badgeClass}>
+                {statusMeta.text}
               </Badge>
             </div>
             <div className="flex justify-between"><span className="text-gray-600">최대 재고</span><span>{item.maxStock} {item.unit}</span></div>
@@ -1164,7 +1205,7 @@ function ItemDetailContent({
         <Button onClick={onAdjust} variant="outline" className="border-kpi-orange text-kpi-orange hover:bg-orange-50">
           <Settings className="w-4 h-4 mr-2" />재고 조정
         </Button>
-        {(item.status === 'low' || item.status === 'critical' || item.status === 'out') && (
+        {(item.status === 'low' || item.status === 'shortage') && (
           <Button variant="outline" className="border-kpi-red text-kpi-red hover:bg-red-50">
             <ShoppingCart className="w-4 h-4 mr-2" />발주 등록
           </Button>
@@ -1183,12 +1224,7 @@ function OrderCartContent({
   items: CartItem[];
   onUpdateQuantity: (itemId: number, quantity: number) => void;
   onRemoveItem: (itemId: number) => void;
-  onSubmitOrder: (orderData: {
-    supplier: string;
-    expectedDate: string;
-    priority: string;
-    notes: string;
-  }) => void;
+  onSubmitOrder: (orderData: { supplier: string; expectedDate: string; priority: string; notes: string }) => void;
 }) {
   const [orderForm, setOrderForm] = useState<{ priority: string; notes: string }>({
     priority: 'NORMAL',
