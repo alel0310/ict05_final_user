@@ -122,7 +122,7 @@ interface OrderItem {
 }
 
 interface Order {
-  id: string;                    // 샘플 데이터와 동일하게 문자열
+  id: string;
   items: OrderItem[];
   supplier: string;
   orderDate: string;
@@ -150,9 +150,8 @@ interface PurchaseOrderRequestsDTO {
 type CartItem = InventoryItem & { orderQuantity: number; totalPrice: number };
 
 /* =======================
-   샘플 데이터
+    샘플 데이터
 ======================= */
-
 // const sampleInventory: InventoryItem[] = [
 //   { id: 1, name: '치킨패티', category: '주재료', currentStock: 45, minStock: 20, maxStock: 100, unit: '개', unitPrice: 1200, lastRestocked: '2024-12-28', expiryDate: '2025-01-15', supplier: 'ABC 식자재', status: 'sufficient', weeklyUsage: 35 },
 // ];
@@ -649,13 +648,7 @@ export function InventoryManagement() {
         setOrders(prev => [newOrder, ...prev]);
         toast.success('발주 등록이 완료되었습니다.');
       } else if (modalType === 'register') {
-        // 가맹점 재료 등록 API 연동
         
-        // storeId는 필요하면 여기서 세션/전역 상태에서 꺼내서 넣기
-        // storeId: currentStoreId,
-        // 나중에 로그인 세션/전역 상태에서 storeId 끌어오면 여기만 교체하면 됨.
-
-
         // 3) payload 구성 – StoreMaterialCreateRequest와 1:1 매핑
         const payload: StoreMaterialCreateRequest = {
           name: data.itemName,

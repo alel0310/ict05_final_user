@@ -20,26 +20,22 @@ export async function createStoreMaterial(
   const data: any = res.data;
 
   if (typeof data === 'number') {
-    // ResponseEntity<Long>
-    return data;
+    return data; // ResponseEntity<Long>
   }
   if (data && typeof data.id === 'number') {
-    // StoreMaterialResponse { id, ... }
-    return data.id;
+    return data.id; // StoreMaterialResponse { id, ... }
   }
-  // 응답에 id가 없을 경우
   return null;
 }
 
 /**
  * 가맹점 재료 목록 조회
- * GET /API/store/material/list?storeId=...
+ * 
+ * GET /API/store/material/list
+ 
+ * JWT(@AuthenticationPrincipal) 기반: 파라미터 없음
  */
-export async function fetchStoreMaterials(
-  storeId: number,
-): Promise<StoreMaterialResponse[]> {
-  const res = await api.get<StoreMaterialResponse[]>(`${BASE_PATH}/list`, {
-    params: { storeId },
-  });
+export async function fetchStoreMaterials(): Promise<StoreMaterialResponse[]> {
+  const res = await api.get<StoreMaterialResponse[]>(`${BASE_PATH}/list`);
   return res.data;
 }
