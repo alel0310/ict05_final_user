@@ -6,7 +6,6 @@ import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { FormModal } from '../Common/FormModal';
-import { ConfirmDialog } from '../Common/ConfirmDialog';
 import {
   Plus, ChevronLeft, ChevronRight, Search
 } from 'lucide-react';
@@ -33,44 +32,29 @@ interface Staff {
   status: 'active' | 'inactive' | 'vacation' | 'resigned';
 }
 
-// 백엔드 AttendanceListDTO에 맞는 타입
+// === 백엔드 AttendanceListDTO/AttendanceStatus 에 맞춘 타입들 ===
+type AttendanceStatusType =
+  | 'NORMAL'
+  | 'LATE'
+  | 'EARLY_LEAVE'
+  | 'ABSENT'
+  | 'VACATION'
+  | 'HOLIDAY'
+  | 'RESIGN'
+  | (string & {});
+
+type StaffEmploymentTypeType = 'OWNER' | 'STAFF' | 'PART_TIME' | (string & {});
+
 interface AttendanceItem {
   attendanceId: number;
-  attendanceWorkDate: string;        // "2025-11-25"
-  attendanceCheckIn: string | null;  // "2025-11-25T09:00:00"
-  attendanceCheckOut: string | null; // "2025-11-25T18:00:00"
-  attendanceStatus: string;          // e.g. "WORKING", "COMPLETED"
+  attendanceWorkDate: string;
+  attendanceCheckIn: string | null;
+  attendanceCheckOut: string | null;
+  attendanceStatus: AttendanceStatusType;
   attendanceWorkHours: number;
-  staffShiftTypeName: string | null; // 오픈/미들/마감 이름 (지금은 null일 수도)
   staffId: number;
   staffName: string;
-  staffEmploymentType: string;       // "OWNER", "STAFF", "PART_TIME" 같은 값 예상
-}
-
-interface WorkSchedule {
-  id: string;
-  staffId: string;
-  staffName: string;
-  date: string;
-  workType: 'open' | 'middle' | 'close' | 'A' | 'B' | 'C' | 'D' | 'vacation' | 'off' | 'custom';
-  startTime: string;
-  endTime: string;
-  actualStartTime?: string;
-  actualEndTime?: string;
-  breakTime: number;
-  status: 'scheduled' | 'confirmed' | 'working' | 'completed' | 'absent';
-  notes?: string;
-}
-
-interface WorkTimeTemplate {
-  id: string;
-  name: string;
-  type: 'open' | 'middle' | 'close' | 'A' | 'B' | 'C' | 'D';
-  startTime: string;
-  endTime: string;
-  breakTime: number;
-  description: string;
-  employmentType: '파트타임' | '정규직';
+  staffEmploymentType: StaffEmploymentTypeType;
 }
 
 interface StoreHoliday {
@@ -97,21 +81,6 @@ type FormField = {
   validation?: (value: unknown) => string | undefined;
 };
 
-const toFormValues = (s: WorkSchedule): FormValues => ({
-  id: s.id,
-  staffId: s.staffId,
-  staffName: s.staffName,
-  date: s.date,
-  workType: s.workType,
-  startTime: s.startTime,
-  endTime: s.endTime,
-  actualStartTime: s.actualStartTime,
-  actualEndTime: s.actualEndTime,
-  breakTime: s.breakTime,
-  status: s.status,
-  notes: s.notes,
-});
-
 // UTC 꼬임 방지용: 로컬 기준 YYYY-MM-DD
 const formatDateLocal = (date: Date) => {
   const y = date.getFullYear();
@@ -120,98 +89,148 @@ const formatDateLocal = (date: Date) => {
   return `${y}-${m}-${d}`;
 };
 
-// ===== Constants =====
-const BUSINESS_HOURS = { open: '08:00', close: '22:00' };
-const STAFFING_REQUIREMENTS = {
-  partTime: { open: 2, middle: 2, close: 2 },
-  fullTime: { minimum: 1, shifts: ['A', 'B', 'C', 'D'] as const }
-};
-const FULLTIME_COVERAGE = {
-  A: ['open', 'middle'],
-  B: ['middle', 'close'],
-  C: ['middle', 'close'],
-  D: ['open', 'middle']
-} as const;
-
-// ===== Helpers =====
-const checkStaffingRequirements = (schedules: WorkSchedule[], date: string) => {
-  const daySchedules = schedules.filter(
-    s => s.date === date && s.workType !== 'vacation' && s.workType !== 'off'
-  );
-
-  const partTimeCount = {
-    open: daySchedules.filter(s => s.workType === 'open').length,
-    middle: daySchedules.filter(s => s.workType === 'middle').length,
-    close: daySchedules.filter(s => s.workType === 'close').length
-  };
-
-  const fullTimeShifts = daySchedules
-    .filter(s => ['A', 'B', 'C', 'D'].includes(s.workType))
-    .map(s => s.workType as 'A' | 'B' | 'C' | 'D');
-
-  const fullTimeCoverage = { open: 0, middle: 0, close: 0 as number };
-  fullTimeShifts.forEach(shift => {
-    FULLTIME_COVERAGE[shift].forEach(slot => {
-      fullTimeCoverage[slot as keyof typeof fullTimeCoverage]++;
-    });
-  });
-
-  const warnings: string[] = [];
-  (Object.entries(STAFFING_REQUIREMENTS.partTime) as Array<
-    [keyof typeof partTimeCount, number]
-  >).forEach(([shift, required]) => {
-    const totalCoverage = partTimeCount[shift] + fullTimeCoverage[shift];
-    if (totalCoverage < required) {
-      const shiftName = shift === 'open' ? '오픈' : shift === 'middle' ? '미들' : '마감';
-      const shortage = required - totalCoverage;
-      warnings.push(
-        `${shiftName} 시간대 ${shortage}명 부족 (파트타임 ${partTimeCount[shift]}명 + 정규직커버 ${fullTimeCoverage[shift]}명 = ${totalCoverage}명, 필요 ${required}명)`
-      );
-    }
-  });
-
-  if (fullTimeShifts.length < STAFFING_REQUIREMENTS.fullTime.minimum) {
-    warnings.push(
-      `정규직 ${STAFFING_REQUIREMENTS.fullTime.minimum - fullTimeShifts.length}명 부족 (A, B, C, D 시프트 중 최소 1명 필요)`
-    );
+// 00:00 ~ 23:30 30분 단위 시간 옵션
+const TIME_OPTIONS: { value: string; label: string }[] = Array.from(
+  { length: 48 },
+  (_, i) => {
+    const h = String(Math.floor(i / 2)).padStart(2, '0');
+    const m = i % 2 === 0 ? '00' : '30';
+    const time = `${h}:${m}`;
+    return { value: time, label: time };
   }
-  return warnings;
+);
+
+const formatTime = (dateTime: string | null | undefined) => {
+  if (!dateTime) return '-';
+  return dateTime.substring(11, 16);
 };
 
-const getBusinessHours = () => BUSINESS_HOURS;
+// ✅ 실제 근무시간(hh.hh)을 "7시간 15분 (7.25시간)" 형태로 변환
+const formatWorkHoursLabel = (hours: number | null | undefined) => {
+  if (hours == null || Number.isNaN(hours)) return '-';
+
+  const totalMinutes = Math.round(hours * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+
+  return `${h}시간 ${m}분`;
+};
 
 // ===== Component =====
 export function StaffSchedule() {
   const [staffList, setStaffList] = useState<Staff[]>([]);
-  const [workTimeTemplates, setWorkTimeTemplates] = useState<WorkTimeTemplate[]>([]);
-  const [schedules, setSchedules] = useState<WorkSchedule[]>([]);
   const [holidays, setHolidays] = useState<StoreHoliday[]>([]);
 
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedStaff, setSelectedStaff] = useState<string>('all');
-  const [searchTerm, setSearchTerm] = useState(''); // 스케줄용 검색
 
-  // 🔽 하루 근태 리스트 + 페이징 상태
   const [attendanceList, setAttendanceList] = useState<AttendanceItem[]>([]);
   const [attendancePage, setAttendancePage] = useState(0);
   const [attendanceTotalPages, setAttendanceTotalPages] = useState(0);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
 
-  // 🔽 근태 검색 상태
   const [attendanceKeyword, setAttendanceKeyword] = useState('');
   const [attendanceSearchType, setAttendanceSearchType] =
     useState<'name' | 'id' | 'all'>('name');
   const [attendanceStatusFilter, setAttendanceStatusFilter] = useState<string>('ALL');
 
-  // 모달
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
-  const [editingSchedule, setEditingSchedule] = useState<WorkSchedule | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'schedule'; id: string } | null>(
-    null
-  );
+
+  const [selectedStaffForForm, setSelectedStaffForForm] = useState<string>('');
 
   // =====================
-  // 📌 백엔드 근태 API 호출 (useCallback)
+  // 📌 직원 / 휴일 로딩
+  // =====================
+  const loadStaff = useCallback(async () => {
+    try {
+      const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
+      const token = localStorage.getItem('accessToken');
+
+      const res = await axios.get<PageResponse<any>>(
+        `${baseUrl}/api/staff/list`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          params: {
+            page: 0,
+            size: 9999,
+          },
+        }
+      );
+
+      console.log('📌 직원 응답', res.data);
+
+      const rawList = res.data.content ?? [];
+
+      // 🔁 백엔드 DTO -> 프론트 Staff 타입으로 매핑
+      const mapped: Staff[] = rawList.map((s: any) => {
+        const rawStatus = (s.staffStatus ?? s.status ?? 'ACTIVE') as string;
+        let status: Staff['status'];
+        switch (rawStatus.toUpperCase()) {
+          case 'INACTIVE':
+            status = 'inactive';
+            break;
+          case 'VACATION':
+            status = 'vacation';
+            break;
+          case 'RESIGNED':
+          case 'RESIGN':
+            status = 'resigned';
+            break;
+          case 'ACTIVE':
+          default:
+            status = 'active';
+        }
+
+        const rawEmp = (s.staffEmploymentType ?? s.employmentType ?? '') as string;
+        const employmentType: Staff['employmentType'] =
+          rawEmp === 'PART_TIME' || rawEmp === 'PART_TIMER'
+            ? '파트타임'
+            : '정규직';
+
+        return {
+          id: String(s.id),
+          name: s.staffName ?? s.name ?? '',
+          position: s.staffPosition ?? s.position ?? '',
+          hourlyWage: s.hourlyWage ?? s.staffHourlyWage ?? 0,
+          monthlyWage: s.monthlyWage ?? s.staffMonthlyWage ?? 0,
+          employmentType,
+          phone: s.staffPhone ?? s.phone ?? '',
+          email: s.staffEmail ?? s.email ?? '',
+          status,
+        };
+      });
+
+      setStaffList(mapped);
+    } catch (e) {
+      console.error(e);
+      toast.error('직원 목록을 불러오지 못했습니다.');
+    }
+  }, []);
+
+  const loadHolidays = useCallback(async () => {
+    try {
+      const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
+      const token = localStorage.getItem('accessToken');
+
+      const res = await axios.get<StoreHoliday[]>(
+        `${baseUrl}/api/store-holidays`,
+        {
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+
+      setHolidays(res.data);
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadStaff();
+    loadHolidays();
+  }, [loadStaff, loadHolidays]);
+
+  // =====================
+  // 📌 백엔드 근태 조회 API 호출
   // =====================
   const loadAttendance = useCallback(
     async (targetDate: Date, page: number = 0) => {
@@ -229,7 +248,7 @@ export function StaffSchedule() {
             params: {
               date: dateStr,
               page,
-              size: 10, // 🔟 한 페이지 10명
+              size: 6,
               keyword: attendanceKeyword || undefined,
               type: attendanceSearchType,
               attendanceStatus:
@@ -256,114 +275,135 @@ export function StaffSchedule() {
     [attendanceKeyword, attendanceSearchType, attendanceStatusFilter]
   );
 
-  // =====================
-  // 🔁 날짜 / 검색어 / 타입 / 상태 변경 시 자동 로딩
-  // =====================
   useEffect(() => {
-    setAttendancePage(0);              // 항상 0페이지부터
+    setAttendancePage(0);
     loadAttendance(currentDate, 0);
   }, [currentDate, attendanceKeyword, attendanceSearchType, attendanceStatusFilter, loadAttendance]);
 
-  // 휴일 체크
-  const isHoliday = (date: Date) => {
-    const ds = date.toISOString().split('T')[0];
-    return holidays.some(h => h.date === ds);
-  };
-  const getHolidayInfo = (date: Date) => {
-    const ds = date.toISOString().split('T')[0];
-    return holidays.find(h => h.date === ds);
-  };
-
-  // 날짜별 스케줄
-  const getSchedulesForDate = (date: Date) => {
-    const ds = date.toISOString().split('T')[0];
-    return schedules.filter(schedule => {
-      const matchesDate = schedule.date === ds;
-      const matchesStaff = selectedStaff === 'all' || schedule.staffId === selectedStaff;
-      const matchesSearch = schedule.staffName
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase());
-      return matchesDate && matchesStaff && matchesSearch;
-    });
-  };
-
-  // ===== Attendance Helpers =====
-  const formatTime = (dateTime: string | null | undefined) => {
-    if (!dateTime) return '-';
-    // "YYYY-MM-DDTHH:MM:SS" → "HH:MM"
-    return dateTime.substring(11, 16);
-  };
-
-  const getAttendanceStatusBadge = (status: string) => {
+  const getAttendanceStatusBadge = (status: AttendanceStatusType) => {
     switch (status) {
       case 'NORMAL':
-        return <Badge className="bg-green-100 text-green-800">정상출근</Badge>;
-      case 'WORKING':
-        return <Badge className="bg-green-100 text-green-800">근무중</Badge>;
-      case 'COMPLETED':
-        return <Badge className="bg-gray-100 text-gray-800">완료</Badge>;
-      case 'ABSENT':
-        return <Badge className="bg-red-100 text-red-800">결근</Badge>;
+        return <Badge className="bg-green-100 text-green-800">정상</Badge>;
       case 'LATE':
         return <Badge className="bg-yellow-100 text-yellow-800">지각</Badge>;
+      case 'EARLY_LEAVE':
+        return <Badge className="bg-orange-100 text-orange-800">조퇴</Badge>;
+      case 'ABSENT':
+        return <Badge className="bg-red-100 text-red-800">결근</Badge>;
+      case 'VACATION':
+        return <Badge className="bg-blue-100 text-blue-800">휴가</Badge>;
+      case 'HOLIDAY':
+        return <Badge className="bg-purple-100 text-purple-800">휴일</Badge>;
+      case 'RESIGN':
+        return <Badge className="bg-gray-200 text-gray-700">퇴사</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
   };
 
-  const getEmploymentTypeLabel = (type: string) => {
+  const getEmploymentTypeLabel = (type: StaffEmploymentTypeType | string) => {
     switch (type) {
       case 'OWNER':
         return '점주';
       case 'STAFF':
         return '직원';
       case 'PART_TIME':
-      case 'PART_TIMER':
         return '알바';
       default:
         return type;
     }
   };
 
-  // 근무/급여 계산 (지금은 안 써도 냅둠)
-  const calculateWorkHours = (schedule: WorkSchedule) => {
-    if (!schedule.actualStartTime || !schedule.actualEndTime) return 0;
-    const start = new Date(`2024-01-01 ${schedule.actualStartTime}`);
-    const end0 = new Date(`2024-01-01 ${schedule.actualEndTime}`);
-    const end = end0 < start ? new Date(end0.getTime() + 24 * 3600 * 1000) : end0;
-    const diffHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-    const breakHours = schedule.breakTime / 60;
-    return Math.max(0, diffHours - breakHours);
-  };
-  const calculatePay = (schedule: WorkSchedule) => {
-    const staff = staffList.find(s => s.id === schedule.staffId);
-    if (!staff || schedule.status !== 'completed') return 0;
-    return Math.round(calculateWorkHours(schedule) * staff.hourlyWage);
-  };
-
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // 폼용 선택 상태
-  const [selectedStaffForForm, setSelectedStaffForForm] = useState<string>('');
-  const [selectedWorkType, setSelectedWorkType] = useState<string>('');
+  // =====================
+  // 📌 근태 등록 함수
+  // =====================
+  const registerAttendance = async (data: any) => {
+    try {
+      const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
+      const token = localStorage.getItem('accessToken');
 
-  // ===== Form 정의 =====
-  const scheduleFormFields = useMemo(() => {
-    const getFields = (selectedStaffId: string, workType?: string): FormField[] => {
-      const sel = staffList.find(s => s.id === selectedStaffId);
-      const isPartTime = sel?.employmentType === '파트타임';
+      const date = data.date as string;              // "2025-11-22"
+      const staffId = data.staffId;
+      const checkInTime = data.attendanceCheckIn;    // "06:30"
+      const checkOutTime = data.attendanceCheckOut;  // "04:30"
+      const status = data.attendanceStatus || 'NORMAL';
 
-      const availableTemplates = workTimeTemplates.filter(
-        t => t.employmentType === sel?.employmentType
-      );
-      const workTypeOptions: { value: string; label: string }[] = [
-        ...availableTemplates.map(t => ({ value: t.type, label: t.name })),
-        { value: 'vacation', label: '휴가' },
-        { value: 'off', label: '휴무' }
-      ];
-      if (!isPartTime && sel) {
-        workTypeOptions.push({ value: 'custom', label: '직접 입력' });
+      if (!date || !staffId || !checkInTime || !checkOutTime) {
+        toast.error('근무 일자, 출근/퇴근 시간, 직원을 모두 입력해주세요.');
+        return;
       }
+
+      // 기본은 같은 날
+      const attendanceWorkDate = date;
+      let attendanceCheckIn = `${date}T${checkInTime}:00`;
+      let attendanceCheckOutDatePart = date;
+
+      // 🔥 퇴근 시간이 출근 시간보다 이르면 "다음 날 퇴근"으로 판단해서 날짜 +1
+      if (checkOutTime <= checkInTime) {
+        const [y, m, d] = date.split('-').map(Number);
+        const workDate = new Date(y, m - 1, d);
+        const nextDate = new Date(workDate);
+        nextDate.setDate(workDate.getDate() + 1);
+        attendanceCheckOutDatePart = formatDateLocal(nextDate);  // "2025-11-23"
+      }
+
+      const attendanceCheckOut = `${attendanceCheckOutDatePart}T${checkOutTime}:00`;
+
+      // ✅ 실제 근무 시간 계산 (직접 입력값이 있으면 그걸 우선 사용)
+      let workHours: number;
+      if (
+        data.attendanceWorkHours !== undefined &&
+        data.attendanceWorkHours !== null &&
+        data.attendanceWorkHours !== ''
+      ) {
+        workHours = Number(data.attendanceWorkHours);
+      } else {
+        const start = new Date(attendanceCheckIn);
+        const end = new Date(attendanceCheckOut);
+        const diffHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+        workHours = Number(Math.max(0, diffHours).toFixed(2));
+      }
+
+      const payload = {
+        staffId: Number(staffId),
+        attendanceWorkDate,          // "2025-11-22"
+        attendanceCheckIn,           // "2025-11-22T07:00:00"
+        attendanceCheckOut,          // "2025-11-23T04:30:00" 이런 형식
+        attendanceStatus: status,    // 'NORMAL' 같은 enum 값
+        attendanceWorkHours: workHours, // 숫자
+        attendanceMemo: data.notes || '',
+      };
+
+      console.log('📌 근태 등록 payload', payload);
+
+      const res = await axios.post<number>(
+        `${baseUrl}/api/attendance/add`,
+        payload,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      console.log('근태 등록 완료, id=', res.data);
+      toast.success('근태가 등록되었습니다.');
+      loadAttendance(currentDate, 0);
+    } catch (error: any) {
+      console.error('📌 근태 등록 실패', error.response?.data || error);
+      toast.error(
+        (error.response?.data as any)?.message ||
+        '근태 등록에 실패했습니다.'
+      );
+    }
+  };
+
+  // =====================
+  // 📌 모달 폼 필드 정의 (근무 템플릿 제거 버전)
+  // =====================
+  const scheduleFormFields = useMemo(() => {
+    const getFields = (selectedStaffId: string): FormField[] => {
+      const sel = staffList.find(s => s.id === selectedStaffId);
 
       const fields: FormField[] = [
         {
@@ -372,16 +412,14 @@ export function StaffSchedule() {
           type: 'select',
           required: true,
           placeholder: '근무중인 직원을 선택하세요',
-          options: staffList
-            .filter(st => st.status === 'active')
-            .map(st => ({
-              value: st.id,
-              label: `${st.name} (${st.position}) - ${st.employmentType}`
-            }))
+          options: staffList.map(st => ({
+            value: st.id,
+            label: `${st.name} (${st.employmentType})`
+          }))
         },
         {
           name: 'date',
-          label: '날짜',
+          label: '근무 일자',
           type: 'date',
           required: true,
           validation: (value: unknown) => {
@@ -392,34 +430,67 @@ export function StaffSchedule() {
           }
         },
         {
-          name: 'workType',
-          label: '근무 템플릿',
+          name: 'attendanceCheckIn',
+          label: '출근 시간(근태)',
           type: 'select',
           required: true,
-          placeholder: '근무 템플릿을 선택하세요',
-          options: workTypeOptions
+          placeholder: '출근 시간을 선택하세요',
+          options: TIME_OPTIONS
+        },
+        {
+          name: 'attendanceCheckOut',
+          label: '퇴근 시간(근태)',
+          type: 'select',
+          required: true,
+          placeholder: '퇴근 시간을 선택하세요',
+          options: TIME_OPTIONS
+        },
+
+        {
+          name: 'attendanceStatus',
+          label: '근태 상태',
+          type: 'select',
+          required: true,
+          placeholder: '근태 상태를 선택하세요',
+          options: [
+            { value: 'NORMAL', label: '정상' },
+            { value: 'LATE', label: '지각' },
+            { value: 'EARLY_LEAVE', label: '조퇴' },
+            { value: 'ABSENT', label: '결근' },
+            { value: 'VACATION', label: '휴가' },
+            { value: 'HOLIDAY', label: '휴일' },
+            { value: 'RESIGN', label: '퇴사' }
+          ]
+        },
+        {
+          name: 'attendanceWorkHours',
+          label: '실제 근무 시간(시간 단위)',
+          type: 'number',
+          required: false,
+          placeholder: '예: 8.0 (미입력 시 출퇴근 시간으로 자동 계산)'
+        },
+        {
+          name: 'notes',
+          label: '메모',
+          type: 'textarea',
+          required: false
         }
       ];
 
-      if (!isPartTime && workType === 'custom') {
-        fields.push(
-          { name: 'startTime', label: '시작 시간', type: 'time', required: true },
-          { name: 'endTime', label: '종료 시간', type: 'time', required: true },
-          { name: 'breakTime', label: '휴게시간 (분)', type: 'number', required: true, placeholder: '120' }
-        );
-      }
-      fields.push({ name: 'notes', label: '메모', type: 'textarea', required: false });
+      // sel 을 지금은 안 쓰지만, 나중에 정규직/파트타임에 따라 필드 바꾸고 싶으면 여기서 분기 가능
+      void sel;
+
       return fields;
     };
     return getFields;
-  }, [staffList, workTimeTemplates, holidays]);
+  }, [staffList, holidays]);
 
-  // ===== Handlers =====
-  const handleAddSchedule = (data: any) => {
-    if (!data.staffId || !data.date || !data.workType) {
-      toast.error('필수 항목을 모두 입력해주세요.');
+  const handleAddSchedule = async (data: any) => {
+    if (!data.staffId || !data.date) {
+      toast.error('직원과 근무 일자를 모두 입력해주세요.');
       return;
     }
+
     const staff = staffList.find(s => s.id === data.staffId);
     if (!staff) {
       toast.error('선택한 직원을 찾을 수 없습니다.');
@@ -441,54 +512,11 @@ export function StaffSchedule() {
       return;
     }
 
-    const template = workTimeTemplates.find(t => t.type === data.workType);
-    let startTime = '',
-      endTime = '',
-      breakTime = 0;
-    if (template) {
-      startTime = template.startTime;
-      endTime = template.endTime;
-      breakTime = template.breakTime;
-    } else if (data.workType === 'custom') {
-      startTime = data.startTime || '';
-      endTime = data.endTime || '';
-      breakTime = parseInt(data.breakTime) || 60;
-    }
+    // 실제 근태 등록
+    await registerAttendance(data);
 
-    const newSchedule: WorkSchedule = {
-      id: Date.now().toString(),
-      staffId: data.staffId,
-      staffName: staff.name,
-      date: data.date,
-      workType: data.workType,
-      startTime,
-      endTime,
-      breakTime,
-      status: 'scheduled',
-      notes: data.notes || ''
-    };
-    const updated = [...schedules, newSchedule];
-    setSchedules(updated);
-
-    const staffingWarnings = checkStaffingRequirements(updated, data.date);
-    let coverageInfo = '';
-    if (['A', 'B', 'C', 'D'].includes(data.workType)) {
-      const covered = FULLTIME_COVERAGE[data.workType as keyof typeof FULLTIME_COVERAGE]
-        .map(s => (s === 'open' ? '오픈' : s === 'middle' ? '미들' : '마감'))
-        .join('+');
-      coverageInfo = `\n✅ ${data.workType}근무로 ${covered} 시간대 커버`;
-    }
-    if (staffingWarnings.length > 0) {
-      toast.warning(`일정 추가(인력 부족):${coverageInfo}\n${staffingWarnings.join('\n')}`, {
-        duration: 10000,
-        style: { whiteSpace: 'pre-line' }
-      });
-    } else {
-      toast.success(`근무 일정이 추가되었습니다.${coverageInfo}`);
-    }
     setIsScheduleModalOpen(false);
     setSelectedStaffForForm('');
-    setSelectedWorkType('');
   };
 
   const navigateDay = (dir: 'prev' | 'next') => {
@@ -499,26 +527,19 @@ export function StaffSchedule() {
 
   const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
 
-  const currentDaySchedules = getSchedulesForDate(currentDate);
-  const currentDateString = currentDate.toISOString().split('T')[0];
-  const staffingWarningsForDay = checkStaffingRequirements(schedules, currentDateString);
-  const businessHours = getBusinessHours();
-  const isCurrentHoliday = isHoliday(currentDate);
-  const holidayInfo = isCurrentHoliday ? getHolidayInfo(currentDate) : undefined;
-
   return (
     <div className="space-y-6">
       {/* 헤더 */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">근무 일정 관리</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">근무 일정 / 근태 관리</h1>
           <p className="text-sm text-gray-600 mt-1">
-            직원들의 출퇴근 및 휴가 일정을 관리합니다
+            직원들의 출퇴근(근태)과 근무 일정을 함께 관리합니다
           </p>
         </div>
         <div className="flex gap-2">
           <Button onClick={() => setIsScheduleModalOpen(true)} className="gap-2">
-            <Plus className="w-4 h-4" /> 일정 추가
+            <Plus className="w-4 h-4" /> 근태 추가
           </Button>
         </div>
       </div>
@@ -536,14 +557,12 @@ export function StaffSchedule() {
                   onChange={e => {
                     const value = e.target.value;
                     setAttendanceKeyword(value);
-                    setSearchTerm(value); // 스케줄 리스트 필터도 같이 사용
                   }}
                   className="pl-10"
                 />
               </div>
             </div>
             <div className="flex gap-2 items-center flex-wrap">
-              {/* 검색 타입 */}
               <Select
                 value={attendanceSearchType}
                 onValueChange={v =>
@@ -560,7 +579,6 @@ export function StaffSchedule() {
                 </SelectContent>
               </Select>
 
-              {/* 근태 상태 필터 */}
               <Select
                 value={attendanceStatusFilter}
                 onValueChange={v => setAttendanceStatusFilter(v)}
@@ -570,11 +588,13 @@ export function StaffSchedule() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">전체</SelectItem>
-                  <SelectItem value="NORMAL">정상출근</SelectItem>
-                  <SelectItem value="WORKING">근무중</SelectItem>
-                  <SelectItem value="COMPLETED">완료</SelectItem>
+                  <SelectItem value="NORMAL">정상</SelectItem>
                   <SelectItem value="LATE">지각</SelectItem>
+                  <SelectItem value="EARLY_LEAVE">조퇴</SelectItem>
                   <SelectItem value="ABSENT">결근</SelectItem>
+                  <SelectItem value="VACATION">휴가</SelectItem>
+                  <SelectItem value="HOLIDAY">휴일</SelectItem>
+                  <SelectItem value="RESIGN">퇴사</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -582,7 +602,7 @@ export function StaffSchedule() {
         </CardContent>
       </Card>
 
-      {/* 날짜 네비게이션 (하루 단위) */}
+      {/* 날짜 네비게이션 */}
       <Card>
         <CardContent className="p-4">
           <div className="flex items-center justify-between">
@@ -600,55 +620,77 @@ export function StaffSchedule() {
         </CardContent>
       </Card>
 
-      {/* 하루 리스트 뷰 */}
+      {/* 하루 리스트 뷰 (근태) */}
       <Card>
-        <CardContent className="p-6 space-y-4">
-          {/* 직원 근태 리스트 */}
+        <CardContent className="p-6 space-y-3">
           {attendanceLoading ? (
-            <div className="text-sm text-gray-500 px-1">근태 데이터를 불러오는 중입니다...</div>
+            <div className="text-sm text-gray-500 px-1">
+              근태 데이터를 불러오는 중입니다...
+            </div>
           ) : attendanceList.length > 0 ? (
             <>
-              <div className="border rounded-lg overflow-hidden">
-                {/* 헤더 */}
-                <div className="grid grid-cols-7 bg-gray-50 px-4 py-2 text-xs font-medium text-gray-600">
-                  <div className="col-span-2 text-left">직원</div>
-                  <div className="text-left">출근</div>
-                  <div className="text-left">퇴근</div>
-                  <div className="text-left">근태 상태</div>
-                  <div className="text-left">실제 근무시간(h)</div>
-                </div>
+              <h3 className="font-semibold mb-2">근무(근태) 일정</h3>
 
-                {/* 데이터 rows */}
-                {attendanceList.map(item => (
-                  <div
-                    key={item.attendanceId}
-                    className="grid grid-cols-7 items-center px-4 py-3 text-sm border-t hover:bg-gray-50"
+              <div className="space-y-4">
+                {attendanceList.map((item, index) => (
+                  <Card
+                    key={item.attendanceId ?? index}
+                    className="p-4 hover:shadow-md transition-shadow"
                   >
-                    {/* 직원 */}
-                    <div className="col-span-2 flex flex-col">
-                      <span className="font-medium">{item.staffName}</span>
-                      <span className="text-xs text-gray-500">
-                        {getEmploymentTypeLabel(item.staffEmploymentType)}
-                      </span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-4 mb-3">
+                          <div>
+                            <h4 className="font-semibold">{item.staffName}</h4>
+                            <p className="text-sm text-dark-gray">
+                              {getEmploymentTypeLabel(item.staffEmploymentType)}
+                            </p>
+                          </div>
+                          {getAttendanceStatusBadge(item.attendanceStatus)}
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-y-2 gap-x-4 text-sm">
+                          <div>
+                            <p className="text-dark-gray">근무일자</p>
+                            <p className="font-semibold">
+                              {item.attendanceWorkDate}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-dark-gray">출근시간</p>
+                            <p className="font-semibold">
+                              {formatTime(item.attendanceCheckIn)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-dark-gray">퇴근시간</p>
+                            <p className="font-semibold">
+                              {formatTime(item.attendanceCheckOut)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-dark-gray">실제 근무시간</p>
+                            <div className="flex items-center gap-3">
+                              <p className="font-semibold">
+                                {formatWorkHoursLabel(item.attendanceWorkHours)}
+                              </p>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="ml-3"
+                              >
+                                근무리포트 상세
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-
-                    {/* 출근 */}
-                    <div>{formatTime(item.attendanceCheckIn)}</div>
-
-                    {/* 퇴근 */}
-                    <div>{formatTime(item.attendanceCheckOut)}</div>
-
-                    {/* 근태 상태 */}
-                    <div>{getAttendanceStatusBadge(item.attendanceStatus)}</div>
-
-                    {/* 실제 근무시간 */}
-                    <div>{item.attendanceWorkHours?.toFixed(2)}</div>
-                  </div>
+                  </Card>
                 ))}
               </div>
 
-              {/* 페이징 버튼 */}
-              <div className="flex justify-end gap-2 mt-3">
+              <div className="flex justify-end gap-2 mt-4">
                 <Button
                   variant="outline"
                   size="sm"
@@ -683,95 +725,21 @@ export function StaffSchedule() {
         </CardContent>
       </Card>
 
-      {/* 모달들 */}
+      {/* 근태 입력 모달 (근무 템플릿 제거) */}
       <FormModal
         key="add-schedule"
         isOpen={isScheduleModalOpen}
         onClose={() => {
           setIsScheduleModalOpen(false);
           setSelectedStaffForForm('');
-          setSelectedWorkType('');
         }}
         onSubmit={handleAddSchedule}
-        title="근무 일정 추가"
-        fields={scheduleFormFields(selectedStaffForForm, selectedWorkType)}
-        initialData={{ date: todayStr, breakTime: 120 }}
+        title="근무 일정 / 근태 추가"
+        fields={scheduleFormFields(selectedStaffForForm)}
+        initialData={{ date: todayStr }}
         onChange={(field, value) => {
           if (field === 'staffId') setSelectedStaffForForm(String(value ?? ''));
-          if (field === 'workType') setSelectedWorkType(String(value ?? ''));
         }}
-      />
-
-      <FormModal
-        key={`edit-schedule-${editingSchedule?.id || 'new'}`}
-        isOpen={!!editingSchedule}
-        onClose={() => {
-          setEditingSchedule(null);
-          setSelectedStaffForForm('');
-          setSelectedWorkType('');
-        }}
-        onSubmit={data => {
-          const staff = staffList.find(s => s.id === data.staffId);
-          const template = workTimeTemplates.find(
-            t => t.type === String(data.workType)
-          );
-
-          let startTime = '';
-          let endTime = '';
-          let breakTime = 0;
-
-          if (template) {
-            ({ startTime, endTime, breakTime } = template);
-          } else if (String(data.workType) === 'custom') {
-            startTime = String((data as Record<string, unknown>).startTime ?? '');
-            endTime = String((data as Record<string, unknown>).endTime ?? '');
-            breakTime = Number((data as Record<string, unknown>).breakTime ?? 60);
-          }
-
-          setSchedules(
-            schedules.map(s =>
-              s.id === editingSchedule?.id
-                ? {
-                    ...s,
-                    ...data,
-                    startTime,
-                    endTime,
-                    breakTime,
-                    staffName: staff?.name || s.staffName
-                  }
-                : s
-            )
-          );
-          setEditingSchedule(null);
-          setSelectedStaffForForm('');
-          setSelectedWorkType('');
-          toast.success('일정이 수정되었습니다.');
-        }}
-        title="일정 수정"
-        fields={scheduleFormFields(
-          selectedStaffForForm || editingSchedule?.staffId || '',
-          selectedWorkType || editingSchedule?.workType
-        )}
-        initialData={editingSchedule ? toFormValues(editingSchedule) : undefined}
-        onChange={(field, value) => {
-          if (field === 'staffId') setSelectedStaffForForm(String(value ?? ''));
-          if (field === 'workType') setSelectedWorkType(String(value ?? ''));
-        }}
-      />
-
-      <ConfirmDialog
-        isOpen={!!deleteConfirm}
-        onClose={() => setDeleteConfirm(null)}
-        onConfirm={() => {
-          if (!deleteConfirm) return;
-          setSchedules(schedules.filter(s => s.id !== deleteConfirm.id));
-          toast.success('일정이 삭제되었습니다.');
-          setDeleteConfirm(null);
-        }}
-        title="일정 삭제"
-        description="정말로 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다."
-        confirmText="삭제"
-        cancelText="취소"
       />
     </div>
   );

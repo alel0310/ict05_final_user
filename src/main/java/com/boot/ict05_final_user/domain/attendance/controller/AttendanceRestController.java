@@ -1,12 +1,13 @@
 package com.boot.ict05_final_user.domain.attendance.controller;
 
 import com.boot.ict05_final_user.config.security.principal.AppUser;
+import com.boot.ict05_final_user.domain.attendance.service.AttendanceService;
 import com.boot.ict05_final_user.domain.attendance.dto.AttendanceListDTO;
 import com.boot.ict05_final_user.domain.attendance.dto.AttendanceSearchDTO;
 import com.boot.ict05_final_user.domain.attendance.dto.AttendanceWriteFormDTO;
-import com.boot.ict05_final_user.domain.attendance.service.AttendanceService;
 import com.boot.ict05_final_user.domain.staff.entity.AttendanceStatus;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -39,13 +40,12 @@ public class AttendanceRestController {
             @RequestParam("date")
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(required = false) Integer size,
+            @RequestParam int size,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String type,
             @RequestParam(required = false) AttendanceStatus attendanceStatus
     ) {
-        int pageSize = (size != null ? size : 10);  // 한 페이지에 10개 고정
-        Pageable pageable = PageRequest.of(page, pageSize);
+        Pageable pageable = PageRequest.of(page, size);
 
         AttendanceSearchDTO searchDto = new AttendanceSearchDTO();
         searchDto.setKeyword(keyword);
@@ -65,7 +65,7 @@ public class AttendanceRestController {
      */
     @PostMapping("/add")
     public ResponseEntity<Long> addAttendance(
-            @RequestBody AttendanceWriteFormDTO dto,
+            @Valid @RequestBody AttendanceWriteFormDTO dto,
             @AuthenticationPrincipal AppUser user
     ) {
         log.info("POST /api/attendance/add dto={}, storeId={}", dto, user.getStoreId());

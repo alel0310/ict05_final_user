@@ -130,11 +130,15 @@ interface Order {
   status: OrderStatus;
   total: number;
 }
+
 // 발주 품목 DTO
-interface PurchaseOrderItemDTO {
-  materialId: number;   // 본사 재료 PK
-  count: number;        // 발주 수량
+interface PurchaseOrderItemDTO { 
+  // 가맹점 재료 ID (StoreMaterial.id)
+  storeMaterialId: number;
+  // 발주 수량
+  count: number;
 }
+
 // 발주 요청 DTO
 interface PurchaseOrderRequestsDTO {
   priority: 'NORMAL' | 'URGENT';
@@ -211,21 +215,26 @@ function toStockStatus(domainStatus: string): StockStatus {
 
 
 
-function mapStoreInventoryToInventoryItem(
-  si: StoreInventoryResponse,
-): InventoryItem {
+// InventoryItem 생성 블록만 교체
+function mapStoreInventoryToInventoryItem(si: StoreInventoryResponse): InventoryItem {
   const optimal = si.optimalQuantity ?? 0;
   const unit = si.baseUnit || '개';
   const quantity = si.quantity ?? 0;
-  const inventoryId: number = (si.storeInventoryId ?? si.id)!;
 
-  const status = calcStockStatus(quantity, optimal);
+  // ID 정리
+  const storeInventoryId = (si.storeInventoryId ?? si.id)!; // 백엔드가 둘 중 하나를 주는 상황 대비
+  const storeMaterialId  = si.storeMaterialId!;             // 반드시 가맹점 재료 PK
+
+  // 백엔드 상태(SHORTAGE/LOW/SUFFICIENT) → 프론트 상태로 매핑
+  const status: StockStatus =
+    si.status === 'SHORTAGE' ? 'shortage' :
+    si.status === 'LOW'      ? 'low'      : 'sufficient';
 
   return {
-    id: inventoryId,
-    storeInventoryId: inventoryId,
-    storeMaterialId: si.storeMaterialId,
-    materialId: si.storeMaterialId,
+    id: storeInventoryId,        // ← 체크/선택용 키
+    storeInventoryId,            // 보존
+    storeMaterialId,             // ← 발주에 실릴 키
+    materialId: storeMaterialId, // (혹시 남아있는 참조 대비, 필요 없으면 제거해도 됨)
 
     name: si.name,
     category: si.category ?? '기타',
@@ -235,14 +244,13 @@ function mapStoreInventoryToInventoryItem(
     unit,
     unitPrice: si.purchasePrice ?? 0,
     lastRestocked: si.lastUpdated ?? '',
-    expiryDate:
-      si.nearestExpireDate ??
-      new Date().toISOString().split('T')[0],
+    expiryDate: si.nearestExpireDate ?? new Date().toISOString().split('T')[0],
     supplier: si.supplier ?? '',
-    status,      // ✅ 공통 함수로 계산
+    status,
     weeklyUsage: 0,
   };
 }
+
 
 
 
@@ -1007,10 +1015,14 @@ export function InventoryManagement() {
                     priority: (priority as 'NORMAL' | 'URGENT') ?? 'NORMAL',
                     notes: notes?.trim() || '',
                     items: cartItems.map(ci => ({
-                      materialId: ci.storeMaterialId,
+                      storeMaterialId: ci.storeMaterialId,  // ← 핵심
                       count: ci.orderQuantity,
                     })),
                   };
+                  await api.post<number>('/api/purchase/create', dto);
+                  
+                  console.table(cartItems.map(ci => ({ id: ci.id, storeMaterialId: ci.storeMaterialId, qty: ci.orderQuantity, name: ci.name })));
+
 
                   // 2) 백엔드 호출
                   const res = await api.post<number>('/api/purchase/create', dto);
@@ -1025,12 +1037,7 @@ export function InventoryManagement() {
                   setOrders(prev => [
                     {
                       id: String(res.data),
-                      items: cartItems.map(ci => ({
-                        name: ci.name,
-                        quantity: ci.orderQuantity,
-                        unit: ci.unit,
-                        unitPrice: ci.unitPrice,
-                      })),
+                      items: cartItems.map(ci => ({ name: ci.name, quantity: ci.orderQuantity, unit: ci.unit, unitPrice: ci.unitPrice })),
                       supplier: (cartItems[0] as any)?.supplier ?? '미지정',
                       orderDate: new Date().toISOString().split('T')[0],
                       expectedDate: '', // 서버에서 관리
@@ -1217,12 +1224,7 @@ function OrderCartContent({
   items: CartItem[];
   onUpdateQuantity: (itemId: number, quantity: number) => void;
   onRemoveItem: (itemId: number) => void;
-  onSubmitOrder: (orderData: {
-    supplier: string;
-    expectedDate: string;
-    priority: string;
-    notes: string;
-  }) => void;
+  onSubmitOrder: (orderData: { supplier: string; expectedDate: string; priority: string; notes: string }) => void;
 }) {
   const [orderForm, setOrderForm] = useState<{ priority: string; notes: string }>({
     priority: 'NORMAL',
