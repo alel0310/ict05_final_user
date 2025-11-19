@@ -54,8 +54,7 @@ public class StoreMaterialRestController {
             @Valid @RequestBody StoreMaterialCreateDTO dto,
             @AuthenticationPrincipal AppUser user
     ) {
-        Long storeId = user.getStoreId();
-        dto.setStoreId(storeId);
+        dto.setStoreId(user.getStoreId());
         Long id = storeMaterialService.create(dto);
         return ResponseEntity.ok(id);
     }
