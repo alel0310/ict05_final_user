@@ -77,4 +77,6 @@ public interface DailyClosingRepositoryCustom {
             return new OrderDailySummary(0, 0, 0, 0, 0, 0, 0, 0, 0);
         }
     }
+
+    List<DailyClosing> findDailyClosingHistory(Long storeId, LocalDate from, LocalDate to);
 }

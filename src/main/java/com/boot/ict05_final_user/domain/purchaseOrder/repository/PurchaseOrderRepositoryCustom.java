@@ -30,5 +30,8 @@ public interface PurchaseOrderRepositoryCustom {
     void deletePurchaseOrderDetail(Long detailId);
     // 발주 상태 연동
     Optional<String> findOrderCodeById(Long id);
+    // 발주 상태 변경
+    int updateStatusById(Long id, PurchaseOrderStatus status);
+    int updateStatusByOrderCode(String orderCode, PurchaseOrderStatus status);
 
 }

@@ -38,17 +38,6 @@ public interface DailyClosingRepository
      * @param to      조회 종료 일자(포함)
      * @return 기간 내 일일 마감 엔티티 목록
      */
-    @Query("""
-           select d
-           from DailyClosing d
-           where d.storeId = :storeId
-             and d.closingDate between :from and :to
-           order by d.closingDate desc
-           """)
-    List<DailyClosing> findDailyClosingHistory(
-            @Param("storeId") Long storeId,
-            @Param("from") LocalDate from,
-            @Param("to") LocalDate to
-    );
+    List<DailyClosing> findDailyClosingHistory(Long storeId, LocalDate from, LocalDate to);
 
 }
