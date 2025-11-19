@@ -19,11 +19,15 @@ public interface StoreMaterialRepository extends JpaRepository<StoreMaterial, Lo
 
     // 필요하면: 가맹점 한 개 기준 목록 조회
     // Page<StoreMaterial> findByStore(Store store, Pageable pageable);
-    
+
     // 가맹점 재료 조회
     List<StoreMaterial> findByStore(Store store);
 
-    // 가맹점 재료 체크
-    Optional<StoreMaterial> findByIdAndStoreId(Long id, Long storeId);
+    // 스토어 + HQ 재료 PK로 조회 (연관 필드명: material)
+    Optional<StoreMaterial> findByStore_IdAndMaterial_Id(Long storeId, Long materialId);
 
+    // 필요하면 가맹점 재료 PK로 찾는 버전도 병행
+    Optional<StoreMaterial> findByStore_IdAndId(Long storeId, Long storeMaterialId);
+
+    Optional<StoreMaterial> findById(Long id);
 }

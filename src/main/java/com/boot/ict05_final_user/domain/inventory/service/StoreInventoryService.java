@@ -5,9 +5,7 @@ import com.boot.ict05_final_user.domain.inventory.dto.StoreInventoryRestockReque
 import com.boot.ict05_final_user.domain.inventory.dto.StoreInventoryRestockResponse;
 import com.boot.ict05_final_user.domain.inventory.entity.InventoryStatus;
 import com.boot.ict05_final_user.domain.inventory.entity.StoreInventory;
-import com.boot.ict05_final_user.domain.inventory.entity.StoreInventoryBatch;
 import com.boot.ict05_final_user.domain.inventory.entity.StoreMaterial;
-import com.boot.ict05_final_user.domain.inventory.repository.StoreInventoryBatchRepository;
 import com.boot.ict05_final_user.domain.inventory.repository.StoreInventoryRepository;
 import com.boot.ict05_final_user.domain.inventory.repository.StoreMaterialRepository;
 import com.boot.ict05_final_user.domain.store.entity.Store;
@@ -33,7 +31,6 @@ public class StoreInventoryService {
     private final StoreRepository storeRepository;
     private final StoreMaterialRepository storeMaterialRepository;
     private final StoreInventoryRepository storeInventoryRepository;
-    private final StoreInventoryBatchRepository storeInventoryBatchRepository;
 
     /**
      * 지정 매장의 재고 목록 조회
