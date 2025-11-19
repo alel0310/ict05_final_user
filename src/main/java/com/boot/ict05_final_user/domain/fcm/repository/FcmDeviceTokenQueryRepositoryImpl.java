@@ -1,9 +1,11 @@
+// src/main/java/com/boot/ict05_final_user/domain/fcm/repository/FcmDeviceTokenQueryRepositoryImpl.java
 package com.boot.ict05_final_user.domain.fcm.repository;
 
 import com.boot.ict05_final_user.domain.fcm.entity.AppType;
 import com.boot.ict05_final_user.domain.fcm.entity.FcmDeviceToken;
 import com.boot.ict05_final_user.domain.fcm.entity.PlatformType;
 import com.querydsl.core.types.dsl.BooleanExpression;
+import com.querydsl.jpa.impl.JPAUpdateClause;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
@@ -37,7 +39,7 @@ public class FcmDeviceTokenQueryRepositoryImpl implements FcmDeviceTokenQueryRep
                 .fetchFirst();
 
         if (found == null) {
-            // 2) 같은 (app, platform, member, device) 로 기존 행 있는지
+            // 2) 같은 (app, platform, member, device) 로 기존 행 유무
             FcmDeviceToken byDevice = query
                     .selectFrom(fcmDeviceToken)
                     .where(allOf(
@@ -96,6 +98,27 @@ public class FcmDeviceTokenQueryRepositoryImpl implements FcmDeviceTokenQueryRep
                 .setHint("jakarta.persistence.query.timeout", 3000)
                 .fetchFirst();
         return Optional.ofNullable(row);
+    }
+
+    @Override
+    public int deactivateAllByUpdatedAtBefore(LocalDateTime cutoff) {
+        long affected = new JPAUpdateClause(em, fcmDeviceToken)
+                .where(fcmDeviceToken.isActive.isTrue()
+                        .and(fcmDeviceToken.updatedAt.before(cutoff)))
+                .set(fcmDeviceToken.isActive, false)
+                .execute();
+        return (int) affected;
+    }
+
+    @Override
+    public int deactivateAllByLastSeenAtBefore(LocalDateTime cutoff) {
+        long affected = new JPAUpdateClause(em, fcmDeviceToken)
+                .where(fcmDeviceToken.isActive.isTrue()
+                        .and(fcmDeviceToken.lastSeenAt.isNotNull())
+                        .and(fcmDeviceToken.lastSeenAt.before(cutoff)))
+                .set(fcmDeviceToken.isActive, false)
+                .execute();
+        return (int) affected;
     }
 
     // helpers

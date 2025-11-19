@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 public interface FcmDeviceTokenQueryRepository {
+
     /**
      * (appType, platform, memberId, deviceId) 조합 또는 token 기준으로 업서트.
      */
@@ -18,4 +19,10 @@ public interface FcmDeviceTokenQueryRepository {
                           LocalDateTime seenAt);
 
     Optional<FcmDeviceToken> findActiveByToken(String token);
+
+    /** updatedAt 기준 일괄 비활성화 */
+    int deactivateAllByUpdatedAtBefore(LocalDateTime cutoff);
+
+    /** lastSeenAt 기준 일괄 비활성화(선택) */
+    int deactivateAllByLastSeenAtBefore(LocalDateTime cutoff);
 }

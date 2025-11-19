@@ -41,6 +41,7 @@ public class FirebaseConfig {
 
     @Bean
     public FirebaseMessaging firebaseMessaging(FirebaseApp app) {
+
         return FirebaseMessaging.getInstance(app);
     }
 }

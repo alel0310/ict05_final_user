@@ -1,17 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import api from '../../lib/authApi';
-import { Bell, AlertTriangle, Clock3, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { Bell, AlertTriangle, Clock3, ShieldCheck, ShieldAlert, RefreshCw, Smartphone, BellRing, BellOff } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { toast } from 'sonner';
 import { KPICard } from '../Common/KPICard';
 import { Switch } from '../ui/switch';
 import { Label } from '../ui/label';
+import { Input } from '../ui/input';
+import { requestFcmToken, deleteFcmToken } from '../../lib/firebase';
 
 type Pref = {
   catNotice: boolean;
   catStockLow: boolean;
   catExpireSoon: boolean;
+  thresholdDays?: number;   // ← 서버가 내려주므로 반영
   storeId?: number;
 };
 
@@ -19,8 +22,12 @@ export default function NotificationSettings() {
   const [pref, setPref] = useState<Pref | null>(null);
   const [applySubs, setApplySubs] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [perm, setPerm] = useState<NotificationPermission>(Notification.permission);
+  const [tokenBusy, setTokenBusy] = useState(false);
+  const [currentToken, setCurrentToken] = useState<string | null>(localStorage.getItem('fcm_token'));
 
+  // 초기 선호도 로드
   useEffect(() => {
     (async () => {
       try {
@@ -29,45 +36,115 @@ export default function NotificationSettings() {
           catNotice: !!data.catNotice,
           catStockLow: !!data.catStockLow,
           catExpireSoon: !!data.catExpireSoon,
+          thresholdDays: data.thresholdDays ?? 3,
           storeId: data.storeId ?? undefined,
         });
       } catch (e: any) {
         console.error('[FCM] pref load error', e);
         toast.error('알림 설정을 불러오지 못했습니다.');
-        setPref({ catNotice: true, catStockLow: true, catExpireSoon: true });
+        setPref({ catNotice: true, catStockLow: true, catExpireSoon: true, thresholdDays: 3 });
       } finally {
         setLoading(false);
       }
     })();
   }, []);
 
+  // 권한 요청
   const requestPerm = async () => {
     try {
       const p = await Notification.requestPermission();
       setPerm(p);
-      if (p === 'granted') {
-        toast.success('알림 권한이 허용되었습니다.');
-      } else {
-        toast.warning('알림 권한이 차단되었습니다. 브라우저 설정에서 변경할 수 있습니다.');
-      }
+      if (p === 'granted') toast.success('알림 권한이 허용되었습니다.');
+      else if (p === 'denied') toast.warning('알림 권한이 차단되었습니다. 브라우저 설정에서 변경할 수 있습니다.');
     } catch {
       toast.error('알림 권한을 요청하는 중 오류가 발생했습니다.');
     }
   };
 
+  // 토큰 등록(업서트 + 선호 토픽 동기화)
+  const registerToken = async () => {
+    setTokenBusy(true);
+    try {
+      // 1) 토큰 발급(권한 포함)
+      const token = await requestFcmToken();
+      if (!token) {
+        toast.warning('FCM 토큰을 가져오지 못했습니다. 브라우저 권한을 확인하세요.');
+        return;
+      }
+
+      // 2) 서버 업서트
+      await api.post('/fcm/token', {
+        token,
+        platform: 'WEB',
+        deviceId: 'browser',
+        appType: 'STORE',
+      });
+
+      // 3) 선호도 즉시 반영(옵션: 현재 화면의 applySubs에 따라)
+      if (applySubs && pref?.storeId) {
+        // 서버가 /fcm/pref/me 저장 시에도 반영하지만 즉시성 위해 한 번 더 저장 호출
+        await api.put('/fcm/pref/me', {
+          catNotice: pref.catNotice,
+          catStockLow: pref.catStockLow,
+          catExpireSoon: pref.catExpireSoon,
+          thresholdDays: pref.thresholdDays ?? 3,
+          applySubscriptions: true,
+        });
+      }
+
+      setCurrentToken(token);
+      toast.success('디바이스가 알림 수신에 등록되었습니다.');
+    } catch (e: any) {
+      console.error('[FCM] token register failed', e);
+      toast.error('디바이스 등록에 실패했습니다.');
+    } finally {
+      setTokenBusy(false);
+    }
+  };
+
+  // 토큰 해제(서버 revoke + 클라이언트 삭제)
+  const revokeToken = async () => {
+    setTokenBusy(true);
+    try {
+      const token = localStorage.getItem('fcm_token');
+      if (token) {
+        await api.post('/fcm/token/revoke', {
+          token,
+          platform: 'WEB',
+          deviceId: 'browser',
+        }).catch(() => {});
+      }
+      try { await deleteFcmToken(); } catch {}
+      localStorage.removeItem('fcm_token');
+      setCurrentToken(null);
+      toast.success('디바이스 알림 등록이 해제되었습니다.');
+    } catch (e: any) {
+      console.error('[FCM] token revoke failed', e);
+      toast.error('디바이스 해제에 실패했습니다.');
+    } finally {
+      setTokenBusy(false);
+    }
+  };
+
+  // 설정 저장
   const save = async () => {
     if (!pref) return;
+    if (saving) return;
+    setSaving(true);
     try {
       await api.put('/fcm/pref/me', {
         catNotice: pref.catNotice,
         catStockLow: pref.catStockLow,
         catExpireSoon: pref.catExpireSoon,
+        thresholdDays: pref.thresholdDays ?? 3,
         applySubscriptions: applySubs,
       });
       toast.success('저장되었습니다.');
     } catch (e: any) {
       console.error('[FCM] pref save error', e);
       toast.error('저장에 실패했습니다.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -89,10 +166,16 @@ export default function NotificationSettings() {
           <h1 className="text-2xl font-semibold text-gray-900">알림 설정</h1>
           <p className="text-sm text-gray-600 mt-1">공지/재고부족/유통임박 알림 구독과 수신 상태를 관리합니다.</p>
         </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={requestPerm}>
+            {perm === 'granted' ? <ShieldCheck className="w-4 h-4 mr-1" /> : <ShieldAlert className="w-4 h-4 mr-1" />}
+            권한 재요청
+          </Button>
+        </div>
       </div>
 
       {/* KPI 카드 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <KPICard
           title="공지 수신"
           value={pref.catNotice ? 'ON' : 'OFF'}
@@ -113,6 +196,13 @@ export default function NotificationSettings() {
           icon={Clock3}
           color="red"
           footerText={`Topic: expire-soon-${storeIdText}`}
+        />
+        <KPICard
+          title="디바이스 등록"
+          value={currentToken ? '등록됨' : '미등록'}
+          icon={Smartphone}
+          color="purple"
+          footerText={currentToken ? '수신 가능' : '수신 불가'}
         />
       </div>
 
@@ -145,26 +235,51 @@ export default function NotificationSettings() {
         </CardContent>
       </Card>
 
-      {/* 브라우저 알림 권한 */}
+      {/* 임계 일수(옵션) */}
       <Card>
         <CardHeader>
-          <CardTitle>브라우저 알림 권한</CardTitle>
+          <CardTitle>유통임박 임계 일수</CardTitle>
+        </CardHeader>
+        <CardContent className="flex items-center gap-3">
+          <Input
+            type="number"
+            min={1}
+            max={30}
+            className="w-28"
+            value={pref.thresholdDays ?? 3}
+            onChange={(e) => setPref({ ...pref, thresholdDays: Math.max(1, Math.min(30, Number(e.target.value) || 1)) })}
+          />
+          <span className="text-sm text-gray-600">일 (1~30)</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setPref({ ...pref, thresholdDays: 3 })}
+            title="기본값으로"
+          >
+            <RefreshCw className="w-4 h-4 mr-1" /> 기본 3일
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* 디바이스(토큰) 제어 */}
+      <Card>
+        <CardHeader>
+          <CardTitle>디바이스 등록 상태</CardTitle>
         </CardHeader>
         <CardContent className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {perm === 'granted' ? (
-              <span className="flex items-center gap-1 text-green-700">
-                <ShieldCheck className="w-4 h-4" /> 알림 권한이 허용되었습니다.
-              </span>
-            ) : (
-              <span className="flex items-center gap-1 text-red-700">
-                <ShieldAlert className="w-4 h-4" /> 알림 권한이 차단되었습니다.
-              </span>
-            )}
+          <div className="text-sm text-gray-700">
+            현재 상태: <strong>{currentToken ? '등록됨' : '미등록'}</strong>
           </div>
-          <Button variant="outline" onClick={requestPerm}>
-            권한 재요청
-          </Button>
+          <div className="flex gap-2">
+            <Button disabled={tokenBusy} variant="outline" onClick={registerToken}>
+              <BellRing className="w-4 h-4 mr-1" />
+              디바이스 등록
+            </Button>
+            <Button disabled={tokenBusy || !currentToken} variant="destructive" onClick={revokeToken}>
+              <BellOff className="w-4 h-4 mr-1" />
+              등록 해제
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -181,10 +296,12 @@ export default function NotificationSettings() {
           </Label>
         </div>
         <div className="flex gap-2">
-          <Button variant="ghost" onClick={() => window.history.back()}>
+          <Button variant="ghost" onClick={() => window.history.back()} disabled={saving}>
             취소
           </Button>
-          <Button onClick={save}>설정 저장</Button>
+          <Button onClick={save} disabled={saving}>
+            {saving ? '저장 중…' : '설정 저장'}
+          </Button>
         </div>
       </div>
     </div>

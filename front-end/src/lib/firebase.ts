@@ -63,8 +63,30 @@ export async function getMessagingIfSupported(): Promise<Messaging | null> {
   return messagingPromise;
 }
 
+// (추가) 권한 요청
+async function ensureNotificationPermission(): Promise<boolean> {
+  if (typeof Notification === 'undefined') {
+    console.warn('[FCM] Notification API not supported');
+    return false;
+  }
+  if (Notification.permission === 'granted') return true;
+  const perm = await Notification.requestPermission();
+  return perm === 'granted';
+}
+
+// (추가) 로컬 키 상수
+const LOCAL_TOKEN_KEY = 'fcm_token';
+const getSavedFcmToken = () => localStorage.getItem(LOCAL_TOKEN_KEY);
+const saveFcmToken = (t: string) => localStorage.setItem(LOCAL_TOKEN_KEY, t);
+
 // 3) 토큰 요청 + localStorage 저장
 export async function requestFcmToken(): Promise<string | null> {
+  const permOk = await ensureNotificationPermission();
+  if (!permOk) {
+    console.warn('[FCM] notification permission denied');
+    return null;
+  }
+
   const messaging = await getMessagingIfSupported();
   if (!messaging) return null;
 
@@ -79,14 +101,19 @@ export async function requestFcmToken(): Promise<string | null> {
     }
 
     const token = await getToken(messaging, { vapidKey });
-    if (token) {
-      console.log('[FCM] FCM token acquired', token);
-      localStorage.setItem('fcm_token', token);
-      return token;
-    } else {
+    if (!token) {
       console.warn('[FCM] getToken returned null');
       return null;
     }
+
+    const prev = getSavedFcmToken();
+    if (prev !== token) {
+      console.log('[FCM] token changed (prev -> new)', prev, token);
+      saveFcmToken(token);
+    } else {
+      console.log('[FCM] token unchanged');
+    }
+    return token;
   } catch (e) {
     console.error('[FCM] getToken failed', e);
     return null;

@@ -112,6 +112,7 @@ export default function Login() {
               token: fcmToken,
               platform: "WEB",
               deviceId: navigator.userAgent.slice(0, 120),
+              appType: "STORE",
             },
             authHeader
           );
