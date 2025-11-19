@@ -115,6 +115,8 @@ export function DailyClosingPage({ onPageChange }: DailyClosingPageProps) {
 
   const [isClosed, setIsClosed] = useState(false);
 
+  const [startingCashLocked, setStartingCashLocked] = useState(false);
+
   // 오늘 날짜 문자열 (YYYY-MM-DD)
   //const todayStr = new Date().toISOString().slice(0, 10);
   const todayStr = (() => {
@@ -186,6 +188,9 @@ export function DailyClosingPage({ onPageChange }: DailyClosingPageProps) {
         setDifferenceMemo(data.differenceMemo ?? "");
         setIsClosed(data.closed);
 
+        // 오픈 후 시작금 수정 잠금
+        setStartingCashLocked(data.startingCash !== null && data.startingCash !== undefined);
+
         // 지출: DTO 에 id 가 없으므로 화면용 id 는 index 로 만든다
         const uiExpenses: UiExpense[] =
           (data.expenses || []).map((e, idx) => ({
@@ -216,8 +221,8 @@ export function DailyClosingPage({ onPageChange }: DailyClosingPageProps) {
 
   // 이벤트
   const handleOpen = async () => {
-    if (isClosed) return;
-
+    if (isClosed || startingCashLocked) return;
+    
     const ok = window.confirm("오늘 일자의 오픈 시재를 저장하시겠습니까?");
     if (!ok) {
       return;
@@ -230,6 +235,7 @@ export function DailyClosingPage({ onPageChange }: DailyClosingPageProps) {
         startingCash,
       };
       await api.post("/api/daily-closing/open", payload);
+      setStartingCashLocked(true);
       toast.success("오픈 시재가 저장되었습니다.");
     } catch (err) {
       console.error(err);
@@ -341,7 +347,7 @@ export function DailyClosingPage({ onPageChange }: DailyClosingPageProps) {
             variant="outline"
             className="gap-2"
             onClick={handleOpen}
-            disabled={isClosed || loading}
+            disabled={isClosed || startingCashLocked || loading}
           >
             <Package className="w-4 h-4" />
             오픈 시재 저장
@@ -527,7 +533,7 @@ export function DailyClosingPage({ onPageChange }: DailyClosingPageProps) {
                   type="number"
                   value={startingCash}
                   onChange={(e) => setStartingCash(parseFloat(e.target.value) || 0)}
-                  disabled={isClosed}
+                  disabled={isClosed || startingCashLocked}
                 />
               </div>
 

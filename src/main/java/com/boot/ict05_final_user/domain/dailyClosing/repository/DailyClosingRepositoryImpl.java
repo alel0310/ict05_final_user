@@ -1,10 +1,6 @@
 package com.boot.ict05_final_user.domain.dailyClosing.repository;
 
-import com.boot.ict05_final_user.domain.dailyClosing.entity.DailyClosing;
-import com.boot.ict05_final_user.domain.dailyClosing.entity.DailyClosingDenom;
-import com.boot.ict05_final_user.domain.dailyClosing.entity.DailyClosingExpense;
-import com.boot.ict05_final_user.domain.dailyClosing.entity.QDailyClosingDenom;
-import com.boot.ict05_final_user.domain.dailyClosing.entity.QDailyClosingExpense;
+import com.boot.ict05_final_user.domain.dailyClosing.entity.*;
 import com.boot.ict05_final_user.domain.order.entity.OrderStatus;
 import com.boot.ict05_final_user.domain.order.entity.OrderType;
 import com.boot.ict05_final_user.domain.order.entity.PaymentType;
@@ -29,6 +25,19 @@ public class DailyClosingRepositoryImpl implements DailyClosingRepositoryCustom 
 
     private final JPAQueryFactory queryFactory;
 
+    /**
+     * 특정 가맹점의 지정 일자에 대한 주문 매출 요약을 조회한다.
+     *
+     * <p>
+     * - 기준 시간대: [date 00:00, date+1 00:00) 구간의 주문<br>
+     * - 결제수단(현금/카드/상품권)과 주문유형(방문/포장/배달)별로 매출 총액을 집계한다.<br>
+     * - 매출 합계는 현재 구현상 취소·환불(CANCELED, REFUNDED) 상태를 제외한 주문 기준으로 계산한다.
+     * </p>
+     *
+     * @param storeId 가맹점 ID
+     * @param date    기준 일자 (로컬 날짜)
+     * @return 결제수단/주문유형별 매출, 할인/환불 합계를 포함한 일일 요약 정보
+     */
     @Override
     public OrderDailySummary getOrderDailySummary(Long storeId, LocalDate date) {
 
@@ -83,7 +92,7 @@ public class DailyClosingRepositoryImpl implements DailyClosingRepositoryCustom 
      * @param end       조회 종료 일시(미포함)
      * @param orderType 주문 유형 (VISIT/TAKEOUT/DELIVERY). null 이면 전체.
      * @param paymentType 결제 수단 (CARD/CASH/VOUCHER)
-     * @param status    주문 상태 (예: COMPLETED)
+     * @param ignoredStatus    주문 상태 (예: COMPLETED)
      * @return 조건에 해당하는 주문 총금액 합계(원 단위)
      */
     private long sumOrderTotal(
@@ -196,7 +205,16 @@ public class DailyClosingRepositoryImpl implements DailyClosingRepositoryCustom 
         return result.longValue();
     }
 
-    // 지출 조회
+    /**
+     * 특정 DailyClosing 에 연결된 지출(DailyClosingExpense) 목록을 조회한다.
+     *
+     * <p>
+     * sortOrder 오름차순, 동일 sortOrder 내에서는 id 오름차순으로 정렬하여 반환한다.
+     * </p>
+     *
+     * @param closing 기준이 되는 DailyClosing 엔티티
+     * @return 해당 마감에 속한 지출 목록
+     */
     @Override
     public List<DailyClosingExpense> findExpensesByClosing(DailyClosing closing) {
         QDailyClosingExpense expense = QDailyClosingExpense.dailyClosingExpense;
@@ -208,7 +226,16 @@ public class DailyClosingRepositoryImpl implements DailyClosingRepositoryCustom 
                 .fetch();
     }
 
-    // 권종 조회
+    /**
+     * 특정 DailyClosing 에 연결된 권종(DailyClosingDenom) 목록을 조회한다.
+     *
+     * <p>
+     * 권종 값(denomValue) 내림차순, 동일 권종 내에서는 id 오름차순으로 정렬하여 반환한다.
+     * </p>
+     *
+     * @param closing 기준이 되는 DailyClosing 엔티티
+     * @return 해당 마감에 속한 권종별 시재 목록
+     */
     @Override
     public List<DailyClosingDenom> findDenomsByClosing(DailyClosing closing) {
         QDailyClosingDenom denom = QDailyClosingDenom.dailyClosingDenom;
@@ -217,6 +244,34 @@ public class DailyClosingRepositoryImpl implements DailyClosingRepositoryCustom 
                 .selectFrom(denom)
                 .where(denom.closing.eq(closing))
                 .orderBy(denom.denomValue.desc(), denom.id.asc())
+                .fetch();
+    }
+
+    /**
+     * 가맹점과 기간을 기준으로 DailyClosing 목록을 조회한다.
+     *
+     * <p>
+     * - closingDate 가 from 이상, to 이하인 데이터만 조회<br>
+     * - closingDate 내림차순으로 정렬<br>
+     * - 단순히 헤더 정보만 필요할 때 사용한다.
+     * </p>
+     *
+     * @param storeId 가맹점 ID
+     * @param from    조회 시작 일자(포함)
+     * @param to      조회 종료 일자(포함)
+     * @return 기간 내 DailyClosing 목록
+     */
+    @Override
+    public List<DailyClosing> findDailyClosingHistory(Long storeId, LocalDate from, LocalDate to) {
+        QDailyClosing dc = QDailyClosing.dailyClosing;
+
+        return queryFactory
+                .selectFrom(dc)
+                .where(
+                        dc.storeId.eq(storeId),
+                        dc.closingDate.between(from, to)
+                )
+                .orderBy(dc.closingDate.desc())
                 .fetch();
     }
 }

@@ -344,7 +344,7 @@ export function Layout({ children, userType, currentPage, onPageChange, memberNa
         </nav>
 
         {/* Bottom Actions */}
-        <div className="absolute bottom-4 left-4 right-4 space-y-2">
+        <div className="space-y-2">
           {!sidebarCollapsed && (
             <>
               <Button 
