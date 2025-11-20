@@ -2,10 +2,7 @@ package com.boot.ict05_final_user.domain.inventory.entity;
 
 import com.boot.ict05_final_user.domain.store.entity.Store;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.Comment;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -119,6 +116,7 @@ public class StoreMaterial {
     private MaterialTemperature temperature;
 
     /** 재료 상태 (USE=사용, STOP=미사용) */
+    @Setter
     @Enumerated(EnumType.STRING)
     @Column(name = "store_material_status", nullable = false,
             columnDefinition = "ENUM('USE','STOP') DEFAULT 'USE'")
@@ -126,6 +124,7 @@ public class StoreMaterial {
     private MaterialStatus status;
 
     /** 적정 수량 (가맹점 기준 – 보통 소진단위 기준으로 운용) */
+    @Setter
     @Column(name = "store_material_optimal_quantity", precision = 15, scale = 3,
             columnDefinition = "DECIMAL(15,3)")
     @Comment("적정 수량(가맹점 기준)")

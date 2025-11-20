@@ -30,7 +30,6 @@ interface Staff {
   status: 'active' | 'inactive' | 'vacation' | 'resigned';
 }
 
-// === 백엔드 AttendanceListDTO/AttendanceStatus 에 맞춘 타입들 ===
 type AttendanceStatusType =
   | 'NORMAL'
   | 'LATE'
@@ -55,7 +54,6 @@ interface AttendanceItem {
   staffEmploymentType: StaffEmploymentTypeType;
 }
 
-// ✅ 근무상세 모달용 상세 DTO 타입
 interface AttendanceDetail {
   attendanceId: number;
   attendanceWorkDate: string;
@@ -69,7 +67,6 @@ interface AttendanceDetail {
   staffEmploymentType: StaffEmploymentTypeType;
 }
 
-// ⭐ 근태 수정용 DTO 타입
 interface AttendanceModifyForm {
   attendanceId: number;
   attendanceWorkDate: string;
@@ -142,7 +139,6 @@ const formatWorkHoursLabel = (hours: number | null | undefined) => {
   return `${h}시간 ${m}분`;
 };
 
-// ===== Component =====
 export function StaffSchedule() {
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [holidays, setHolidays] = useState<StoreHoliday[]>([]);
@@ -200,11 +196,8 @@ export function StaffSchedule() {
         }
       );
 
-      console.log('📌 직원 응답', res.data);
-
       const rawList = res.data.content ?? [];
 
-      // 🔁 백엔드 DTO -> 프론트 Staff 타입으로 매핑
       const mapped: Staff[] = rawList.map((s: any) => {
         const rawStatus = (s.staffStatus ?? s.status ?? 'ACTIVE') as string;
         let status: Staff['status'];
@@ -250,29 +243,6 @@ export function StaffSchedule() {
     }
   }, []);
 
-  const loadHolidays = useCallback(async () => {
-    try {
-      const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
-      const token = localStorage.getItem('accessToken');
-
-      const res = await axios.get<StoreHoliday[]>(
-        `${baseUrl}/api/store-holidays`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-
-      setHolidays(res.data);
-    } catch (e) {
-      console.error(e);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadStaff();
-    loadHolidays();
-  }, [loadStaff, loadHolidays]);
-
   // =====================
   // 📌 백엔드 근태 조회 API 호출
   // =====================
@@ -304,7 +274,6 @@ export function StaffSchedule() {
         );
 
         const data = res.data;
-        console.log('📌 근태 응답', data);
 
         setAttendanceList(data.content || []);
         setAttendancePage(data.number ?? 0);
@@ -374,86 +343,6 @@ export function StaffSchedule() {
       const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
       const token = localStorage.getItem('accessToken');
 
-      const date = data.date as string; // "2025-11-22"
-      const staffId = data.staffId;
-      const checkInTime = data.attendanceCheckIn; // "06:30"
-      const checkOutTime = data.attendanceCheckOut; // "04:30"
-      const status = data.attendanceStatus || 'NORMAL';
-
-      if (!date || !staffId || !checkInTime || !checkOutTime) {
-        toast.error('근무 일자, 출근/퇴근 시간, 직원을 모두 입력해주세요.');
-        return;
-      }
-
-      // 기본은 같은 날
-      const attendanceWorkDate = date;
-      let attendanceCheckIn = `${date}T${checkInTime}:00`;
-      let attendanceCheckOutDatePart = date;
-
-      // 🔥 퇴근 시간이 출근 시간보다 이르면 "다음 날 퇴근"으로 판단해서 날짜 +1
-      if (checkOutTime <= checkInTime) {
-        const [y, m, d] = date.split('-').map(Number);
-        const workDate = new Date(y, m - 1, d);
-        const nextDate = new Date(workDate);
-        nextDate.setDate(workDate.getDate() + 1);
-        attendanceCheckOutDatePart = formatDateLocal(nextDate); // "2025-11-23"
-      }
-
-      const attendanceCheckOut = `${attendanceCheckOutDatePart}T${checkOutTime}:00`;
-
-      // ✅ 실제 근무 시간 계산 (직접 입력값이 있으면 그걸 우선 사용)
-      let workHours: number;
-      if (
-        data.attendanceWorkHours !== undefined &&
-        data.attendanceWorkHours !== null &&
-        data.attendanceWorkHours !== ''
-      ) {
-        workHours = Number(data.attendanceWorkHours);
-      } else {
-        const start = new Date(attendanceCheckIn);
-        const end = new Date(attendanceCheckOut);
-        const diffHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
-        workHours = Number(Math.max(0, diffHours).toFixed(2));
-      }
-
-      const payload = {
-        staffId: Number(staffId),
-        attendanceWorkDate, // "2025-11-22"
-        attendanceCheckIn, // "2025-11-22T07:00:00"
-        attendanceCheckOut, // "2025-11-23T04:30:00" 이런 형식
-        attendanceStatus: status, // 'NORMAL' 같은 enum 값
-        attendanceWorkHours: workHours, // 숫자
-        attendanceMemo: data.notes || '',
-      };
-
-      console.log('📌 근태 등록 payload', payload);
-
-      const res = await axios.post<number>(
-        `${baseUrl}/api/attendance/add`,
-        payload,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-
-      console.log('근태 등록 완료, id=', res.data);
-      toast.success('근태가 등록되었습니다.');
-      loadAttendance(currentDate, 0);
-    } catch (error: any) {
-      console.error('📌 근태 등록 실패', error.response?.data || error);
-      toast.error(
-        (error.response?.data as any)?.message ||
-          '근태 등록에 실패했습니다.'
-      );
-    }
-  };
-
-  // ⭐ 근태 수정 함수 (기존 기록 수정)
-  const updateAttendance = async (attendanceId: number, data: any) => {
-    try {
-      const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
-      const token = localStorage.getItem('accessToken');
-
       const date = data.date as string;
       const staffId = data.staffId;
       const checkInTime = data.attendanceCheckIn;
@@ -469,7 +358,6 @@ export function StaffSchedule() {
       let attendanceCheckIn = `${date}T${checkInTime}:00`;
       let attendanceCheckOutDatePart = date;
 
-      // 🔥 퇴근 시간이 출근 시간보다 이르면 "다음 날 퇴근" 처리
       if (checkOutTime <= checkInTime) {
         const [y, m, d] = date.split('-').map(Number);
         const workDate = new Date(y, m - 1, d);
@@ -504,7 +392,78 @@ export function StaffSchedule() {
         attendanceMemo: data.notes || '',
       };
 
-      console.log('📌 근태 수정 payload', payload);
+      const res = await axios.post<number>(
+        `${baseUrl}/api/attendance/add`,
+        payload,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      toast.success('근태가 등록되었습니다.');
+      loadAttendance(currentDate, 0);
+    } catch (error: any) {
+      console.error('📌 근태 등록 실패', error.response?.data || error);
+      toast.error(
+        (error.response?.data as any)?.message || '근태 등록에 실패했습니다.'
+      );
+    }
+  };
+
+  // ⭐ 근태 수정 함수 (기존 기록 수정)
+  const updateAttendance = async (attendanceId: number, data: any) => {
+    try {
+      const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
+      const token = localStorage.getItem('accessToken');
+
+      const date = data.date as string;
+      const staffId = data.staffId;
+      const checkInTime = data.attendanceCheckIn;
+      const checkOutTime = data.attendanceCheckOut;
+      const status = data.attendanceStatus || 'NORMAL';
+
+      if (!date || !staffId || !checkInTime || !checkOutTime) {
+        toast.error('근무 일자, 출근/퇴근 시간, 직원을 모두 입력해주세요.');
+        return;
+      }
+
+      const attendanceWorkDate = date;
+      let attendanceCheckIn = `${date}T${checkInTime}:00`;
+      let attendanceCheckOutDatePart = date;
+
+      if (checkOutTime <= checkInTime) {
+        const [y, m, d] = date.split('-').map(Number);
+        const workDate = new Date(y, m - 1, d);
+        const nextDate = new Date(workDate);
+        nextDate.setDate(workDate.getDate() + 1);
+        attendanceCheckOutDatePart = formatDateLocal(nextDate);
+      }
+
+      const attendanceCheckOut = `${attendanceCheckOutDatePart}T${checkOutTime}:00`;
+
+      let workHours: number;
+      if (
+        data.attendanceWorkHours !== undefined &&
+        data.attendanceWorkHours !== null &&
+        data.attendanceWorkHours !== ''
+      ) {
+        workHours = Number(data.attendanceWorkHours);
+      } else {
+        const start = new Date(attendanceCheckIn);
+        const end = new Date(attendanceCheckOut);
+        const diffHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+        workHours = Number(Math.max(0, diffHours).toFixed(2));
+      }
+
+      const payload = {
+        staffId: Number(staffId),
+        attendanceWorkDate,
+        attendanceCheckIn,
+        attendanceCheckOut,
+        attendanceStatus: status,
+        attendanceWorkHours: workHours,
+        attendanceMemo: data.notes || '',
+      };
 
       await axios.put(
         `${baseUrl}/api/attendance/modify/${attendanceId}`,
@@ -520,13 +479,11 @@ export function StaffSchedule() {
       setEditInitialData(null);
       setSelectedStaffForForm('');
 
-      // 현재 날짜/페이지 새로고침
       loadAttendance(currentDate, attendancePage);
     } catch (error: any) {
       console.error('📌 근태 수정 실패', error.response?.data || error);
       toast.error(
-        (error.response?.data as any)?.message ||
-          '근태 수정에 실패했습니다.'
+        (error.response?.data as any)?.message || '근태 수정에 실패했습니다.'
       );
     }
   };
@@ -553,7 +510,6 @@ export function StaffSchedule() {
         });
 
         toast.success('삭제되었습니다.');
-        // 안전하게 첫 페이지로 리로드
         setAttendancePage(0);
         await loadAttendance(currentDate, 0);
       } catch (e: any) {
@@ -727,7 +683,7 @@ export function StaffSchedule() {
       );
       setAttendanceDetail(null);
     } finally {
-           setDetailLoading(false);
+      setDetailLoading(false);
     }
   };
 
@@ -928,7 +884,8 @@ export function StaffSchedule() {
                           {getAttendanceStatusBadge(item.attendanceStatus)}
                         </div>
 
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-y-2 gap-x-4 text-sm">
+                        {/* ✅ 반응형 컬럼: 작을 땐 1열, sm부터 2열, md부터 4열 */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-y-2 gap-x-4 text-sm">
                           <div>
                             <p className="text-dark-gray">근무일자</p>
                             <p className="font-semibold">
@@ -947,56 +904,65 @@ export function StaffSchedule() {
                               {formatTime(item.attendanceCheckOut)}
                             </p>
                           </div>
+
+                          {/* ✅ 근무시간 + 버튼들: 랩핑 허용 & 시간 라벨 고정 */}
                           <div>
                             <p className="text-dark-gray">실제 근무시간</p>
-                            <div className="flex items-center gap-2">
-                              <p className="font-semibold">
-                                {formatWorkHoursLabel(
-                                  item.attendanceWorkHours
-                                )}
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              <p className="font-semibold whitespace-nowrap min-w-[88px]">
+                                {formatWorkHoursLabel(item.attendanceWorkHours)}
                               </p>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="ml-3"
-                                onClick={() =>
-                                  handleOpenDetail(item.attendanceId)
-                                }
-                              >
-                                근무상세
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  handleOpenEdit(item.attendanceId)
-                                }
-                                disabled={editLoading}
-                              >
-                                수정
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="ml-2 border-red-300 text-red-600 hover:bg-red-50"
-                                onClick={() =>
-                                  handleDeleteDailyForStaff(
-                                    item.staffId,
-                                    item.attendanceWorkDate,
-                                    item.staffName
+                              <div className="flex flex-wrap gap-2 ml-0 sm:ml-3">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="shrink-0"
+                                  onClick={() =>
+                                    handleOpenDetail(item.attendanceId)
+                                  }
+                                >
+                                  근무상세
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="shrink-0"
+                                  onClick={() =>
+                                    handleOpenEdit(item.attendanceId)
+                                  }
+                                  disabled={editLoading}
+                                >
+                                  수정
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  className="shrink-0"
+                                  onClick={() =>
+                                    handleDeleteDailyForStaff(
+                                      item.staffId,
+                                      item.attendanceWorkDate,
+                                      item.staffName
+                                    )
+                                  }
+                                  disabled={deletingKeys.has(
+                                    keyOf(
+                                      item.staffId,
+                                      item.attendanceWorkDate
+                                    )
+                                  )}
+                                >
+                                  <Trash className="w-4 h-4 mr-1" />
+                                  {deletingKeys.has(
+                                    keyOf(
+                                      item.staffId,
+                                      item.attendanceWorkDate
+                                    )
                                   )
-                                }
-                                disabled={deletingKeys.has(
-                                  keyOf(item.staffId, item.attendanceWorkDate)
-                                )}
-                              >
-                                <Trash className="w-4 h-4 mr-1" />
-                                {deletingKeys.has(
-                                  keyOf(item.staffId, item.attendanceWorkDate)
-                                )
-                                  ? '삭제 중...'
-                                  : '삭제'}
-                              </Button>
+                                    ? '삭제 중...'
+                                    : '삭제'}
+                                </Button>
+                              </div>
                             </div>
                           </div>
                         </div>

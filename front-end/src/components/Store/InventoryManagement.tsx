@@ -29,7 +29,7 @@ import {
 } from '../../services/storeMaterialApi';
 import {
   fetchStoreInventory,
-  restockStoreInventory,
+  inboundStoreInventory,
   initStoreInventory,
 } from '../../services/storeInventoryApi';
 import type { 
@@ -40,7 +40,8 @@ import type {
 } from '../../types/storeMaterial';
 import type {
   StoreInventoryResponse,
-  StoreInventoryRestockRequest
+  StoreInventoryRestockRequest,
+  StoreInventoryInWriteDTO
 } from '../../types/storeInventory';
 import {
   Pagination,
@@ -111,8 +112,7 @@ interface InventoryItem {
   name: string;
   category: string;
   currentStock: number;
-  minStock: number;
-  maxStock: number;
+  optimalQuantity: number; // minStock, maxStock 대신 이걸 사용
   unit: string;
   unitPrice: number;
   lastRestocked: string;
@@ -120,6 +120,7 @@ interface InventoryItem {
   supplier: string;
   status: StockStatus;
   weeklyUsage: number;
+  hqMaterial?: boolean;  // 본사 제품 여부 추가
 }
 
 interface OrderItem {
@@ -234,8 +235,7 @@ function mapStoreInventoryToInventoryItem(si: StoreInventoryResponse): Inventory
 
   // 백엔드 상태(SHORTAGE/LOW/SUFFICIENT) → 프론트 상태로 매핑
   const status: StockStatus =
-    si.status === 'SHORTAGE' ? 'shortage' :
-    si.status === 'LOW'      ? 'low'      : 'sufficient';
+    quantity < optimal ? 'low' : 'sufficient'; // optimal을 기준으로 low, sufficient 처리
 
   return {
     id: storeInventoryId,        // ← 체크/선택용 키
@@ -246,8 +246,7 @@ function mapStoreInventoryToInventoryItem(si: StoreInventoryResponse): Inventory
     name: si.name,
     category: si.category ?? '기타',
     currentStock: quantity,
-    minStock: optimal,
-    maxStock: optimal > 0 ? optimal * 2 : 0,
+    optimalQuantity: optimal,    // minStock과 maxStock을 대체
     unit,
     unitPrice: si.purchasePrice ?? 0,
     lastRestocked: si.lastUpdated ?? '',
@@ -375,9 +374,8 @@ export function InventoryManagement() {
       label: '재고현황',
       sortable: true,
       render: (value, row) => {
-        const percentage =
-          row.maxStock > 0 ? (value / row.maxStock) * 100 : 0;
-        const isLow = value <= row.minStock;
+        const percentage = row.optimalQuantity > 0 ? (value / row.optimalQuantity) * 100 : 0;
+        const isLow = value <= row.optimalQuantity;
 
         return (
           <div>
@@ -395,7 +393,7 @@ export function InventoryManagement() {
               }`}
             />
             <div className="text-xs text-dark-gray mt-1">
-              적정: {row.minStock}
+              적정: {row.optimalQuantity}
             </div>
           </div>
         );
@@ -450,7 +448,7 @@ export function InventoryManagement() {
       label: '공급업체',
       render: (value, row) => (
         <div>
-          <div className="text-sm text-gray-900">{value}</div>
+          <div className="text-sm text-gray-900">{row.hqMaterial ? '본사' : value}</div>
           <div className="text-xs text-dark-gray">₩{(row.unitPrice || 0).toLocaleString()}/{row.unit}</div>
         </div>
       )
@@ -559,7 +557,8 @@ export function InventoryManagement() {
     }
     const selectedInventoryItems = inventory.filter(item => selectedItems.includes(item.id));
     const cartData: CartItem[] = selectedInventoryItems.map(item => {
-      const qty = Math.max(item.maxStock - item.currentStock, item.minStock);
+      const qty = Math.max(item.optimalQuantity - item.currentStock, 0); 
+      
       return { ...item, orderQuantity: qty, totalPrice: qty * item.unitPrice };
     });
     setCartItems(cartData);
@@ -607,24 +606,28 @@ export function InventoryManagement() {
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       if (modalType === 'restock' && selectedItem) {
-        // 재고PK 기반 재입고 요청 DTO 생성
-        const payload: StoreInventoryRestockRequest = {
+        const parsedQty = Number(data.quantity);
+        const parsedUnitPrice =
+          data.unitPrice !== undefined && data.unitPrice !== ''
+            ? Number(data.unitPrice)
+            : undefined; // ★ 미입력 시 undefined 전송 → 백엔드가 정책대로 보정
+
+        const payload: StoreInventoryInWriteDTO = {
           storeInventoryId: selectedItem.storeInventoryId ?? selectedItem.id,
-          quantity: Number(data.quantity),
+          storeMaterialId:  selectedItem.storeMaterialId,
+          quantity: parsedQty,
           memo: data.memo ?? '',
+          ...(parsedUnitPrice !== undefined ? { unitPrice: parsedUnitPrice } : {}),
         };
 
-        // 재입고 API는 한 번만 호출
-        await restockStoreInventory(payload);
+        const id = await inboundStoreInventory(payload);
 
-        // 성공 후 목록 재조회
         const list = await fetchStoreInventory();
         const mapped = list.map(mapStoreInventoryToInventoryItem);
         setInventory(mapped);
 
-        toast.success(
-          `${selectedItem.name} ${data.quantity}${selectedItem.unit} 재입고 완료`,
-        );
+        toast.success(`${selectedItem.name} ${parsedQty}${selectedItem.unit} 입고 완료 (#${id})`);
+        
       } else if (modalType === 'adjust' && selectedItem) {
         const newQty = parseInt(data.newStock, 10);
         setInventory(prev =>
@@ -633,7 +636,7 @@ export function InventoryManagement() {
               ? {
                   ...item,
                   currentStock: newQty,
-                  status: calcStockStatus(newQty, item.minStock),
+                  status: calcStockStatus(newQty, item.optimalQuantity),
                 }
               : item,
           ),
@@ -643,7 +646,7 @@ export function InventoryManagement() {
             ? {
                 ...prev,
                 currentStock: newQty,
-                status: calcStockStatus(newQty, prev.minStock),
+                status: calcStockStatus(newQty, prev.optimalQuantity),
               }
             : prev,
         );
@@ -697,7 +700,7 @@ export function InventoryManagement() {
       toast.error(
         e?.response?.data?.message ||
           (modalType === 'restock'
-            ? '재입고 처리 중 오류가 발생했습니다.'
+            ? '입고 처리 중 오류가 발생했습니다.'
             : '오류가 발생했습니다.'),
       );
     } finally {
@@ -708,8 +711,8 @@ export function InventoryManagement() {
   const getFormFields = () => {
     if (modalType === 'restock') {
       return [
-        { name: 'quantity', label: `재입고 수량 (${selectedItem?.unit})`, type: 'number' as const, required: true, placeholder: '재입고할 수량을 입력하세요' },
-        { name: 'memo', label: '메모', type: 'text' as const, required: false, placeholder: '재입고 관련 메모 (선택)' }
+        { name: 'quantity', label: `입고 수량 (${selectedItem?.unit})`, type: 'number' as const, required: true, placeholder: '입고할 수량을 입력하세요' },
+        { name: 'memo', label: '메모', type: 'text' as const, required: false, placeholder: '입고 관련 메모 (선택)' }
       ];
     } else if (modalType === 'adjust') {
       return [
@@ -802,7 +805,7 @@ export function InventoryManagement() {
   };
 
   const getModalTitle = () => {
-    if (modalType === 'restock') return `${selectedItem?.name} 재입고`;
+    if (modalType === 'restock') return `${selectedItem?.name} 입고`;
     if (modalType === 'adjust') return `${selectedItem?.name} 재고 조정`;
     if (modalType === 'order') return '새 발주 등록';
     return '새 자재 등록';
@@ -943,7 +946,7 @@ export function InventoryManagement() {
                 >
                   <span className="font-medium">{item.name}</span>
                   <span className="text-xs">
-                    {item.currentStock}/{item.minStock} {item.unit}
+                    {item.currentStock}/{item.optimalQuantity} {item.unit}
                   </span>
                 </Button>
               ))}
@@ -1156,7 +1159,7 @@ function ItemDetailContent({
   onAdjust: () => void;
 }) {
   const [editingMinStock, setEditingMinStock] = useState(false);
-  const [minStockValue, setMinStockValue] = useState(item.minStock.toString());
+  const [minStockValue, setMinStockValue] = useState(item.optimalQuantity.toString());
 
   const handleSaveMinStock = () => {
     const newMinStock = parseInt(minStockValue, 10);
@@ -1169,7 +1172,7 @@ function ItemDetailContent({
   };
 
   const handleCancelEdit = () => {
-    setMinStockValue(item.minStock.toString());
+    setMinStockValue(item.optimalQuantity.toString());
     setEditingMinStock(false);
   };
 
@@ -1208,9 +1211,8 @@ function ItemDetailContent({
                 {statusMeta.text}
               </Badge>
             </div>
-            <div className="flex justify-between"><span className="text-gray-600">최대 재고</span><span>{item.maxStock} {item.unit}</span></div>
             <div className="flex justify-between items-center">
-              <span className="text-gray-600">최소 재고</span>
+              <span className="text-gray-600">적정 재고</span>
               <div className="flex items-center gap-2">
                 {editingMinStock ? (
                   <div className="flex items-center gap-2">
@@ -1221,7 +1223,7 @@ function ItemDetailContent({
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <span>{item.minStock} {item.unit}</span>
+                    <span>{item.optimalQuantity} {item.unit}</span>
                     <Button size="sm" variant="ghost" onClick={() => setEditingMinStock(true)} className="h-8 w-8 p-0">
                       <Settings className="w-4 h-4" />
                     </Button>
@@ -1263,24 +1265,29 @@ function ItemDetailContent({
         <h3 className="font-semibold text-gray-900 mb-4">재고 레벨</h3>
         <div className="space-y-3">
           <div className="relative">
-            <Progress value={(item.currentStock / item.maxStock) * 100} className="h-6" />
+            {/* Progress value에서 maxStock을 optimalQuantity로 변경 */}
+            <Progress value={(item.currentStock / item.optimalQuantity) * 100} className="h-6" />
             <div className="absolute inset-0 flex items-center justify-center">
+              {/* 현재 재고와 적정 재고 표시 */}
               <span className="text-sm font-medium text-gray-700">
-                {item.currentStock} / {item.maxStock} {item.unit}
+                {item.currentStock} / {item.optimalQuantity} {item.unit}
               </span>
             </div>
           </div>
           <div className="flex justify-between text-sm text-gray-600">
-            <span>최소: {item.minStock}{item.unit}</span>
+            {/* 최소 재고는 optimalQuantity와 같은 값을 사용 */}
+            <span>최소: {item.optimalQuantity}{item.unit}</span>
             <span>현재: {item.currentStock}{item.unit}</span>
-            <span>최대: {item.maxStock}{item.unit}</span>
+            {/* 최대 재고를 표시하려면, 적정 재고가 0보다 클 때만 두 배로 표시 */}
+            <span>최대: {item.optimalQuantity > 0 ? item.optimalQuantity * 2 : 0}{item.unit}</span>
           </div>
         </div>
       </Card>
 
+
       <div className="flex gap-3 pt-4 border-t">
         <Button onClick={onRestock} className="bg-kpi-green hover:bg-green-600 text-white">
-          <Plus className="w-4 h-4 mr-2" />재입고
+          <Plus className="w-4 h-4 mr-2" />입고
         </Button>
         <Button onClick={onAdjust} variant="outline" className="border-kpi-orange text-kpi-orange hover:bg-orange-50">
           <Settings className="w-4 h-4 mr-2" />재고 조정
@@ -1383,7 +1390,7 @@ function OrderCartContent({
                       </div>
                       <div className="flex items-center gap-2">
                         <span>적정 재고:</span>
-                        <span>{item.minStock}{item.unit}</span>
+                        <span>{item.optimalQuantity}{item.unit}</span>
                       </div>
                     </div>
                   </div>

@@ -14,6 +14,11 @@ import java.time.LocalDateTime;
  * 프론트의 재입고 폼 입력을 1건 단위로 전달한다
  * 매장 단은 LOT를 관리하지 않으며 총량만 반영한다
  *
+ * <p>단가 정책:
+ * - HQ 재료: 본사 판매가를 단가로 사용(프런트 입력 불필요).
+ * - 가맹점 자체 재료: 입력값이 없으면 최근 입고 단가를 기본값으로 사용.
+ * - 위 모두 불가 시 400 반환.</p>
+ *
  * 필드
  * - storeMaterialId 가맹점 재료 PK
  * - quantity 입고 수량 소수 3자리
@@ -29,21 +34,23 @@ import java.time.LocalDateTime;
 @Builder
 public class StoreInventoryInWriteDTO {
 
+    /** 재고 PK (store_inventory_id) */
+    @NotNull(message = "재고 ID는 필수입니다.")
+    private Long storeInventoryId;
+
+    /** 가맹점 재료 PK (store_material_id) */
     @NotNull(message = "가맹점 재료 ID는 필수입니다.")
     private Long storeMaterialId;
 
+    /** 입고 수량(0 이상) */
     @NotNull(message = "입고 수량은 필수입니다.")
-    @DecimalMin(value = "0.001", message = "입고 수량은 0보다 커야 합니다.")
-    @Digits(integer = 12, fraction = 3)
-    private BigDecimal quantity;
+    @DecimalMin(value = "0.0", inclusive = true, message = "입고 수량은 0 이상이어야 합니다.")
+    private Double quantity;
 
-    @DecimalMin(value = "0.00", message = "단가는 음수가 될 수 없습니다.")
-    @Digits(integer = 13, fraction = 2)
-    private BigDecimal unitPrice;
-
-    private LocalDateTime inDate;
-
-    private Long refHqOutId;
-
+    /** 메모(선택) */
     private String memo;
+
+    /** 입고 단가(선택): null이면 서비스에서 정책에 따라 해석 */
+    private Double unitPrice;
+
 }

@@ -108,3 +108,40 @@ export interface StoreMaterialResponse {
   /** 본사 재료 여부 (true=본사 재료, false=가맹점 자체 재료) */
   hqMaterial: boolean;
 }
+
+
+/**
+ * StoreMaterial 도메인: 상태(사용/중지)
+ *
+ * - USE  : 화면 및 로직에서 사용
+ * - STOP : 화면에는 보일 수 있으나 사용 흐름(소진/발주 등) 비활성
+ */
+export type StoreMaterialStatus = 'USE' | 'STOP';
+
+/**
+ * 가맹점 재료 적정재고(최소 재고) 업데이트 DTO
+ *
+ * - 목적: 상세 팝업에서 최소 재고(적정재고) 저장
+ * - 비고: null 허용(미설정), 단위는 소진 단위 기준
+ */
+export interface StoreMaterialUpdateOptimalDTO {
+  /** 가맹점 재료 PK (store_material_id) */
+  storeMaterialId: number;
+
+  /** 적정 재고 수량(소진 단위). null 이면 미설정 */
+  optimalQuantity: number | null;
+}
+
+/**
+ * 가맹점 재료 상태(사용/중지) 업데이트 DTO
+ *
+ * - 목적: 본사 재료 사용 토글 on/off
+ * - 비고: 본사 재료가 아닌 경우 토글을 숨기거나 요청 자체를 막는 편이 안전
+ */
+export interface StoreMaterialUpdateStatusDTO {
+  /** 가맹점 재료 PK (store_material_id) */
+  storeMaterialId: number;
+
+  /** 'USE' | 'STOP' */
+  status: StoreMaterialStatus;
+}
