@@ -6,7 +6,7 @@ import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { FormModal } from '../Common/FormModal';
-import { Plus, ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, Search, X, Trash } from 'lucide-react';
 import { toast } from 'sonner';
 
 // ===== Types =====
@@ -176,6 +176,10 @@ export function StaffSchedule() {
     null
   );
   const [editLoading, setEditLoading] = useState(false);
+
+  // 🔥 삭제 진행 상태 (직원+날짜 단위)
+  const [deletingKeys, setDeletingKeys] = useState<Set<string>>(new Set());
+  const keyOf = useCallback((staffId: number | string, date: string) => `${staffId}-${date}`, []);
 
   // =====================
   // 📌 직원 / 휴일 로딩
@@ -527,6 +531,45 @@ export function StaffSchedule() {
     }
   };
 
+  // ✅ 직원+날짜 기준 전체 삭제
+  const handleDeleteDailyForStaff = useCallback(
+    async (staffId: number, dateStr: string, staffName: string) => {
+      if (!window.confirm(`${staffName}님의 ${dateStr} 근태를 모두 삭제할까요?`)) return;
+
+      const key = keyOf(staffId, dateStr);
+      setDeletingKeys(prev => {
+        const next = new Set(prev);
+        next.add(key);
+        return next;
+      });
+
+      try {
+        const baseUrl = import.meta.env.VITE_BACKEND_API_BASE_URL;
+        const token = localStorage.getItem('accessToken');
+
+        await axios.delete(`${baseUrl}/api/attendance/daily/staff`, {
+          headers: { Authorization: `Bearer ${token}` },
+          params: { date: dateStr, staffId },
+        });
+
+        toast.success('삭제되었습니다.');
+        // 안전하게 첫 페이지로 리로드
+        setAttendancePage(0);
+        await loadAttendance(currentDate, 0);
+      } catch (e: any) {
+        console.error('📌 근태 삭제 실패', e?.response?.data || e);
+        toast.error(e?.response?.data?.message || '삭제에 실패했습니다.');
+      } finally {
+        setDeletingKeys(prev => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }
+    },
+    [currentDate, keyOf, loadAttendance]
+  );
+
   // =====================
   // 📌 모달 폼 필드 정의
   // =====================
@@ -684,7 +727,7 @@ export function StaffSchedule() {
       );
       setAttendanceDetail(null);
     } finally {
-      setDetailLoading(false);
+           setDetailLoading(false);
     }
   };
 
@@ -931,6 +974,28 @@ export function StaffSchedule() {
                                 disabled={editLoading}
                               >
                                 수정
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="ml-2 border-red-300 text-red-600 hover:bg-red-50"
+                                onClick={() =>
+                                  handleDeleteDailyForStaff(
+                                    item.staffId,
+                                    item.attendanceWorkDate,
+                                    item.staffName
+                                  )
+                                }
+                                disabled={deletingKeys.has(
+                                  keyOf(item.staffId, item.attendanceWorkDate)
+                                )}
+                              >
+                                <Trash className="w-4 h-4 mr-1" />
+                                {deletingKeys.has(
+                                  keyOf(item.staffId, item.attendanceWorkDate)
+                                )
+                                  ? '삭제 중...'
+                                  : '삭제'}
                               </Button>
                             </div>
                           </div>

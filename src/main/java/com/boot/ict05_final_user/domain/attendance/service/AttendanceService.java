@@ -281,6 +281,25 @@ public class AttendanceService {
         log.info("📌 근태 수정 완료: attendanceId={}, storeId={}", attendance.getId(), storeId);
     }
 
+    /**
+     * 근태 삭제
+     * - 출퇴근 시간/상태/메모/근무시간 등을 삭제
+     */
+    public void deleteDailyAttendanceForStaff(Long staffId, LocalDate workDate) {
+        Long storeId = getCurrentStoreId();
+        if (storeId == null) {
+            throw new IllegalStateException("가맹점 정보가 없어 근태 삭제를 할 수 없습니다.");
+        }
+
+        long deleted = attendanceRepository.deleteByStoreAndStaffAndWorkDate(storeId, staffId, workDate);
+        if (deleted == 0) {
+            throw new IllegalArgumentException("해당 날짜의 근태를 찾을 수 없거나 삭제 권한이 없습니다.");
+        }
+
+        log.info("✅ 직원 하루 근태 일괄 삭제 완료: storeId={}, staffId={}, date={}, deletedRows={}",
+                storeId, staffId, workDate, deleted);
+    }
+
     /* ================== 공통 유틸 ================== */
 
     private Long getCurrentStoreId() {
