@@ -3,6 +3,7 @@ package com.boot.ict05_final_user.domain.order.repository;
 import com.boot.ict05_final_user.domain.order.entity.CustomerOrder;
 import com.boot.ict05_final_user.domain.order.entity.OrderStatus;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -28,5 +29,8 @@ public interface CustomerOrderRepository extends JpaRepository<CustomerOrder, Lo
     // ✅ 가맹점별 주문 조회
     List<CustomerOrder> findByStore_Id(Long storeId, Sort sort);
 
+    // 주문 + 매장 + 디테일 + 디테일의 메뉴를 한 번에 로딩
+    @EntityGraph(attributePaths = {"store", "details", "details.menuIdFk"})
+    Optional<CustomerOrder> findById(Long id);  // ← 이름을 findById로!
 }
 
