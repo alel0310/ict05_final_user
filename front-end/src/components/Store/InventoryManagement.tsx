@@ -267,7 +267,10 @@ function mapStoreInventoryToInventoryItem(si: StoreInventoryResponse): Inventory
 ======================= */
 
 export function InventoryManagement() {
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]); // 전체 재고 데이터
+  const [filteredInventory, setFilteredInventory] = useState<InventoryItem[]>([]); // 검색된 재고 데이터
+  const [searchTerm, setSearchTerm] = useState(''); // 검색어 상태 관리
+  const [page, setPage] = useState(1); // 현재 페이지 상태
   const [hasInventory, setHasInventory] = useState<boolean>(false);   // {재고 초기화} 버튼 상태
   const [orders, setOrders] = useState<Order[]>(sampleOrders);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -295,24 +298,19 @@ export function InventoryManagement() {
     { label: '완료', value: 'delivered', count: orders.filter(o => o.status === 'delivered').length }
   ];
 
-  // 페이지 관련
-  const PAGE_SIZE = 10;
-  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10; // 페이지당 항목 수
 
   // 컴포넌트 내부 (state 선언들 밑에)
   const didFetchRef = useRef(false);
 
+  // 컴포넌트가 처음 렌더링될 때 재고 목록을 가져옴
   useEffect(() => {
-    // React StrictMode 에서의 두 번째 마운트 때는 그냥 리턴
-    if (didFetchRef.current) return;
-    didFetchRef.current = true;
-
     const loadInventory = async () => {
       try {
         const list = await fetchStoreInventory();
         const mapped = list.map(mapStoreInventoryToInventoryItem);
         setInventory(mapped);
-        setHasInventory(mapped.length > 0);
+        setFilteredInventory(mapped); // 처음에는 전체 데이터를 필터링된 데이터로 설정
       } catch (e) {
         console.error(e);
         toast.error('가맹점 재고 목록을 불러오지 못했습니다.');
@@ -321,6 +319,49 @@ export function InventoryManagement() {
 
     loadInventory();
   }, []);
+
+
+  // 검색어가 변경될 때마다 필터링 처리
+  useEffect(() => {
+    // 검색어가 있을 때
+    if (searchTerm) {
+      setPage(1); // 검색 시 페이지 리셋
+      const filtered = inventory.filter(item =>
+        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item.category?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) // category가 null일 경우 대비
+      );
+      setFilteredInventory(filtered);
+    } else {
+      // 검색어가 없을 경우 전체 재고를 다시 설정
+      setFilteredInventory(inventory);
+    }
+  }, [searchTerm]); // inventory가 변경되면 필터링 다시 적용
+
+
+
+  // 페이지 계산
+  const totalItems = filteredInventory.length; 
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+
+  // 페이징 처리
+  const pagedInventory = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredInventory.slice(start, start + PAGE_SIZE); // 필터링된 데이터로 계산
+  }, [filteredInventory, page]);
+
+  // 페이지가 넘을 경우 정리
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [totalPages, page]);
+
+  // 검색어 입력 처리
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);  // searchTerm 상태를 업데이트
+    setPage(1);  // 검색 시 페이지를 1로 리셋
+  };
+
   
   /* ---------- 선택/전체선택 핸들러 (선언문으로 호이스팅) ---------- */
   function handleItemSelect(itemId: number, checked: boolean) {
@@ -632,10 +673,10 @@ export function InventoryManagement() {
       } else if (modalType === 'adjust' && selectedItem) {
         const newQty = parseInt(data.newStock, 10);
            await adjustStoreInventory({
-              storeInventoryId: selectedItem.storeInventoryId ?? selectedItem.id,
-              storeMaterialId: selectedItem.storeMaterialId,
-              newQuantity: newQty,
-              reason: data.reason,  // reason에 'REAL_AUDIT' 값 전송됨
+            storeInventoryId: selectedItem.storeInventoryId ?? selectedItem.id,
+            storeMaterialId: selectedItem.storeMaterialId,  // Ensure this is valid
+            newQuantity: newQty,
+            reason: data.reason,  // Include reason such as 'REAL_AUDIT'
         });
         setInventory(prev =>
           prev.map(item =>
@@ -816,29 +857,12 @@ export function InventoryManagement() {
       },
     ];
   };
-
   const getModalTitle = () => {
     if (modalType === 'restock') return `${selectedItem?.name} 입고`;
     if (modalType === 'adjust') return `${selectedItem?.name} 재고 조정`;
     if (modalType === 'order') return '새 발주 등록';
     return '새 자재 등록';
   };
-
-  // 통계 + 페이징
-  const totalItems = inventory.length;
-  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
-
-  const pagedInventory = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return inventory.slice(start, start + PAGE_SIZE);
-  }, [inventory, page]);
-
-  // 재고가 줄어들어서 page가 넘치는 경우 정리
-  useEffect(() => {
-    if (page > totalPages) {
-      setPage(totalPages);
-    }
-  }, [totalPages, page]);
 
   const lowStockItems = inventory.filter(
     (i) => i.status === 'low' || i.status === 'shortage',
@@ -967,15 +991,29 @@ export function InventoryManagement() {
         </Card>
       )}
 
+      {/* 검색창 */}
+      <div className="flex justify-between items-center">
+        <div className="flex gap-3">
+          <Input
+            value={searchTerm}
+            onChange={handleSearchChange}
+            placeholder="품목명, 카테고리로 검색"
+            className="w-80"
+          />
+        </div>
+      </div>
+
       {/* 테이블 */}
       <DataTable
-        data={pagedInventory}
+        data={filteredInventory} // 필터링된 데이터 전달
         columns={inventoryColumns}
         title="재고 현황"
         searchPlaceholder="품목명, 카테고리로 검색"
         filters={inventoryFilters}
         showActions={false}
       />
+      
+      {/* 페이징 */}
       <Pagination className="mt-4">
         <PaginationContent>
           <PaginationItem>
@@ -1014,9 +1052,7 @@ export function InventoryManagement() {
                 e.preventDefault();
                 if (page < totalPages) setPage(page + 1);
               }}
-              className={
-                page === totalPages ? 'pointer-events-none opacity-50' : ''
-              }
+              className={page === totalPages ? 'pointer-events-none opacity-50' : ''}
             />
           </PaginationItem>
         </PaginationContent>
