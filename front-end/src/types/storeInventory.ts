@@ -121,6 +121,8 @@ export interface StoreInventoryInWriteDTO {
 export interface StoreInventoryAdjustmentWriteDTO {
   /** 재고 PK (store_inventory_id) – 선택된 행의 고유키 */
   storeInventoryId: number;
+  
+  storeMaterialId?: number;  // Optional field
 
   /** 조정 후 최종 재고 수량(절대값). 0 이상 정수/실수 허용(소수 사용 시 백엔드 정책 준수) */
   newQuantity: number;

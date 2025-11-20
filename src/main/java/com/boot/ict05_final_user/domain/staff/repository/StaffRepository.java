@@ -8,21 +8,33 @@ import org.springframework.data.repository.query.Param;
 import java.util.Optional;
 
 /**
- * StaffProfile 엔티티용 Spring Data JPA 리포지토리 인터페이스.
+ * 직원(StaffProfile) 엔티티용 Spring Data JPA 리포지토리.
  *
- * <p>특징</p>
+ * <p>기능 요약</p>
  * <ul>
- *   <li>{@link JpaRepository} 상속: 기본 CRUD, 페이징/정렬 메서드 자동 제공</li>
- *   <li>{@code StaffRepositoryCustom} 상속: 복잡한 동적쿼리/커스텀 메서드 구현 분리</li>
+ *     <li>기본 CRUD 기능(JpaRepository)</li>
+ *     <li>직원 커스텀 쿼리(StaffRepositoryCustom) 포함</li>
+ *     <li>마이페이지용 member_id 기반 직원 조회</li>
+ *     <li>로그인 후 지점명 조회(지연 로딩 이슈 해결용 JPQL)</li>
  * </ul>
  */
-
 public interface StaffRepository extends JpaRepository<StaffProfile, Long>, StaffRepositoryCustom {
 
-    // 마이페이지용: member_id 로 StaffProfile 찾기
+    /**
+     * member_id(FK)로 직원 프로필을 조회한다.
+     *
+     * @param memberId 연결된 Member ID
+     * @return StaffProfile Optional
+     */
     Optional<StaffProfile> findByMember_Id(Long memberId);
 
-    // 로그인 성공 시 지점 이름용(Lazy 터지던 부분)
+    /**
+     * 로그인 후 상단 메뉴에서 지점명 표시할 때 사용.
+     * <p>LAZY 로딩으로 store.name 호출 시 터지는 문제 방지용.</p>
+     *
+     * @param email 로그인한 직원의 이메일
+     * @return 지점명 Optional
+     */
     @Query("select s.store.name from StaffProfile s " +
             "join s.store " +
             "where s.member.email = :email")
