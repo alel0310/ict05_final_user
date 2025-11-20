@@ -30,7 +30,7 @@ public class MenuRecipe {
     @JoinColumn(name = "material_id_fk", nullable = true)
     private Material material;
 
-    @Column(name = "recipe_qty", precision = 12, scale = 3, nullable = false)
+    @Column(name = "recipe_qty", precision = 12, scale = 2, nullable = false)
     private BigDecimal recipeQty;
 
     @Column(name = "recipe_unit", length = 20, nullable = false)
