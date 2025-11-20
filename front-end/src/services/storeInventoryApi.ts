@@ -1,7 +1,8 @@
 import api from '../lib/authApi';
 import type {
   StoreInventoryResponse,
-  StoreInventoryRestockRequest,
+  StoreInventoryInWriteDTO,
+  StoreInventoryAdjustmentWriteDTO,
 } from '../types/storeInventory';
 
 const BASE_PATH = '/API/store/inventory';
@@ -38,18 +39,56 @@ export async function fetchStoreInventory(): Promise<StoreInventoryResponse[]> {
   return res.data;
 }
 
-/**
- * 가맹점 재고 입고(재입고)
- *
- * - 단일 StoreMaterial에 대해 수량을 증가시키고
- *   StoreInventoryBatch를 생성한 뒤, 최종 StoreInventory 스냅샷을 반환한다.
- *
- * POST /API/store/inventory/restock
- * 
- * JWT(@AuthenticationPrincipal) 기반: 파라미터 없음
+
+/** ★ 신규: 입고(inbound) 등록
+ * - POST /API/store/inventory/in
+ * - 반환: 생성된 입고 PK (백엔드가 Long을 반환한다고 가정)
  */
-export async function restockStoreInventory(
-  payload: StoreInventoryRestockRequest,
-): Promise<void> {
+/** ★ 입고(inbound) 등록 */
+export async function inboundStoreInventory(payload: StoreInventoryInWriteDTO): Promise<number> {
+  if (
+    !payload ||
+    typeof payload.storeInventoryId !== 'number' ||
+    typeof payload.storeMaterialId !== 'number' ||  // ★ 추가
+    typeof payload.quantity !== 'number' ||
+    Number.isNaN(payload.quantity) ||
+    payload.quantity < 0
+  ) {
+    throw new Error('유효하지 않은 입고 요청입니다.');
+  }
+  const res = await api.post<number>(`${BASE_PATH}/in`, payload);
+  return res.data;
+}
+
+/** (레거시) 재입고: 재고 수량만 증가 — 더 이상 사용하지 않음 (호출부 제거)
+export async function restockStoreInventory(payload: StoreInventoryRestockRequest): Promise<void> {
   await api.post(`${BASE_PATH}/restock`, payload);
+}
+*/
+
+
+/**
+ * 재고 조정
+ *
+ * - 엔드포인트: POST /API/store/inventory/adjust
+ * - 계약: 컨트롤러가 인증 사용자(AppUser)의 storeId를 내부에서 사용
+ * - 보완:
+ *   - 백엔드: storeInventoryId 소유권(storeId) 검증 필수
+ *   - 프런트: 음수/NaN 방지 등 기본 유효성 검사 후 호출 권장
+ */
+export async function adjustStoreInventory(
+  payload: StoreInventoryAdjustmentWriteDTO,
+): Promise<void> {
+  // 최소 방어: newQuantity가 유효한지 클라이언트에서 1차 확인
+  if (
+    payload == null ||
+    typeof payload.storeInventoryId !== 'number' ||
+    typeof payload.newQuantity !== 'number' ||
+    Number.isNaN(payload.newQuantity) ||
+    payload.newQuantity < 0
+  ) {
+    throw new Error('유효하지 않은 조정 요청입니다.');
+  }
+
+  await api.post(`${BASE_PATH}/adjust`, payload);
 }

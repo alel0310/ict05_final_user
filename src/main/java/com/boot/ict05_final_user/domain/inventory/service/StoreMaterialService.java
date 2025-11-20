@@ -256,4 +256,41 @@ public class StoreMaterialService {
     }
 
 
+
+    /**
+     * 적정재고(최소 재고) 업데이트
+     *
+     * @param storeId         인증 사용자 매장 ID
+     * @param storeMaterialId 가맹점 재료 PK
+     * @param optimalQuantity 소진 단위 기준 수량(null 허용, 0 이상)
+     */
+    @Transactional
+    public void updateOptimalQuantity(Long storeId, Long storeMaterialId, Double optimalQuantity) {
+        StoreMaterial sm = storeMaterialRepository
+                .findByIdAndStore_Id(storeMaterialId, storeId)
+                .orElseThrow(() -> new IllegalArgumentException("재료가 존재하지 않거나 권한이 없습니다."));
+
+        if (optimalQuantity != null && optimalQuantity < 0) {
+            throw new IllegalArgumentException("적정 재고는 0 이상이어야 합니다.");
+        }
+
+        // 엔티티 필드 타입에 맞춰 세팅 : BigDecimal 사용 시
+        sm.setOptimalQuantity(optimalQuantity != null ? BigDecimal.valueOf(optimalQuantity) : null);
+    }
+
+    /**
+     * 가맹점 재료 상태(사용/중지) 업데이트
+     *
+     * @param storeId         인증 사용자 매장 ID
+     * @param storeMaterialId 가맹점 재료 PK
+     * @param status          USE | STOP
+     */
+    @Transactional
+    public void updateStatus(Long storeId, Long storeMaterialId, MaterialStatus status) {
+        StoreMaterial sm = storeMaterialRepository
+                .findByIdAndStore_Id(storeMaterialId, storeId)
+                .orElseThrow(() -> new IllegalArgumentException("재료가 존재하지 않거나 권한이 없습니다."));
+
+        sm.setStatus(status);
+    }
 }

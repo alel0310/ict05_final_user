@@ -3,6 +3,8 @@ package com.boot.ict05_final_user.domain.inventory.controller;
 import com.boot.ict05_final_user.config.security.principal.AppUser;
 import com.boot.ict05_final_user.domain.inventory.dto.StoreMaterialCreateDTO;
 import com.boot.ict05_final_user.domain.inventory.dto.StoreMaterialResponse;
+import com.boot.ict05_final_user.domain.inventory.dto.StoreMaterialUpdateOptimalRequest;
+import com.boot.ict05_final_user.domain.inventory.dto.StoreMaterialUpdateStatusRequest;
 import com.boot.ict05_final_user.domain.inventory.service.StoreMaterialService;
 import com.boot.ict05_final_user.domain.purchaseOrder.dto.PurchaseOrderRequestsDTO;
 import jakarta.validation.Valid;
@@ -88,5 +90,31 @@ public class StoreMaterialRestController {
     public ResponseEntity<Integer> initInventory(@AuthenticationPrincipal AppUser user) {
         int created = storeMaterialService.initStoreInventoryForStore(user.getStoreId());
         return ResponseEntity.ok(created);
+    }
+
+    /**
+     * 가맹점 재료 적정재고(최소 재고) 업데이트
+     *
+     * PATCH /API/store/material/{id}/optimal-quantity
+     */
+    @PatchMapping("/{id}/optimal-quantity")
+    public ResponseEntity<Void> updateOptimalQuantity(@PathVariable("id") Long storeMaterialId,
+                                                      @Valid @RequestBody StoreMaterialUpdateOptimalRequest request,
+                                                      @AuthenticationPrincipal AppUser user) {
+        storeMaterialService.updateOptimalQuantity(user.getStoreId(), storeMaterialId, request.getOptimalQuantity());
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * 가맹점 재료 상태(사용/중지) 업데이트
+     *
+     * PATCH /API/store/material/{id}/status
+     */
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<Void> updateStatus(@PathVariable("id") Long storeMaterialId,
+                                             @Valid @RequestBody StoreMaterialUpdateStatusRequest request,
+                                             @AuthenticationPrincipal AppUser user) {
+        storeMaterialService.updateStatus(user.getStoreId(), storeMaterialId, request.getStatus());
+        return ResponseEntity.ok().build();
     }
 }

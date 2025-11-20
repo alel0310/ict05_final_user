@@ -85,3 +85,49 @@ export interface StoreInventoryRestockRequest {
   // 메모(선택)
   memo?: string | null;
 }
+
+/** 가맹점 재고 '입고' 요청 DTO
+ * - 엔드포인트: POST /API/store/inventory/in
+ * - 비고: 수량은 소진 단위 기준(프로젝트 정책에 맞춰 사용)
+ */
+export interface StoreInventoryInWriteDTO {
+  /** 재고 PK (store_inventory_id) */
+  storeInventoryId: number;
+  /** 가맹점 재료 PK (store_material_id) */
+  storeMaterialId: number;
+  /** 입고 수량 (0 이상) */
+  quantity: number;
+  /** 메모(선택) */
+  memo?: string | null;
+  /** 가맹점 재료일 때만 보낼 수 있음(선택). HQ 재료면 생략 */
+  unitPrice?: number;
+
+  // 필요 시 확장 필드 (백엔드 DTO가 지원한다면 주석 해제)
+  // receivedDate?: string | null;     // 'YYYY-MM-DD'
+  // expirationDate?: string | null;   // 'YYYY-MM-DD'
+  // lotNo?: string | null;
+  // purchasePrice?: number | null;    // 입고 단가
+}
+
+/**
+ * StoreInventory 도메인: 재고 조정 요청 DTO
+ *
+ * - 목적: 절대값 기반의 재고 수량을 지정 사유와 함께 조정한다.
+ * - 사용처: POST /API/store/inventory/adjust
+ * - 비고:
+ *   - 백엔드는 인증 컨텍스트의 storeId와 storeInventoryId 소유권을 반드시 검증한다.
+ *   - newQuantity는 0 이상의 절대 수량(음수 금지).
+ */
+export interface StoreInventoryAdjustmentWriteDTO {
+  /** 재고 PK (store_inventory_id) – 선택된 행의 고유키 */
+  storeInventoryId: number;
+
+  /** 조정 후 최종 재고 수량(절대값). 0 이상 정수/실수 허용(소수 사용 시 백엔드 정책 준수) */
+  newQuantity: number;
+
+  /** 조정 사유(예: '실사 조정', '손실', '폐기', '기타') */
+  reason: string;
+
+  /** 선택 메모 */
+  memo?: string | null;
+}

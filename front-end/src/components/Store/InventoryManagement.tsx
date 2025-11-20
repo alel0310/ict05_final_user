@@ -29,7 +29,7 @@ import {
 } from '../../services/storeMaterialApi';
 import {
   fetchStoreInventory,
-  restockStoreInventory,
+  inboundStoreInventory,
   initStoreInventory,
 } from '../../services/storeInventoryApi';
 import type { 
@@ -40,7 +40,8 @@ import type {
 } from '../../types/storeMaterial';
 import type {
   StoreInventoryResponse,
-  StoreInventoryRestockRequest
+  StoreInventoryRestockRequest,
+  StoreInventoryInWriteDTO
 } from '../../types/storeInventory';
 import {
   Pagination,
@@ -607,24 +608,28 @@ export function InventoryManagement() {
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       if (modalType === 'restock' && selectedItem) {
-        // 재고PK 기반 재입고 요청 DTO 생성
-        const payload: StoreInventoryRestockRequest = {
+        const parsedQty = Number(data.quantity);
+        const parsedUnitPrice =
+          data.unitPrice !== undefined && data.unitPrice !== ''
+            ? Number(data.unitPrice)
+            : undefined; // ★ 미입력 시 undefined 전송 → 백엔드가 정책대로 보정
+
+        const payload: StoreInventoryInWriteDTO = {
           storeInventoryId: selectedItem.storeInventoryId ?? selectedItem.id,
-          quantity: Number(data.quantity),
+          storeMaterialId:  selectedItem.storeMaterialId,
+          quantity: parsedQty,
           memo: data.memo ?? '',
+          ...(parsedUnitPrice !== undefined ? { unitPrice: parsedUnitPrice } : {}),
         };
 
-        // 재입고 API는 한 번만 호출
-        await restockStoreInventory(payload);
+        const id = await inboundStoreInventory(payload);
 
-        // 성공 후 목록 재조회
         const list = await fetchStoreInventory();
         const mapped = list.map(mapStoreInventoryToInventoryItem);
         setInventory(mapped);
 
-        toast.success(
-          `${selectedItem.name} ${data.quantity}${selectedItem.unit} 재입고 완료`,
-        );
+        toast.success(`${selectedItem.name} ${parsedQty}${selectedItem.unit} 입고 완료 (#${id})`);
+        
       } else if (modalType === 'adjust' && selectedItem) {
         const newQty = parseInt(data.newStock, 10);
         setInventory(prev =>
@@ -697,7 +702,7 @@ export function InventoryManagement() {
       toast.error(
         e?.response?.data?.message ||
           (modalType === 'restock'
-            ? '재입고 처리 중 오류가 발생했습니다.'
+            ? '입고 처리 중 오류가 발생했습니다.'
             : '오류가 발생했습니다.'),
       );
     } finally {
@@ -708,8 +713,8 @@ export function InventoryManagement() {
   const getFormFields = () => {
     if (modalType === 'restock') {
       return [
-        { name: 'quantity', label: `재입고 수량 (${selectedItem?.unit})`, type: 'number' as const, required: true, placeholder: '재입고할 수량을 입력하세요' },
-        { name: 'memo', label: '메모', type: 'text' as const, required: false, placeholder: '재입고 관련 메모 (선택)' }
+        { name: 'quantity', label: `입고 수량 (${selectedItem?.unit})`, type: 'number' as const, required: true, placeholder: '입고할 수량을 입력하세요' },
+        { name: 'memo', label: '메모', type: 'text' as const, required: false, placeholder: '입고 관련 메모 (선택)' }
       ];
     } else if (modalType === 'adjust') {
       return [
@@ -802,7 +807,7 @@ export function InventoryManagement() {
   };
 
   const getModalTitle = () => {
-    if (modalType === 'restock') return `${selectedItem?.name} 재입고`;
+    if (modalType === 'restock') return `${selectedItem?.name} 입고`;
     if (modalType === 'adjust') return `${selectedItem?.name} 재고 조정`;
     if (modalType === 'order') return '새 발주 등록';
     return '새 자재 등록';
@@ -1280,7 +1285,7 @@ function ItemDetailContent({
 
       <div className="flex gap-3 pt-4 border-t">
         <Button onClick={onRestock} className="bg-kpi-green hover:bg-green-600 text-white">
-          <Plus className="w-4 h-4 mr-2" />재입고
+          <Plus className="w-4 h-4 mr-2" />입고
         </Button>
         <Button onClick={onAdjust} variant="outline" className="border-kpi-orange text-kpi-orange hover:bg-orange-50">
           <Settings className="w-4 h-4 mr-2" />재고 조정

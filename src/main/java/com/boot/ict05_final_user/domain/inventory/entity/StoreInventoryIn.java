@@ -113,4 +113,12 @@ public class StoreInventoryIn {
     @Builder.Default
     @Comment("트랜잭션 상태")
     private InventoryRecordStatus status = InventoryRecordStatus.CONFIRMED;
+
+
+
+    @PrePersist
+    void prePersist() {
+        if (this.inDate == null) this.inDate = LocalDateTime.now();   // ★ 입고일 기본값
+        if (this.createdAt == null) this.createdAt = LocalDateTime.now();
+    }
 }
