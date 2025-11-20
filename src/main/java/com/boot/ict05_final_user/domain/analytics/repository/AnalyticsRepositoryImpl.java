@@ -1178,7 +1178,7 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 
 		// 매출(일자별) 맵 / 최근 입고일 맵
 		Map<String, Long> salesByDate = fetchSalesByDayForMaterials(storeId, startDt, endExDt);
-		Map<Long, LocalDate> lastInboundBySm = fetchLastInboundDateByStoreMaterial(storeId);
+		Map<Long, LocalDateTime> lastInboundBySm = fetchLastInboundDateByStoreMaterial(storeId);
 
 		// 커서: "YYYY-MM-DD|storeMaterialId"
 		String cursor = cond.cursor();
@@ -1252,7 +1252,7 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 			long daySales = salesByDate.getOrDefault(useDate, 0L);
 			double salesShare = (daySales > 0L && cost > 0L) ? round1(safeDiv(cost, daySales) * 100.0) : 0.0;
 
-			LocalDate inbound = lastInboundBySm.get(storeMaterialId);
+			LocalDateTime inbound = lastInboundBySm.get(storeMaterialId);
 			String inboundStr = (inbound != null ? inbound.toString() : null);
 
 			items.add(new MaterialDailyRowDto(
@@ -1288,7 +1288,7 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 
 		// 매출(월별) 맵 / 최근 입고일 맵
 		Map<String, Long> salesByMonth = fetchSalesByMonthForMaterials(storeId, startDt, endExDt);
-		Map<Long, LocalDate> lastInboundBySm = fetchLastInboundDateByStoreMaterial(storeId);
+		Map<Long, LocalDateTime> lastInboundBySm = fetchLastInboundDateByStoreMaterial(storeId);
 
 		// 커서: "YYYY-MM|storeMaterialId"
 		String cursor = cond.cursor();
@@ -1358,7 +1358,7 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 			long monthSales = salesByMonth.getOrDefault(ym, 0L);
 			double costRate = (monthSales > 0L && cost > 0L) ? round1(safeDiv(cost, monthSales) * 100.0) : 0.0;
 
-			LocalDate inbound = lastInboundBySm.get(smId);
+			LocalDateTime inbound = lastInboundBySm.get(smId);
 			String lastInboundMonth = inbound != null ? inbound.format(ymFormatter) : null;
 
 			items.add(new MaterialMonthlyRowDto(
@@ -1672,10 +1672,10 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 	 *
 	 * @param storeId 점포 ID
 	 * @return 최근 입고일 맵
-	 *
+	 * 주석변경필요
 	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
 	 */
-	private Map<Long, LocalDate> fetchLastInboundDateByStoreMaterial(Long storeId) {
+	private Map<Long, LocalDateTime> fetchLastInboundDateByStoreMaterial(Long storeId) {
 		DateTimeExpression<LocalDateTime> lastReceivedExpr = batch.receivedDate.max();
 
 		List<Tuple> tuples = query
@@ -1691,13 +1691,11 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 				.setHint("jakarta.persistence.query.timeout", 3000)
 				.fetch();
 
-		Map<Long, LocalDate> map = new HashMap<>(tuples.size());
+		Map<Long, LocalDateTime> map = new HashMap<>(tuples.size());
 		for (Tuple t : tuples) {
 			Long smId = t.get(sm.id);
 			LocalDateTime recv = t.get(lastReceivedExpr);
-			if (smId != null && recv != null) {
-				map.put(smId, recv.toLocalDate());
-			}
+			if (smId != null && recv != null) map.put(smId, recv);
 		}
 		return map;
 	}
@@ -1714,26 +1712,24 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 	 *
 	 * @param storeId 점포 ID
 	 * @return 부족 재고 개수
-	 *
+	 * 주석변경필요
 	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
 	 */
 	private long fetchLowStockCount(Long storeId) {
 		QStoreInventory inv = QStoreInventory.storeInventory;
 
-		JPAQuery<Long> jpaQuery = query
+		Long result = query
 				.select(inv.id.countDistinct())
 				.from(inv)
 				.where(
-						inv.store.id.eq(storeId),
+						storeId == null ? null : inv.store.id.eq(storeId),
 						inv.status.in(InventoryStatus.LOW, InventoryStatus.SHORTAGE)
-				);
-
-		jpaQuery
+				)
 				.setHint("org.hibernate.readOnly", true)
 				.setHint("org.hibernate.flushMode", "COMMIT")
-				.setHint("jakarta.persistence.query.timeout", 3000);
+				.setHint("jakarta.persistence.query.timeout", 3000) // jakarta → javax 권장
+				.fetchOne();
 
-		Long result = jpaQuery.fetchOne();
 		return result != null ? result : 0L;
 	}
 
@@ -1749,28 +1745,26 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 	 * @param storeId 점포 ID
 	 * @param today   기준일(LocalDate, KST 가정)
 	 * @return 유통기한 임박 개수
-	 *
+	 * 주석변경필요
 	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
 	 */
 	private long fetchExpireSoonCount(Long storeId, LocalDate today) {
-		LocalDate endDate = today.plusDays(EXPIRE_SOON_DAYS);
+		LocalDate endEx = today.plusDays(EXPIRE_SOON_DAYS + 1);
 
-		JPAQuery<Long> jpaQuery = query
+		Long result = query
 				.select(inv.id.countDistinct())
 				.from(batch)
 				.join(batch.storeInventory, inv)
 				.where(
-						inv.store.id.eq(storeId),
+						storeId == null ? null : inv.store.id.eq(storeId),
 						batch.expirationDate.goe(today),
-						batch.expirationDate.loe(endDate)
-				);
-
-		jpaQuery
+						batch.expirationDate.lt(endEx)
+				)
 				.setHint("org.hibernate.readOnly", true)
 				.setHint("org.hibernate.flushMode", "COMMIT")
-				.setHint("jakarta.persistence.query.timeout", 3000);
+				.setHint("jakarta.persistence.query.timeout", 3000)
+				.fetchOne();
 
-		Long result = jpaQuery.fetchOne();
 		return result != null ? result : 0L;
 	}
 
@@ -2602,13 +2596,13 @@ public class AnalyticsRepositoryImpl implements AnalyticsRespositoryCustom {
 	 * <p><b>정의</b>: {@code s.id = :storeId}.</p>
 	 * <p><b>용도</b>: 멀티테넌시/매장별 격리를 위한 기본 WHERE 조건.</p>
 	 *
-	 * @param storeId 점포 ID (null 불가 가정)
+	 * @param storeId 점포 ID (null 안정성 보강)
 	 * @return 점포 ID 일치 BooleanExpression
 	 *
 	 * <p>작성자: 이경욱 / 작성일: 2025-11-20</p>
 	 */
 	private BooleanExpression eqStore(Long storeId) {
-		return s.id.eq(storeId);
+		return (storeId == null) ? null : s.id.eq(storeId);
 	}
 
 	/**

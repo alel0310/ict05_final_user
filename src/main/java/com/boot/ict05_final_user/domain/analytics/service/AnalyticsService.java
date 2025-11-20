@@ -200,6 +200,7 @@ public class AnalyticsService {
 	public MaterialSummaryDto getMaterialSummary(Long storeId) {
 		LocalDate today = LocalDate.now(KST);
 		System.out.println("재료 카드 쿼리 나오나?" + repo.fetchMaterialSummary(storeId, today));
+
 		return repo.fetchMaterialSummary(storeId, today);
 	}
 

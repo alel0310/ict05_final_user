@@ -4,7 +4,7 @@ import { Button } from '../../../components/ui/button';
 import { AlertTriangle, CalendarIcon, Clock, Download, Package, TrendingDown, TrendingUp } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../components/ui/popover';
 import { Calendar } from '../../../components/ui/calendar';
-import { fmtMoneyInt, fmtPercent1, tz } from '../../../lib/format';
+import { displayInbound, fmtMoneyInt, fmtPercent1, tz } from '../../../lib/format';
 import api from '../../../lib/authApi';
 import { KPICard } from '../../Common/KPICard';
 
@@ -70,6 +70,7 @@ function formatDateLocal(date: Date): string {
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
+
 
 // ==========================
 // 메인 컴포넌트
@@ -473,7 +474,7 @@ export default function MaterialReport() {
                           {fmtPercent1(r.salesShare)}
                         </td>
                         <td className="px-6 py-3 text-sm text-gray-900 text-center">
-                          {r.lastInboundDate || '-'}
+                          {displayInbound(r.lastInboundDate)}
                         </td>
                       </tr>
                     ))}
@@ -514,7 +515,7 @@ export default function MaterialReport() {
                           {fmtPercent1(r.costRate)}
                         </td>
                         <td className="px-6 py-3 text-sm text-gray-900 text-center">
-                          {r.lastInboundMonth || '-'}
+                          {displayInbound(r.lastInboundMonth)}
                         </td>
                       </tr>
                     ))}
