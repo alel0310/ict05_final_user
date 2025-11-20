@@ -16,6 +16,16 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 직원 관련 비즈니스 로직을 처리하는 서비스 클래스.
+ *
+ * <p>주요 역할</p>
+ * <ul>
+ *     <li>현재 로그인한 점주의 매장(storeId)에 따른 직원 목록 조회</li>
+ *     <li>검색 DTO 구성 후 Repository(QueryDSL) 호출</li>
+ *     <li>인증 정보에서 storeId 추출</li>
+ * </ul>
+ */
 @RequiredArgsConstructor
 @Service
 @Transactional
@@ -25,16 +35,23 @@ public class StaffService {
     private final StaffRepository staffRepository;
     private final AttendanceRepository attendanceRepository;
 
-    // EM으로 최신 근태상태 한 번에 조회
+    /** EntityManager (필요 시 근태 최신값 서브쿼리 등 직접 조회 가능) */
     @PersistenceContext
     private EntityManager em;
 
     /**
-     * 로그인한 가맹점주의 storeId 기준으로 직원 목록을 조회한다.
-     * - storeId가 null인 경우(관리자 등)는 전체 조회
-     * - QueryDSL에서 :storeId 조건으로 필터링
+     * 로그인한 가맹점(storeId)의 직원 목록을 조회한다.
      *
-     * @return 직원 리스트 DTO
+     * <p>특징</p>
+     * <ul>
+     *     <li>storeId가 null이면 전체 조회(관리자 모드)</li>
+     *     <li>storeId가 존재하면 해당 매장의 직원만 조회</li>
+     *     <li>QueryDSL 기반 페이징된 DTO 리스트 반환</li>
+     * </ul>
+     *
+     * @param storeId 로그인 사용자 소속 매장 ID
+     * @param pageable 페이징 정보(Page 번호·개수)
+     * @return 직원 목록 페이지
      */
     public Page<StaffListDTO> selectAllStaff(Long storeId, Pageable pageable) {
 
@@ -51,8 +68,16 @@ public class StaffService {
     }
 
     /**
-     * 현재 로그인한 사용자 정보에서 storeId 추출
-     * 인증이 없거나 anonymousUser이면 null 반환
+     * Spring Security 인증 정보에서 현재 로그인한 사용자의 storeId를 가져온다.
+     *
+     * <p>리턴 규칙</p>
+     * <ul>
+     *     <li>로그인 상태(CustomUserDetails) → storeId 반환</li>
+     *     <li>anonymousUser(비로그인) → null</li>
+     *     <li>인증 정보 없음 → null</li>
+     * </ul>
+     *
+     * @return 로그인한 사용자의 storeId 또는 null
      */
     private Long getCurrentStoreId() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();

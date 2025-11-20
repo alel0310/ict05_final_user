@@ -10,31 +10,35 @@ import com.boot.ict05_final_user.domain.staff.repository.StaffRepository;
 import com.boot.ict05_final_user.domain.staff.service.StaffService;
 import com.boot.ict05_final_user.domain.store.entity.Store;
 import com.boot.ict05_final_user.domain.store.service.StoreService;
+
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-
 /**
- * 직원 관련 REST API 컨트롤러
+ * 직원 관련 REST API 컨트롤러.
  *
- * <p>이 컨트롤러는 다음과 같은 기능을 제공합니다:</p>
+ * <p>기능:</p>
  * <ul>
+ *     <li>직원 목록 조회</li>
  *     <li>직원 등록</li>
  *     <li>직원 수정</li>
  * </ul>
  *
- * <p>
- * 검증 및 데이터 바인딩을 수행합니다.
+ * <p>검증, 바인딩, 인증 사용자(StoreId) 기반 접근 제어를 수행한다.</p>
  *
- * @author 채은
+ * @author 미리
  * @since 2025.10.21
  */
 @RestController
@@ -51,27 +55,44 @@ public class StaffRestController {
     private final AttendanceRepository attendanceRepository;
 
     /**
-     * 직원 목록 API
+     * 직원 목록 조회 API.
+     *
+     * @param user 로그인한 사용자 정보(AppUser)
+     * @param page 페이지 번호(0부터 시작)
+     * @param size 페이지 크기
+     * @return 직원 목록 페이지
      */
+    @Operation(
+            summary = "직원 목록 조회",
+            description = "로그인한 사용자의 storeId 기준으로 직원 목록을 조회합니다."
+    )
     @GetMapping("/list")
     public Page<StaffListDTO> getStaffList(
             @AuthenticationPrincipal AppUser user,
-            @RequestParam(defaultValue = "0") int page,   // 0부터 시작
-            @RequestParam(defaultValue = "8") int size   // 한 페이지 8명
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "8") int size
     ) {
         log.info("GET /api/staff/list page={}, size={}, storeId={}", page, size, user.getStoreId());
 
         Long storeId = user.getStoreId();
-
-        Pageable pageable = PageRequest.of(page, size); // 필요하면 sort도 추가 가능
+        Pageable pageable = PageRequest.of(page, size);
 
         return staffService.selectAllStaff(storeId, pageable);
     }
 
     /**
-     * 직원 등록 API
-     * 직원 데이터를 저장하고 생성된 직원 ID를 반환한다.
+     * 직원 등록 API.
+     *
+     * <p>요청된 직원 정보를 저장하고 생성된 직원 ID를 반환한다.</p>
+     *
+     * @param dto 등록할 직원 정보
+     * @param user 인증 사용자(AppUser)
+     * @return 생성된 직원 ID
      */
+    @Operation(
+            summary = "직원 등록",
+            description = "현재 로그인한 매장의 직원 정보를 신규 등록합니다."
+    )
     @PostMapping("/add")
     public ResponseEntity<Long> creatStaff(
             @Valid @RequestBody StaffWriteFormDTO dto,
@@ -95,15 +116,21 @@ public class StaffRestController {
 
         log.info("직원 등록 완료 id={}", staff.getId());
 
-        // 👇 근태 생성 없음 (attendance는 나중에 다른 기능에서 따로 처리)
         return ResponseEntity.ok(staff.getId());
     }
 
-
     /**
-     * 직원 수정 API
-     * 직원 데이터를 수정하고 수정된 직원 ID를 반환한다.
+     * 직원 수정 API.
+     *
+     * @param id 수정 대상 직원 ID
+     * @param dto 수정할 데이터 DTO
+     * @param user 인증 사용자(AppUser)
+     * @return 204 No Content
      */
+    @Operation(
+            summary = "직원 정보 수정",
+            description = "직원 정보를 수정합니다. 로그인한 사용자의 매장 직원만 수정 가능합니다."
+    )
     @PutMapping("/modify/{id}")
     public ResponseEntity<Void> modifyStaff(
             @PathVariable Long id,
@@ -112,16 +139,15 @@ public class StaffRestController {
     ) {
         log.info("PUT /api/staff/modify/{} dto={}, storeId={}", id, dto, user.getStoreId());
 
-        // 1) 수정할 직원 찾기
         StaffProfile staff = staffRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("직원이 존재하지 않습니다."));
 
-        // 2) 로그인한 사용자의 매장 직원인지 확인
+        // 다른 매장의 직원인지 검증
         if (!staff.getStore().getId().equals(user.getStoreId())) {
             return ResponseEntity.status(403).build();
         }
 
-        // 3) setter로 값 업데이트
+        // 값 수정
         staff.setStaffName(dto.getStaffName());
         staff.setStaffEmploymentType(dto.getStaffEmploymentType());
         staff.setStaffEmail(dto.getStaffEmail());
@@ -130,35 +156,9 @@ public class StaffRestController {
         staff.setStaffStartDate(dto.getStaffStartDate());
         staff.setStaffEndDate(dto.getStaffEndDate());
 
-        // 4) 저장
         staffRepository.save(staff);
 
         return ResponseEntity.noContent().build();
     }
 
-//    /**
-//     * 직원 삭제 API
-//     * 직원 데이터를 삭제한다.
-//     */
-//    @DeleteMapping("/delete/{id}")
-//    public ResponseEntity<Void> deleteStaff(
-//            @PathVariable Long id,
-//            @AuthenticationPrincipal AppUser user
-//    ) {
-//        log.info("DELETE /api/staff/delete/{} storeId={}", id, user.getStoreId());
-//
-//        // 1) 직원 조회
-//        StaffProfile staff = staffRepository.findById(id)
-//                .orElseThrow(() -> new IllegalArgumentException("직원이 존재하지 않습니다."));
-//
-//        // 2) 로그인한 매장의 직원인지 확인
-//        if (!staff.getStore().getId().equals(user.getStoreId())) {
-//            return ResponseEntity.status(403).build();
-//        }
-//
-//        // 3) 삭제
-//        staffRepository.delete(staff);
-//
-//        return ResponseEntity.noContent().build();
-//    }
 }
