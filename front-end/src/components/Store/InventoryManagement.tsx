@@ -31,6 +31,7 @@ import {
   fetchStoreInventory,
   inboundStoreInventory,
   initStoreInventory,
+  adjustStoreInventory,
 } from '../../services/storeInventoryApi';
 import type { 
   StoreMaterialCreateRequest,
@@ -630,6 +631,12 @@ export function InventoryManagement() {
         
       } else if (modalType === 'adjust' && selectedItem) {
         const newQty = parseInt(data.newStock, 10);
+           await adjustStoreInventory({
+              storeInventoryId: selectedItem.storeInventoryId ?? selectedItem.id,
+              storeMaterialId: selectedItem.storeMaterialId,
+              newQuantity: newQty,
+              reason: data.reason,  // reason에 'REAL_AUDIT' 값 전송됨
+        });
         setInventory(prev =>
           prev.map(item =>
             item.id === selectedItem.id
@@ -654,7 +661,7 @@ export function InventoryManagement() {
       } else if (modalType === 'order') {
         // 발주 로직
         const newOrder: Order = {
-          id: `PO-${String(Date.now()).slice(-6)}`, // ✅ 문자열 ID
+          id: `PO-${String(Date.now()).slice(-6)}`,
           items: [{ name: data.itemName, quantity: Number(data.quantity), unit: data.unit, unitPrice: Number(data.unitPrice) }],
           supplier: data.supplier,
           orderDate: new Date().toISOString().split('T')[0],
@@ -719,7 +726,13 @@ export function InventoryManagement() {
         { name: 'newStock', label: `새 재고 수량 (${selectedItem?.unit})`, type: 'number' as const, required: true, placeholder: '조정할 재고 수량을 입력하세요' },
         {
           name: 'reason', label: '조정 사유', type: 'select' as const, required: true,
-          options: [{ value: '실사 조정', label: '실사 조정' }, { value: '손실', label: '손실' }, { value: '폐기', label: '폐기' }, { value: '기타', label: '기타' }]
+          options: [
+            { value: 'MANUAL', label: '수동 수정' },
+            { value: 'DAMAGE', label: '파손' },
+            { value: 'LOSS', label: '분실' },
+            { value: 'ERROR', label: '데이터 오류 정정' },
+            { value: 'REAL_AUDIT', label: '실사 조정' },
+          ]
         }
       ];
     } else if (modalType === 'order') {
