@@ -119,4 +119,22 @@ public class AttendanceRestController {
         attendanceService.modifyAttendance(dto);
         return ResponseEntity.ok().build();
     }
+
+    /**
+     * 특정 직원의 특정 날짜 근태 전체 삭제
+     * DELETE /api/attendance/daily/staff?date=2025-11-25&staffId=123
+     */
+    @DeleteMapping("/daily/staff")
+    public ResponseEntity<Void> deleteDailyAttendanceForStaff(
+            @RequestParam("date")
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam("staffId") Long staffId,
+            @AuthenticationPrincipal AppUser user
+    ) {
+        log.info("🗑️ DELETE /api/attendance/daily/staff?date={}&staffId={} (storeId={})",
+                date, staffId, user != null ? user.getStoreId() : null);
+
+        attendanceService.deleteDailyAttendanceForStaff(staffId, date);
+        return ResponseEntity.noContent().build(); // 204
+    }
 }

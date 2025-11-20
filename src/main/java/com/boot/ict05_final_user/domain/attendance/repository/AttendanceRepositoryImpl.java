@@ -143,4 +143,31 @@ public class AttendanceRepositoryImpl implements AttendanceRepositoryCustom {
 
         return Optional.ofNullable(result);
     }
+
+    // 직원 근태 삭제
+    @Override
+    public long deleteByStoreAndStaffAndWorkDate(Long storeId, Long staffId, LocalDate workDate) {
+        QAttendance attendance = QAttendance.attendance;
+        return queryFactory
+                .delete(attendance)
+                .where(
+                        attendance.store.id.eq(storeId)
+                                .and(attendance.staffProfile.id.eq(staffId))
+                                .and(attendance.workDate.eq(workDate))
+                )
+                .execute();
+    }
+
+    @Override
+    public long deleteByIdAndStore(Long attendanceId, Long storeId) {
+        QAttendance attendance = QAttendance.attendance;
+
+        return queryFactory
+                .delete(attendance)
+                .where(
+                        attendance.id.eq(attendanceId)
+                                .and(attendance.store.id.eq(storeId))  // Attendance 엔티티에 store 필드가 있어야 함
+                )
+                .execute();
+    }
 }

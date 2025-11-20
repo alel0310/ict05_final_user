@@ -11,14 +11,16 @@ import java.util.Optional;
 
 public interface AttendanceRepositoryCustom {
 
-    /** 특정 매장의 특정 날짜에 근무한 직원들의 근태 + 직원 정보를 페이징 조회 */
     Page<AttendanceListDTO> findDailyAttendanceByStore(
-            Long storeId,
-            LocalDate workDate,
-            Pageable pageable,
-            AttendanceSearchDTO searchDto
+            Long storeId, LocalDate workDate, Pageable pageable, AttendanceSearchDTO searchDto
     );
 
-    /**  근태 상세 조회용 */
     Optional<AttendanceDetailDTO> findAttendanceDetailByIdAndStore(Long attendanceId, Long storeId);
+
+    // 단건 삭제(이미 추가되어 있음)
+    long deleteByIdAndStore(Long attendanceId, Long storeId);
+
+    // ✅ 직원+날짜 일괄 삭제
+    long deleteByStoreAndStaffAndWorkDate(Long storeId, Long staffId, LocalDate workDate);
 }
+
