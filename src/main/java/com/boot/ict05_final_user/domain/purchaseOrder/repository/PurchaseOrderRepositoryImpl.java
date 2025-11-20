@@ -325,7 +325,7 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
                 .mainItemName(firstStoreMaterial.getName())
                 .priority(dto.getPriority())
                 .remark(dto.getNotes())
-                .status(PurchaseOrderStatus.RECEIVED) // 기존 상태 유지
+                .status(PurchaseOrderStatus.PENDING)
                 .orderDate(LocalDate.now())
                 .build();
         em.persist(purchaseOrder);
