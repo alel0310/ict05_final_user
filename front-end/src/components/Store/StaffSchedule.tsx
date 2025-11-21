@@ -288,6 +288,11 @@ export function StaffSchedule() {
     [attendanceKeyword, attendanceSearchType, attendanceStatusFilter]
   );
 
+  // 직원 목록 먼저 한 번 로딩
+  useEffect(() => {
+    loadStaff();
+  }, [loadStaff]);
+
   useEffect(() => {
     setAttendancePage(0);
     loadAttendance(currentDate, 0);
@@ -1119,7 +1124,7 @@ export function StaffSchedule() {
                   <p className="text-gray-500 mb-1">근태 메모 / 사유</p>
                   <p className="text-sm whitespace-pre-wrap border rounded-md px-3 py-2 bg-gray-50 min-h-[60px]">
                     {attendanceDetail.attendanceMemo &&
-                    attendanceDetail.attendanceMemo.trim().length > 0
+                      attendanceDetail.attendanceMemo.trim().length > 0
                       ? attendanceDetail.attendanceMemo
                       : '등록된 메모가 없습니다.'}
                   </p>
