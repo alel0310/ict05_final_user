@@ -10,6 +10,21 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+/**
+ * 근태 목록 조회 DTO.
+ *
+ * <p>
+ * 직원들의 하루 근태 요약 정보를 리스트 형태로 조회할 때 사용된다.
+ * 상세 정보는 포함하지 않고, 화면 테이블 목록 구성에 필요한 핵심 데이터만 담는다.
+ * </p>
+ *
+ * <p>주요 데이터:</p>
+ * <ul>
+ *     <li>근무 일자, 출퇴근 시간, 근태 상태</li>
+ *     <li>근무 시간</li>
+ *     <li>직원 정보(이름, 근무형태 등)</li>
+ * </ul>
+ */
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
@@ -33,7 +48,8 @@ public class AttendanceListDTO {
     /** 실제 근무 시간 */
     private BigDecimal attendanceWorkHours;
 
-    // === StaffProfile JOIN 해서 가져올 정보 ===
+    // === StaffProfile JOIN ===
+
     /** 직원 시퀀스 */
     private Long staffId;
 

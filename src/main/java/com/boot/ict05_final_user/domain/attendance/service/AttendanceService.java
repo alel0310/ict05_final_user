@@ -27,6 +27,17 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+/**
+ * 근태(Attendance) 도메인 서비스.
+ *
+ * <p>주요 역할:</p>
+ * <ul>
+ *     <li>가맹점(storeId) 기준으로 하루 근태 목록 조회</li>
+ *     <li>직원 근태 등록/수정/삭제 비즈니스 로직 처리</li>
+ *     <li>현재 로그인한 사용자의 storeId 기반 보안 검증</li>
+ *     <li>근무 시간 계산 등 공통 유틸 기능 제공</li>
+ * </ul>
+ */
 @RequiredArgsConstructor
 @Service
 @Transactional
@@ -42,12 +53,31 @@ public class AttendanceService {
 
     /* ================== 하루 리스트 조회 ================== */
 
-    // 검색 없는 기본 버전
+    /**
+     * 검색 조건 없이, 지정된 날짜의 근태 리스트를 조회하는 기본 버전.
+     *
+     * <p>내부적으로 {@link #getDailyAttendance(LocalDate, Pageable, AttendanceSearchDTO)} 를
+     * 검색 조건 null로 호출한다.</p>
+     *
+     * @param workDate 조회할 근무 일자
+     * @param pageable 페이징 정보
+     * @return 페이징된 근태 리스트
+     */
     public Page<AttendanceListDTO> getDailyAttendance(LocalDate workDate, Pageable pageable) {
         return getDailyAttendance(workDate, pageable, null);
     }
 
-    // 검색 + 필터 버전
+    /**
+     * 검색/필터가 적용된 하루 근태 목록 조회.
+     *
+     * <p>현재 로그인한 사용자의 storeId를 기준으로 해당 매장의 근태만 조회하며,
+     * 검색 DTO에 포함된 keyword/type/status를 조건으로 사용한다.</p>
+     *
+     * @param workDate   조회할 근무 일자
+     * @param pageable   페이징 정보
+     * @param searchDto  검색/필터 조건 (null 가능)
+     * @return 페이징된 근태 리스트
+     */
     @Transactional(readOnly = true)
     public Page<AttendanceListDTO> getDailyAttendance(LocalDate workDate,
                                                       Pageable pageable,
@@ -78,9 +108,21 @@ public class AttendanceService {
     /* ================== 근태 등록 ================== */
 
     /**
-     * 직원 근태 등록
+     * 직원 근태 등록.
+     *
+     * <p>로직 요약:</p>
+     * <ol>
+     *     <li>직원 조회 및 매장(storeId) 일치 여부 검증</li>
+     *     <li>출근/퇴근 시간 유효성 검증 (null/역전 여부)</li>
+     *     <li>이미 해당 날짜에 근태가 존재하는지 중복 체크</li>
+     *     <li>근무 시간 계산(분 → 시간 단위 BigDecimal)</li>
+     *     <li>근태 상태 기본값 NORMAL 처리</li>
+     *     <li>Attendance 엔티티 생성 및 저장</li>
+     * </ol>
+     *
      * @param dto     근태 등록 DTO
-     * @param storeId 로그인한 점주의 storeId
+     * @param storeId 로그인한 가맹점주의 storeId
+     * @return 생성된 근태 ID
      */
     public Long createAttendance(AttendanceWriteFormDTO dto, Long storeId) {
 
@@ -121,7 +163,7 @@ public class AttendanceService {
         // 5) 근무 시간 계산
         BigDecimal workHours = calculateWorkHours(checkIn, checkOut);
 
-        // 6) 근태 상태
+        // 6) 근태 상태 (입력 없으면 NORMAL)
         AttendanceStatus status = dto.getAttendanceStatus() != null
                 ? dto.getAttendanceStatus()
                 : AttendanceStatus.NORMAL;
@@ -145,9 +187,15 @@ public class AttendanceService {
     }
 
     /**
-     * 근태 상세 조회
-     * 로그인한 점주의 storeId 기준으로, 해당 근태(attendanceId)가
-     * 내 매장의 기록인지 검증하고 상세 정보를 반환한다.
+     * 근태 상세 조회.
+     *
+     * <p>
+     * 현재 로그인한 점주의 storeId 기준으로,
+     * 해당 근태(attendanceId)가 본인 매장의 기록인지 검증한 뒤 상세 정보를 반환한다.
+     * </p>
+     *
+     * @param attendanceId 조회할 근태 ID
+     * @return 근태 상세 DTO
      */
     @Transactional(readOnly = true)
     public AttendanceDetailDTO getAttendanceDetail(Long attendanceId) {
@@ -165,8 +213,16 @@ public class AttendanceService {
     /* ================== 근태 수정 폼 조회 ================== */
 
     /**
-     * 근태 수정 화면에서 사용할 기존 데이터 조회
-     * - 로그인한 점주의 storeId 기준으로 본인 매장 데이터만 조회
+     * 근태 수정 화면에서 사용할 기존 데이터 조회.
+     *
+     * <p>
+     * - 현재 로그인한 가맹점주의 storeId 기준으로
+     *   본인 매장에 속한 근태만 조회한다.<br>
+     * - 조회된 엔티티를 {@link AttendanceModifyFormDTO}로 변환하여 반환한다.
+     * </p>
+     *
+     * @param attendanceId 수정 대상 근태 ID
+     * @return 수정 폼용 근태 DTO
      */
     @Transactional(readOnly = true)
     public AttendanceModifyFormDTO getAttendanceModifyForm(Long attendanceId) {
@@ -210,9 +266,16 @@ public class AttendanceService {
     /* ================== 근태 수정 저장 ================== */
 
     /**
-     * 근태 수정
-     * - 출퇴근 시간/상태/메모/근무시간 등을 변경
-     * - staff 변경 허용 여부는 정책에 따라 선택 (지금은 같은 매장 직원일 때만 변경 가능하게 예시)
+     * 근태 수정.
+     *
+     * <p>수정 내용:</p>
+     * <ul>
+     *     <li>직원(staff) 변경(같은 매장 소속일 때만 허용)</li>
+     *     <li>근무 일자, 출퇴근 시간, 근태 상태, 메모</li>
+     *     <li>근무 시간(프론트에서 전달되면 사용, 아니면 서버에서 재계산)</li>
+     * </ul>
+     *
+     * @param dto 수정할 근태 데이터 DTO
      */
     public void modifyAttendance(AttendanceModifyFormDTO dto) {
 
@@ -277,13 +340,20 @@ public class AttendanceService {
             attendance.setWorkHours(calculateWorkHours(checkIn, checkOut));
         }
 
-        // 클래스 전체가 @Transactional 이라서 별도 save() 없이 dirty checking으로 업데이트됨
+        // 클래스 전체가 @Transactional 이라 별도 save() 없이 dirty checking으로 업데이트됨
         log.info("📌 근태 수정 완료: attendanceId={}, storeId={}", attendance.getId(), storeId);
     }
 
     /**
-     * 근태 삭제
-     * - 출퇴근 시간/상태/메모/근무시간 등을 삭제
+     * 특정 직원의 특정 날짜 근태 전체 삭제.
+     *
+     * <p>
+     * - 현재 로그인한 가맹점의 storeId를 기준으로 권한 검증 후<br>
+     *   해당 storeId + staffId + workDate 조합의 근태를 일괄 삭제한다.
+     * </p>
+     *
+     * @param staffId 삭제 대상 직원 ID
+     * @param workDate 삭제할 날짜
      */
     public void deleteDailyAttendanceForStaff(Long staffId, LocalDate workDate) {
         Long storeId = getCurrentStoreId();
@@ -302,6 +372,17 @@ public class AttendanceService {
 
     /* ================== 공통 유틸 ================== */
 
+    /**
+     * 현재 로그인한 사용자(SecurityContext)의 storeId를 추출한다.
+     *
+     * <p>지원 principal 타입:</p>
+     * <ul>
+     *     <li>{@link AppUser}</li>
+     *     <li>{@link CustomUserDetails}</li>
+     * </ul>
+     *
+     * @return storeId, 없으면 null
+     */
     private Long getCurrentStoreId() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
 
@@ -328,6 +409,13 @@ public class AttendanceService {
         return null;
     }
 
+    /**
+     * 출근/퇴근 시간으로 실제 근무시간(시간 단위, 소수 둘째 자리)을 계산한다.
+     *
+     * @param checkIn  출근 시각
+     * @param checkOut 퇴근 시각
+     * @return 근무 시간(시간 단위, 소수점 둘째 자리 반올림)
+     */
     private BigDecimal calculateWorkHours(LocalDateTime checkIn, LocalDateTime checkOut) {
         long minutes = Duration.between(checkIn, checkOut).toMinutes();
 
@@ -338,6 +426,5 @@ public class AttendanceService {
         return BigDecimal.valueOf(minutes)
                 .divide(BigDecimal.valueOf(60), 2, RoundingMode.HALF_UP);
     }
-
 
 }
