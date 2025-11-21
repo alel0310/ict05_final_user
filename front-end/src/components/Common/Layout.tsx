@@ -274,7 +274,7 @@ export function Layout({ children, userType, currentPage, onPageChange, memberNa
             </div>
             {!sidebarCollapsed && (
               <div>
-                <h1 className="font-bold">FranFriend ERP</h1>
+                <h1 className="font-bold">ToastLab ERP</h1>
                 <p className="text-sm text-white/70">{userType === 'HQ' ? '본사' : '가맹점'}</p>
               </div>
             )}

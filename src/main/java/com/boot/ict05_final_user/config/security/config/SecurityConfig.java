@@ -102,7 +102,7 @@ public class SecurityConfig {
                 // 공개 엔드포인트
                 .requestMatchers("/login").permitAll()
                 .requestMatchers("/jwt/exchange", "/jwt/refresh").permitAll()
-                .requestMatchers(HttpMethod.POST, "/exist", "/me","/API/**", "/dashboard/**", "/join", "/member/exist-email", "/member","/API/menu/**", "/api/customer-orders/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/exist", "/me","/API/**", "/dashboard/**", "/join", "/member/exist-email", "/member","/API/menu/**", "/api/customer-orders/**", "/register").permitAll()
 
                 .requestMatchers(HttpMethod.POST, "/fcm/notice/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/fcm/token", "/fcm/topic/**", "/fcm/send/**").authenticated()

@@ -217,7 +217,7 @@ export default function Login() {
             <Store className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            FranFriend ERP
+            ToastLab ERP
           </h1>
           <p className="text-dark-gray">프랜차이즈 통합 관리 시스템</p>
         </div>
