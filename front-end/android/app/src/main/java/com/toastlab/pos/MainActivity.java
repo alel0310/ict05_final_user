@@ -1,4 +1,4 @@
-package com.example.webviewapp;
+package com.toastlab.pos;
 
 import com.getcapacitor.BridgeActivity;
 

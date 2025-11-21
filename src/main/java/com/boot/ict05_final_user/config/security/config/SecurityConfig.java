@@ -61,6 +61,8 @@ public class SecurityConfig {
         CorsConfiguration cfg = new CorsConfiguration();
         // 개발/운영 도메인 추가
         cfg.setAllowedOrigins(List.of(
+                "capacitor://localhost",              // 안드로이드 앱 기본 주소
+                "http://localhost",                   // 안드로이드 앱 대체 주소
                 "https://toastlab.duckdns.org",       // ← 추가
                 "http://toastlab.duckdns.org",        // ← 추가
                 "https://toastlabadmin.duckdns.org",  // ← 추가
