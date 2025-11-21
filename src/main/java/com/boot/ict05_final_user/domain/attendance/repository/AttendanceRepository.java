@@ -6,19 +6,28 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.time.LocalDate;
 
 /**
- *  Attendance 엔티티용 Spring Data JPA 리포지토리 인터페이스.
+ * Attendance 엔티티용 Spring Data JPA 리포지토리 인터페이스.
  *
  * <p>특징</p>
  * <ul>
- *   <li>{@link JpaRepository} 상속: 기본 CRUD, 페이징/정렬 메서드 자동 제공</li>
- *   <li>{@code AttendanceRepositoryCustom} 상속: 복잡한 동적쿼리/커스텀 메서드 구현 분리</li>
+ *     <li>{@link JpaRepository} 상속으로 기본 CRUD 및 페이징/정렬 기능 제공</li>
+ *     <li>{@link AttendanceRepositoryCustom} 상속으로 QueryDSL 기반 커스텀 쿼리 기능 확장</li>
+ * </ul>
+ *
+ * <p>추가 기능:</p>
+ * <ul>
+ *     <li>{@code existsByStaffProfileIdAndWorkDate} : 특정 직원이 특정 날짜에 이미 근태 기록이 있는지 검증</li>
  * </ul>
  */
-
 public interface AttendanceRepository
         extends JpaRepository<Attendance, Long>, AttendanceRepositoryCustom {
 
-    // 직원 + 날짜로 이미 근태가 존재하는지 체크
+    /**
+     * 특정 직원의 특정 날짜 근태 기록 존재 여부 확인.
+     *
+     * @param staffId 직원 ID
+     * @param workDate 근태 일자
+     * @return true = 이미 기록이 존재함
+     */
     boolean existsByStaffProfileIdAndWorkDate(Long staffId, LocalDate workDate);
-
 }

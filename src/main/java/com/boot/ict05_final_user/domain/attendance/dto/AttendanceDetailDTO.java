@@ -11,15 +11,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 근태 상세 조회 DTO (AttendanceDetailDTO)
+ * 근태 상세 조회 DTO.
  *
- * 이 DTO는 "특정 근태 기록 상세 조회"를 위해 사용되는 데이터 전달 객체입니다.
- *
- * ✔ 리스트 조회(AttendanceListDTO)에서는 간단한 요약 정보만 제공하지만
- * ✔ 상세 조회에서는 출퇴근 기록, 근무시간, 근태 사유, 직원 정보까지 모두 보여주기 때문에
- *   별도의 DTO로 분리하여 사용합니다.
+ * <p>특정 근태 기록을 상세 조회할 때 사용되는 DTO이며,
+ * 리스트 DTO보다 더 많은 정보(근태 사유, 직원 정보 등)를 포함한다.</p>
  */
-
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
@@ -46,14 +42,15 @@ public class AttendanceDetailDTO {
     /** 근태 비고/사유 */
     private String attendanceMemo;
 
-    // === StaffProfile JOIN 해서 가져올 정보 ===
+    // === StaffProfile JOIN ===
+
     /** 직원 시퀀스 */
     private Long staffId;
 
     /** 직원 이름 */
     private String staffName;
 
-    /** 직원 근무형태 (점주/직원/알바 등) */
+    /** 직원 근무형태 */
     private StaffEmploymentType staffEmploymentType;
 
 }

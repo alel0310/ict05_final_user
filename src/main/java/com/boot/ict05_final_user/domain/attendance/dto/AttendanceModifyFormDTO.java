@@ -11,11 +11,12 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 직원 근태 수정 시 사용하는 요청/응답 DTO.
+ * 근태 수정 폼 DTO.
  *
- * - 근무 일자, 출퇴근 시간, 근태 상태, 근무 시간 등을 수정할 때 사용됨
- * - 기존 Attendance 엔티티 데이터를 기반으로 Form 형태로 전달
- * - 화면(UI)에서 수정된 값을 다시 백엔드에 전달할 때 매핑되는 객체
+ * <p>
+ * 근태 수정 화면에 기존 데이터를 표시하거나,
+ * 수정된 데이터를 서버에 전송할 때 사용되는 DTO이다.
+ * </p>
  */
 @Data
 @AllArgsConstructor
@@ -43,14 +44,15 @@ public class AttendanceModifyFormDTO {
     /** 근태 비고/사유 */
     private String attendanceMemo;
 
-    // === StaffProfile JOIN 해서 가져올 정보 ===
+    // === Staff JOIN ===
+
     /** 직원 시퀀스 */
     private Long staffId;
 
     /** 직원 이름 */
     private String staffName;
 
-    /** 직원 근무형태 (점주/직원/알바 등) */
+    /** 직원 근무형태 */
     private StaffEmploymentType staffEmploymentType;
 
 }

@@ -3,6 +3,14 @@ package com.boot.ict05_final_user.domain.attendance.dto;
 import com.boot.ict05_final_user.domain.staff.entity.AttendanceStatus;
 import lombok.Data;
 
+/**
+ * 근태 조회 검색 조건 DTO.
+ *
+ * <p>
+ * 검색어, 상태, 페이지 크기 등
+ * 근태 리스트 조회 시 필요한 조건을 저장한다.
+ * </p>
+ */
 @Data
 public class AttendanceSearchDTO {
 
@@ -18,6 +26,6 @@ public class AttendanceSearchDTO {
     /** 가맹점 ID */
     private Long storeId;
 
-    /** 근태 상태 (LATE, NORMAL, ABSENT 등) */
+    /** 근태 상태 필터 (NORMAL, LATE, ABSENT 등) */
     private AttendanceStatus attendanceStatus;
 }
