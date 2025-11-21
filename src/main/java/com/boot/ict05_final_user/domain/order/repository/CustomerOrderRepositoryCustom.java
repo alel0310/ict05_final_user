@@ -7,7 +7,7 @@ import org.springframework.data.domain.Pageable;
 
 public interface CustomerOrderRepositoryCustom {
 
-    /** 로그인한 가맹점 기준 주문 검색 + 페이징 */
+    // 로그인한 가맹점 기준 주문 검색 + 페이징
     Page<CustomerOrder> searchOrders(Long storeId,
                                      CustomerOrderSearchDTO cond,
                                      Pageable pageable);

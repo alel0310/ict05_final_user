@@ -59,7 +59,7 @@ public class KitchenOrderService {
 
         List<OrderStatus> statuses = Arrays.asList(
                 OrderStatus.PREPARING,  // 접수/준비 대기
-                OrderStatus.COOKING,    // 🔥 조리중
+                OrderStatus.COOKING,    // 조리중
                 OrderStatus.READY       // 픽업대기
         );
 
@@ -96,8 +96,6 @@ public class KitchenOrderService {
 
         return toDto(order);
     }
-
-    // ===================== DTO 변환 ===================== //
 
     /**
      * 주문 엔티티를 주방 응답 DTO로 변환합니다.
@@ -150,8 +148,6 @@ public class KitchenOrderService {
                 .build();
     }
 
-    // ===================== 상태 매핑 ===================== //
-
     /**
      * 백엔드 상태를 프론트 표기 상태 문자열로 변환합니다.
      *
@@ -184,8 +180,6 @@ public class KitchenOrderService {
             default -> throw new IllegalArgumentException("Unknown status: " + status);
         };
     }
-
-    // ===================== 한글 매핑 ===================== //
 
     /**
      * 주문 유형을 한글 라벨로 변환합니다.

@@ -11,12 +11,6 @@ import java.util.Optional;
 
 public interface CustomerOrderRepository extends JpaRepository<CustomerOrder, Long>, CustomerOrderRepositoryCustom  {
 
-    // 주방 화면에서 쓰던 메서드라면 그대로 두고
-    List<CustomerOrder> findByStatusInOrderByOrderedAtAsc(List<OrderStatus> statuses);
-
-    // 주문 리스트 화면용: 최신순 전체
-    List<CustomerOrder> findAllByOrderByOrderedAtDesc();
-
     // 최신 주문 하나
     Optional<CustomerOrder> findTopByOrderByIdDesc();
 
@@ -26,11 +20,8 @@ public interface CustomerOrderRepository extends JpaRepository<CustomerOrder, Lo
             List<OrderStatus> statuses
     );
 
-    // ✅ 가맹점별 주문 조회
-    List<CustomerOrder> findByStore_Id(Long storeId, Sort sort);
-
     // 주문 + 매장 + 디테일 + 디테일의 메뉴를 한 번에 로딩
     @EntityGraph(attributePaths = {"store", "details", "details.menuIdFk"})
-    Optional<CustomerOrder> findById(Long id);  // ← 이름을 findById로!
+    Optional<CustomerOrder> findById(Long id);
 }
 

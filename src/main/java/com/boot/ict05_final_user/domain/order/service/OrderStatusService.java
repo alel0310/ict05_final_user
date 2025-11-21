@@ -18,6 +18,22 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 주문 상태 전이와 그에 따른 재고 차감/사용 로그 기록을 담당하는 서비스.
+ *
+ * <p><b>전이 규칙</b></p>
+ * <ul>
+ *   <li>{@link OrderStatus#PREPARING} → {@link OrderStatus#COOKING} 전이 시 재고 차감 수행</li>
+ *   <li>그 외 전이는 상태만 갱신</li>
+ * </ul>
+ *
+ * <p><b>재고 차감 흐름</b></p>
+ * <ol>
+ *   <li>레시피 기반 필요 수량 집계({@link MenuUsageCalculator})</li>
+ *   <li>소비 요청 DTO 변환 후 판매 소진 처리({@link StoreConsumptionService})</li>
+ *   <li>사용 로그 기록({@link MenuUsageMaterialLogService})</li>
+ * </ol>
+ */
 @Service
 @RequiredArgsConstructor
 public class OrderStatusService {
@@ -28,6 +44,15 @@ public class OrderStatusService {
     private final StoreMaterialRepository storeMaterialRepository;   // materialId -> storeMaterialId 매핑
     private final MenuUsageMaterialLogService usageLogService;       // 사용 로그 기록
 
+    /**
+     * 주문 상태를 갱신한다. 필요 시 재고 차감을 수행한다.
+     *
+     * <p>규칙: {@code PREPARING → COOKING} 전이에서만 재고 차감/로그 기록을 트리거한다.</p>
+     *
+     * @param orderId 주문 ID
+     * @param next    다음 상태
+     * @throws IllegalArgumentException 주문이 존재하지 않을 때
+     */
     @Transactional
     public void updateStatus(Long orderId, OrderStatus next) {
         CustomerOrder order = orderRepo.findById(orderId)
@@ -41,7 +66,19 @@ public class OrderStatusService {
         }
     }
 
-    // ====== 차감 ======
+    /**
+     * 레시피에 따른 필요 수량을 집계하고, 판매 소진 처리 및 사용 로그를 기록한다.
+     *
+     * <p>처리 순서:</p>
+     * <ol>
+     *   <li>필요 수량 집계: materialId → 총 필요 수량</li>
+     *   <li>상관키 생성</li>
+     *   <li>소비 서비스 호출</li>
+     *   <li>사용 로그 기록</li>
+     * </ol>
+     *
+     * @param order 대상 주문
+     */
     private void applyUsage(CustomerOrder order) {
         // 1) 주문 전체 필요 재료 합계 (materialId -> 총필요수량)
         Map<Long, BigDecimal> need = usageCalculator.calcMaterialsForOrder(order);
@@ -54,13 +91,19 @@ public class OrderStatusService {
         StoreConsumeRequestDTO req = toConsumeRequest(storeId, need, corr);
         storeConsumptionService.consume(storeId, req);
 
-        // 4) 사용 로그 기록(나중에 롤백/정산에 필요)
+        // 4) 사용 로그 기록
         usageLogService.logDeduct(order, need, corr);
     }
 
     /**
-     * materialId->qty 맵을 StoreConsumptionService 가 받는
-     * storeMaterialId->qty 라인 리스트로 변환
+     * 필요 수량 맵(materialId → qty)을 재고 소비 서비스가 요구하는
+     * DTO(storeMaterialId → qty 라인 리스트)로 변환한다.
+     *
+     * @param storeId        매장 ID
+     * @param need           재료별 필요 수량 맵
+     * @param correlationId  상관키
+     * @return 판매 소진 요청 DTO
+     * @throws IllegalArgumentException 매장-재료 매핑이 없을 때
      */
     private StoreConsumeRequestDTO toConsumeRequest(Long storeId,
                                                     Map<Long, BigDecimal> need,
@@ -76,7 +119,7 @@ public class OrderStatusService {
             Long materialId = e.getKey();                  // 본사 재료 PK
             BigDecimal qty = e.getValue();                 // 필요 수량
 
-            // storeId + materialId -> storeMaterialId 조회 (없으면 예외)
+            // storeId + materialId -> storeMaterialId 조회
             Long storeMaterialId = storeMaterialRepository
                     .findByStore_IdAndMaterial_Id(storeId, materialId)
                     .orElseThrow(() ->

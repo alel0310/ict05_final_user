@@ -14,13 +14,53 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-// 메뉴 레시피를 바탕으로 "이 주문을 만들려면 재료가 얼마 필요해?"를 계산하는 컴포넌트
+/**
+ * 메뉴 레시피를 바탕으로 주문 제작에 필요한 재료 총량을 계산하는 컴포넌트.
+ *
+ * <p>
+ * 동작 개요:
+ * <ol>
+ *   <li>주문 내 각 {@link CustomerOrderDetail} 에서 메뉴와 수량을 취득</li>
+ *   <li>메뉴별 레시피({@link MenuRecipe})를 조회하여 재료별 1개당 필요 수량을 가져옴</li>
+ *   <li>주문 수량을 곱하여 재료별 총 필요 수량을 누적 집계</li>
+ *   <li>가공-only 항목 등 재고와 무관한 레시피(재료가 null)는 제외</li>
+ * </ol>
+ * </p>
+ *
+ * <p>
+ * 단위/정밀도:
+ * <ul>
+ *   <li>레시피 단위(예: g, ml, EA 등) 그대로 합산</li>
+ *   <li>단위 변환(예: kg → g)은 수행하지 않음</li>
+ *   <li>{@link BigDecimal} 정밀도 유지, 별도 반올림 규칙 적용하지 않음</li>
+ * </ul>
+ * </p>
+ *
+ * <p>
+ * 반환 형태: {@code materialId → 총 필요 수량}. 재료 ID 기준으로 합산됩니다.
+ * </p>
+ */
 @Component
 @RequiredArgsConstructor
 public class MenuUsageCalculator {
 
-    private final MenuRecipeRepository recipeRepo;                              // 메뉴별 레시피 조회
+    private final MenuRecipeRepository recipeRepo; // 메뉴별 레시피 조회
 
+    /**
+     * 주문 전체에 대해 재료별 필요 수량을 계산합니다.
+     *
+     * <p>
+     * 처리 규칙:
+     * <ul>
+     *   <li>주문 디테일 수량이 null이면 1로 간주</li>
+     *   <li>레시피의 {@code material} 이 null인 항목은 집계 제외</li>
+     *   <li>동일 {@code materialId} 는 누적 합산</li>
+     * </ul>
+     * </p>
+     *
+     * @param order 계산 대상 주문
+     * @return 재료 ID를 키로, 총 필요 수량을 값으로 갖는 맵
+     */
     public Map<Long, BigDecimal> calcMaterialsForOrder(CustomerOrder order) {   // 주문 전체의 필요 재료 합계
         Map<Long, BigDecimal> need = new HashMap<>();                           // materialId -> 총 필요수량
 

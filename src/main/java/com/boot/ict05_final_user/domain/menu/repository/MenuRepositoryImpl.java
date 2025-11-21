@@ -23,6 +23,12 @@ import org.springframework.util.StringUtils;
 
 import java.util.*;
 
+/**
+ * {@link MenuRepositoryCustom} 구현체.
+ *
+ * <p>QueryDSL을 사용하여 가맹점 기준의 메뉴 목록/상세 조회를 제공합니다.
+ * 검색/필터/정렬/페이징을 지원하며, 품절 상태는 가맹점(Store) 단위로 적용됩니다.</p>
+ */
 @Slf4j
 @Repository
 @RequiredArgsConstructor
@@ -30,8 +36,23 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
 
     private final JPAQueryFactory queryFactory;
 
-    // com.boot.ict05_final_user.domain.menu.repository.MenuRepositoryImpl
-
+    /**
+     * 로그인한 가맹점(storeId) 기준으로 메뉴 목록을 조회합니다.
+     *
+     * <ul>
+     *   <li>검색: 이름(대/소문자 무시)</li>
+     *   <li>카테고리 필터: menuCategoryId 우선, 없으면 categoryName 포함 검색</li>
+     *   <li>판매 상태: 파라미터 없으면 기본으로 {@code MenuShow.SHOW}</li>
+     *   <li>품절 상태: 가맹점별 {@code StoreMenu} 조인 후 필터</li>
+     *   <li>정렬: {@link Pageable#getSort()} → QueryDSL OrderSpecifier로 변환</li>
+     *   <li>페이징: ID 사전 조회 후 실제 행 조회(두 단계)</li>
+     * </ul>
+     *
+     * @param storeId  가맹점 ID
+     * @param dto      검색/필터 파라미터(Null 허용)
+     * @param pageable 페이징/정렬 정보
+     * @return 메뉴 목록 페이지
+     */
     @Override
     public Page<MenuListDTO> listMenu(Long storeId, MenuSearchDTO dto, Pageable pageable) {
         if (dto == null) dto = new MenuSearchDTO();
@@ -53,7 +74,7 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
             where = andAll(where, menu.menuShow.eq(MenuShow.SHOW));
         }
 
-        // 🔹 품절 필터 (가맹점별)
+        // 품절 필터 (가맹점별)
         where = andAll(where, eqSoldOutStatus(dto, storeMenu));
 
         // 정렬 (기본: menuId DESC)
@@ -68,7 +89,7 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
                 .leftJoin(menu.menuCategory, category)
                 .leftJoin(storeMenu)
                 .on(storeMenu.menu.eq(menu)
-                        .and(storeMenu.store.id.eq(storeId)))  // 🔹 로그인한 가맹점 기준
+                        .and(storeMenu.store.id.eq(storeId)))  // 로그인한 가맹점 기준
                 .where(where)
                 .orderBy(toOrderSpec(menu, sort))
                 .offset(pageable.getOffset())
@@ -93,14 +114,14 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
                         menu.menuKcal,
                         menu.menuInformation,
                         menu.menuCode,
-                        storeMenu.storeMenuSoldout,   // 가맹점별 품절
+                        storeMenu.storeMenuSoldout,
                         menu.menuShow
                 ))
                 .from(menu)
                 .leftJoin(menu.menuCategory, category)
                 .leftJoin(storeMenu)
                 .on(storeMenu.menu.eq(menu)
-                        .and(storeMenu.store.id.eq(storeId)))  // 🔹 로그인한 가맹점 기준
+                        .and(storeMenu.store.id.eq(storeId)))  // 로그인한 가맹점 기준
                 .where(menu.menuId.in(pageIds))
                 .orderBy(toOrderSpec(menu, sort))
                 .fetch();
@@ -121,7 +142,7 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
                 d.setMenuKcal(t.get(menu.menuKcal));
                 d.setMenuInformation(t.get(menu.menuInformation));
                 d.setMenuCode(t.get(menu.menuCode));
-                d.setStoreMenuSoldout(t.get(storeMenu.storeMenuSoldout)); // null 가능
+                d.setStoreMenuSoldout(t.get(storeMenu.storeMenuSoldout));
                 d.setMenuShow(t.get(menu.menuShow));
                 return d;
             });
@@ -142,9 +163,16 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
         return new PageImpl<>(content, pageable, total != null ? total : 0L);
     }
 
-    // ====== 검색 조건 헬퍼들 ======
-
-    /** 이름 검색 */
+    /**
+     * 이름/설명 검색 조건을 생성합니다.
+     *
+     * <p>현재 구현은 {@code type}이 {@code name}이거나 기타인 경우 모두
+     * {@code menu.menuName.containsIgnoreCase(s)}만 적용합니다.</p>
+     *
+     * @param dto  검색 DTO
+     * @param menu QMenu
+     * @return BooleanExpression 또는 null
+     */
     private BooleanExpression eqNameOrInfo(MenuSearchDTO dto, QMenu menu) {
         String kw = dto.getS();
         if (!StringUtils.hasText(kw)) return null;
@@ -156,7 +184,16 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
         };
     }
 
-    /** 카테고리 필터 */
+    /**
+     * 카테고리 검색 조건을 생성합니다.
+     *
+     * <p>우선순위: menuCategoryId → categoryName 포함 검색 → 조건 없음</p>
+     *
+     * @param dto      검색 DTO
+     * @param menu     QMenu
+     * @param category QMenuCategory
+     * @return BooleanExpression 또는 null
+     */
     private BooleanExpression eqCategory(MenuSearchDTO dto, QMenu menu, QMenuCategory category) {
         // 1) menuCategoryId 우선 사용
         if (dto.getMenuCategoryId() != null && dto.getMenuCategoryId() != 0) {
@@ -169,14 +206,24 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
         return null;
     }
 
-    /** 품절상태 필터 – StoreMenu 기준 */
+    /**
+     * 가맹점 품절 상태 필터 조건을 생성합니다.
+     *
+     * @param dto       검색 DTO
+     * @param storeMenu QStoreMenu
+     * @return BooleanExpression 또는 null
+     */
     private BooleanExpression eqSoldOutStatus(MenuSearchDTO dto, QStoreMenu storeMenu) {
         if (dto.getStoreMenuSoldout() == null) return null;
         return storeMenu.storeMenuSoldout.eq(dto.getStoreMenuSoldout());
     }
 
-
-    /** 여러 조건 and 결합 */
+    /**
+     * 여러 조건을 AND로 결합합니다.
+     *
+     * @param exps 결합할 조건들
+     * @return 결합된 표현식 또는 null
+     */
     private BooleanExpression andAll(BooleanExpression... exps) {
         BooleanExpression result = null;
         for (BooleanExpression exp : exps) {
@@ -186,8 +233,15 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
         return result;
     }
 
-    // 정렬 변환 (pageable Sort → QueryDSL OrderSpecifier[])
-
+    /**
+     * {@link Sort} 정보를 QueryDSL의 {@code OrderSpecifier[]}로 변환합니다.
+     *
+     * <p>지원 필드: menuId, menuName, menuPrice, menuKcal (기타는 menuId DESC)</p>
+     *
+     * @param menu QMenu
+     * @param sort Spring Data Sort
+     * @return OrderSpecifier 배열
+     */
     private com.querydsl.core.types.OrderSpecifier<?>[] toOrderSpec(QMenu menu, Sort sort) {
         return sort.stream()
                 .map(order -> {
@@ -206,8 +260,15 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
                 .toArray(com.querydsl.core.types.OrderSpecifier[]::new);
     }
 
-    // ====== 상세 조회 (재료 목록 중심) ======
-
+    /**
+     * 단일 메뉴의 상세 정보를 조회합니다.
+     *
+     * <p>레시피/재료를 조인해 재료 이름 리스트를 구성하며,
+     * 중복을 제거하고 입력 순서를 보존합니다.</p>
+     *
+     * @param menuId 메뉴 ID
+     * @return 메뉴 상세 DTO(없으면 null)
+     */
     @Override
     public MenuDetailDTO getMenuDetail(Long menuId) {
         QMenu menu = QMenu.menu;
@@ -227,7 +288,7 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
                         menu.menuInformation,
                         menu.menuCode,
                         menu.menuShow,
-                        material.name       // 🔹 레시피 재료 이름
+                        material.name
                 ))
                 .from(menu)
                 .leftJoin(menu.menuCategory, category)
@@ -256,7 +317,7 @@ public class MenuRepositoryImpl implements MenuRepositoryCustom {
         dto.setMenuCode(first.get(menu.menuCode));
         dto.setMenuShow(first.get(menu.menuShow));
 
-        // 🔹 재료 이름 목록만 추출해서 DTO에 세팅
+        // 재료 이름 목록만 추출해서 DTO에 세팅
         Set<String> ingredientNames = new LinkedHashSet<>();
         for (var t : rows) {
             String name = t.get(material.name);
