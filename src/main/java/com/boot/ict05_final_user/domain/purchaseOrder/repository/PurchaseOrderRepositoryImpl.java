@@ -74,7 +74,7 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
                         po.itemCount,
                         po.totalPrice,
                         po.orderDate,
-                        po.actualDeliveryDate,
+                        po.actualDeliveryDate.as("actualDeliveryDate"),
                         po.priority,
                         po.status
                 ))
@@ -221,7 +221,7 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
                         po.orderCode.as("orderCode"),
                         po.supplier,
                         po.orderDate.as("orderDate"),
-                        po.actualDeliveryDate.as("actualDate"),
+                        po.actualDeliveryDate.as("actualDeliveryDate"),
                         po.status,
                         po.priority,
                         po.remark.as("notes"),
@@ -706,12 +706,18 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
     public int updateStatusById(Long id, PurchaseOrderStatus status) {
         QPurchaseOrder po = QPurchaseOrder.purchaseOrder;
 
-        // 기존 @Modifying(clearAutomatically = true, flushAutomatically = true) 와 비슷한 효과
         em.flush();
 
-        long updated = queryFactory
+        var update = queryFactory
                 .update(po)
-                .set(po.status, status)
+                .set(po.status, status);
+
+        // 검수완료로 바뀌는 경우에만 실제납기일을 오늘 날짜로 세팅
+        if (status == PurchaseOrderStatus.DELIVERED) {
+            update.set(po.actualDeliveryDate, LocalDate.now());
+        }
+
+        long updated = update
                 .where(po.id.eq(id))
                 .execute();
 
@@ -726,9 +732,15 @@ public class PurchaseOrderRepositoryImpl implements PurchaseOrderRepositoryCusto
 
         em.flush();
 
-        long updated = queryFactory
+        var update = queryFactory
                 .update(po)
-                .set(po.status, status)
+                .set(po.status, status);
+
+        if (status == PurchaseOrderStatus.DELIVERED) {
+            update.set(po.actualDeliveryDate, LocalDate.now());
+        }
+
+        long updated = update
                 .where(po.orderCode.eq(orderCode))
                 .execute();
 

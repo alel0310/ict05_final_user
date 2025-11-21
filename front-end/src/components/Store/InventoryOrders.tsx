@@ -221,7 +221,8 @@ export function InventoryOrders() {
       setOrders(prev => prev.map(o => o.id === orderId
         ? { ...o, status: newStatus,
             actualDate: newStatus === "DELIVERED"
-              ? new Date().toISOString().split("T")[0] : o.actualDate }
+              ? new Date().toISOString().split("T")[0]
+              : o.actualDate }     
         : o));
 
       // 3️⃣ 가맹점(내 서버) 상태 변경
@@ -633,7 +634,7 @@ export function InventoryOrders() {
                 <div>
                   <span className="text-sm text-dark-gray">실제납기일</span>
                   <p className="font-medium">
-                    {selectedOrder?.actualDate && selectedOrder.actualDate.trim() !== '' ? selectedOrder.actualDate : '-'}
+                    {selectedOrder?.actualDeliveryDate && selectedOrder.actualDeliveryDate.trim() !== '' ? selectedOrder.actualDeliveryDate : '-'}
                   </p>
                 </div>
                 <div>
