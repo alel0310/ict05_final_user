@@ -5,6 +5,7 @@ const config: CapacitorConfig = {
   appName: 'Toast Lab App',
   webDir: 'build',
   server: {
+    url: 'https://toastlab.duckdns.org/user',
     cleartext: true,
   },
 };
