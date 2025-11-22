@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { 
   Building2, 
   Store, 
@@ -25,9 +25,13 @@ import {
 import { Button } from '../ui/button';
 import { useNavigate } from "react-router-dom";
 import api from "../../lib/authApi";
-import FcmForegroundListener from '../fcm/FcmForegroundListener';
-import { getMessagingIfSupported } from "../../lib/firebase";
-import { deleteToken } from "firebase/messaging";
+import { Capacitor } from '@capacitor/core';
+import { toast } from 'sonner';
+import {
+  cleanupPushNotifications,
+  addNotificationListenersNative,
+  addForegroundListenerWeb,
+} from '../../lib/fcm';
 import defaultProfile from "/images/default-profile.png"; // 기본 이미지
 
 interface LayoutProps {
@@ -132,67 +136,22 @@ export function Layout({ children, userType, currentPage, onPageChange, memberNa
 
   const navigate = useNavigate();
 
-  const parseJwt = (t: string): any | null => {
-    try { return JSON.parse(atob((t || "").split(".")[1] || "")); } catch { return null; }
-  };
-
   const handleLogout = async () => {
-    const accessToken = localStorage.getItem("accessToken") || "";
-    const refreshToken = localStorage.getItem("refreshToken") || "";
-    const fcmToken    = localStorage.getItem("fcm_token") || "";
-
-    // 1) storeId 확보(JWT → /fcm/pref/me 순)
-    let storeId: number | undefined;
-    if (accessToken) {
-      const claims = parseJwt(accessToken);
-      storeId = claims?.storeId ?? claims?.sid ?? undefined;
-    }
-    if (!storeId && accessToken) {
-      try {
-        const me = await api.get("/fcm/pref/me", {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        storeId = me?.data?.storeId ?? undefined;
-      } catch { /* ignore */ }
-    }
-
     try {
-      // 2) 토픽 구독 해제
-      if (fcmToken && accessToken && storeId) {
-        const hdr = { headers: { Authorization: `Bearer ${accessToken}` } };
-        const t = encodeURIComponent(fcmToken);
-        await Promise.allSettled([
-          api.post(`/fcm/topic/unsubscribe?token=${t}&topic=store-${storeId}`, {}, hdr),
-          api.post(`/fcm/topic/unsubscribe?token=${t}&topic=inv-low-${storeId}`, {}, hdr),
-          api.post(`/fcm/topic/unsubscribe?token=${t}&topic=expire-soon-${storeId}`, {}, hdr),
-        ]);
-      }
+      // 1) 서버 및 클라이언트의 FCM 토큰 정리
+      await cleanupPushNotifications();
 
-      // 3) 서버 토큰 비활성(엔드포인트 있을 때)
-      if (fcmToken && accessToken) {
-        await api.post(
-          "/fcm/token/revoke",
-          { token: fcmToken, platform: "WEB", deviceId: navigator.userAgent.slice(0,120) },
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        ).catch(() => {});
-      }
-
-      // 4) 브라우저 FCM 토큰 삭제
-      try {
-        const messaging = await getMessagingIfSupported();
-        if (messaging) await deleteToken(messaging);
-      } catch { /* ignore */ }
-
-      // 5) 서버 로그아웃(리프레시 무효화)
+      // 2) 서버 로그아웃(리프레시 토큰 무효화)
+      const refreshToken = localStorage.getItem("refreshToken");
       if (refreshToken) {
         await api.post("/logout", { refreshToken }).catch(() => {});
       }
     } finally {
-      // 6) 클라이언트 정리 & 이동
+      // 3) 클라이언트 로컬 정보 최종 정리 및 로그인 페이지로 이동
       delete (api as any).defaults?.headers?.common?.Authorization;
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
-      localStorage.removeItem("fcm_token");
+      // fcm_token은 cleanupPushNotifications에서 이미 처리됨
       navigate("/login", { replace: true });
     }
   };
@@ -207,8 +166,7 @@ export function Layout({ children, userType, currentPage, onPageChange, memberNa
     );
   };
 
-    // 선택: 간단한 path -> 메뉴 매핑
-  const navigateByLink = (rawLink: string) => {
+  const navigateByLink = useCallback((rawLink: string) => {
     if (!rawLink) return;
 
     // 1) 절대/상대 URL 모두 처리
@@ -224,15 +182,9 @@ export function Layout({ children, userType, currentPage, onPageChange, memberNa
     const map: Record<string, string> = {
       "/": "dashboard",
       "/dashboard": "dashboard",
-
-      // 📢 공지사항: NoticeEducation.tsx
       "/notice/list": "notice",
-
-      // 🔔 재고부족 / 유통임박: InventoryManagement.tsx
       "/inventory/low": "inventory-management",
       "/inventory/expire": "inventory-management",
-
-      // 기존 리포트/설정 매핑 (이미 쓰던 것 유지)
       "/reports/kpi": "kpi-report",
       "/reports/orders": "order-report",
       "/settings/notifications": "settings-notifications",
@@ -242,10 +194,38 @@ export function Layout({ children, userType, currentPage, onPageChange, memberNa
     if (pageId) {
       onPageChange(pageId);
     } else {
-      // 매핑 안 된 건 그냥 전체 URL로 이동 (fallback)
       window.location.href = url.toString();
     }
-  };
+  }, [onPageChange]);
+
+  useEffect(() => {
+    const isNative = Capacitor.getPlatform() !== 'web';
+
+    if (isNative) {
+      addNotificationListenersNative(navigateByLink);
+    } else {
+      const unsubscribe = addForegroundListenerWeb((payload: any) => {
+        console.log('[FCM] Foreground:', payload.notification?.title, payload.notification?.body);
+        toast.info(payload.notification?.title || '새 알림', {
+          description: payload.notification?.body,
+          duration: 5000,
+          action: {
+            label: '보기',
+            onClick: () => {
+              if (payload.data?.link) {
+                navigateByLink(payload.data.link);
+              }
+            },
+          },
+        });
+      });
+      return () => {
+        if (typeof unsubscribe === 'function') {
+          unsubscribe();
+        }
+      };
+    }
+  }, [navigateByLink]);
 
   const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_API_BASE_URL;
   const staticRoot = BACKEND_BASE_URL.replace(/\/api\/?$/, ""); 
@@ -429,8 +409,6 @@ export function Layout({ children, userType, currentPage, onPageChange, memberNa
         <main className="flex-1 p-6 overflow-auto">
           {children}
         </main>
-        {/* ✅ 포어그라운드 FCM 리스너: 최상위에서 한 번만 등록 */}
-        <FcmForegroundListener onNavigate={navigateByLink} />
       </div>
     </div>
   );

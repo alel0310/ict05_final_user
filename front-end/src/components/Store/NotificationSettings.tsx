@@ -8,7 +8,8 @@ import { KPICard } from '../Common/KPICard';
 import { Switch } from '../ui/switch';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
-import { requestFcmToken, deleteFcmToken } from '../../lib/firebase';
+import { Capacitor } from '@capacitor/core';
+import { initializePushNotifications, cleanupPushNotifications } from '../../lib/fcm';
 
 type Pref = {
   catNotice: boolean;
@@ -52,10 +53,18 @@ export default function NotificationSettings() {
   // 권한 요청
   const requestPerm = async () => {
     try {
-      const p = await Notification.requestPermission();
-      setPerm(p);
-      if (p === 'granted') toast.success('알림 권한이 허용되었습니다.');
-      else if (p === 'denied') toast.warning('알림 권한이 차단되었습니다. 브라우저 설정에서 변경할 수 있습니다.');
+      let newPerm: NotificationPermission;
+      if (Capacitor.getPlatform() !== 'web') {
+        const permStatus = await PushNotifications.requestPermissions();
+        newPerm = permStatus.receive === 'granted' ? 'granted' : permStatus.receive === 'denied' ? 'denied' : 'default';
+      } else {
+        newPerm = await Notification.requestPermission();
+      }
+      
+      setPerm(newPerm);
+      if (newPerm === 'granted') toast.success('알림 권한이 허용되었습니다.');
+      else if (newPerm === 'denied') toast.warning('알림 권한이 차단되었습니다. 브라우저/앱 설정에서 변경할 수 있습니다.');
+
     } catch {
       toast.error('알림 권한을 요청하는 중 오류가 발생했습니다.');
     }
@@ -65,29 +74,24 @@ export default function NotificationSettings() {
   const registerToken = async () => {
     setTokenBusy(true);
     try {
-      // 1) 토큰 발급(권한 포함)
-      const token = await requestFcmToken();
+      // 1) 토큰 발급(플랫폼별 분기 처리 위임)
+      const token = await initializePushNotifications();
       if (!token) {
-        toast.warning('FCM 토큰을 가져오지 못했습니다. 브라우저 권한을 확인하세요.');
+        toast.warning('FCM 토큰을 가져오지 못했습니다. 브라우저/앱의 알림 권한을 확인하세요.');
         return;
       }
 
-      // 2) 서버 업서트
+      // 2) 서버 업서트 (fcm.ts의 registerTokenWithServer와 유사하나, 여기서는 UI 옵션(applySubs)을 고려해야 하므로 직접 호출)
       await api.post('/fcm/token', {
         token,
-        platform: 'WEB',
-        deviceId: 'browser',
-        appType: 'STORE',
+        platform: Capacitor.getPlatform() !== 'web' ? Capacitor.getPlatform().toUpperCase() : 'WEB',
+        deviceId: 'browser', // 네이티브의 경우 실제 ID를 가져와야 하지만, 여기서는 단순화
       });
 
-      // 3) 선호도 즉시 반영(옵션: 현재 화면의 applySubs에 따라)
+      // 3) 선호도 즉시 반영
       if (applySubs && pref?.storeId) {
-        // 서버가 /fcm/pref/me 저장 시에도 반영하지만 즉시성 위해 한 번 더 저장 호출
         await api.put('/fcm/pref/me', {
-          catNotice: pref.catNotice,
-          catStockLow: pref.catStockLow,
-          catExpireSoon: pref.catExpireSoon,
-          thresholdDays: pref.thresholdDays ?? 3,
+          ...pref,
           applySubscriptions: true,
         });
       }
@@ -106,16 +110,7 @@ export default function NotificationSettings() {
   const revokeToken = async () => {
     setTokenBusy(true);
     try {
-      const token = localStorage.getItem('fcm_token');
-      if (token) {
-        await api.post('/fcm/token/revoke', {
-          token,
-          platform: 'WEB',
-          deviceId: 'browser',
-        }).catch(() => {});
-      }
-      try { await deleteFcmToken(); } catch {}
-      localStorage.removeItem('fcm_token');
+      await cleanupPushNotifications();
       setCurrentToken(null);
       toast.success('디바이스 알림 등록이 해제되었습니다.');
     } catch (e: any) {

@@ -9,7 +9,7 @@ import { Store, Lock, Mail } from "lucide-react";
 import { toast } from "sonner";
 import axios from "axios";
 import api from "../../lib/authApi";
-import { requestFcmToken } from "../../lib/firebase";
+import { initializePushNotifications, registerTokenWithServer } from "../../lib/fcm";
 
 // JWT 파싱(스토어ID를 토큰에서 꺼낼 때 사용; 없으면 /me 호출)
 function parseJwt(token: string): any | null {
@@ -96,85 +96,18 @@ export default function Login() {
           undefined;
       }
 
-      // 3) FCM 토큰 발급 → 서버 업서트 → 토픽 구독(공지/재고부족/유통임박)
-      try {
-        const fcmToken = await requestFcmToken(); // 권한 요청 포함
-        if (fcmToken && accessToken) {
-          const authHeader = {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          };
-          const encToken = encodeURIComponent(fcmToken);
-
-          // 3-1) 토큰 업서트
-          await api.post(
-            "/fcm/token",
-            {
-              token: fcmToken,
-              platform: "WEB",
-              deviceId: navigator.userAgent.slice(0, 120),
-              appType: "STORE",
-            },
-            authHeader
-          );
-
-          // 3-2) 선호도(/fcm/pref/me) 조회해서 카테고리별 on/off 확인
-          let catNotice = true;
-          let catStockLow = true;
-          let catExpireSoon = true;
-
-          try {
-            const prefRes = await api.get("/fcm/pref/me", authHeader);
-            catNotice = prefRes.data?.catNotice ?? true;
-            catStockLow = prefRes.data?.catStockLow ?? true;
-            catExpireSoon = prefRes.data?.catExpireSoon ?? true;
-
-            // storeId를 아직 못 구한 경우 pref에서 보완
-            if (!storeId) {
-              storeId = prefRes.data?.storeId ?? storeId;
-            }
-          } catch (e) {
-            console.warn("[FCM] /fcm/pref/me 조회 실패, 기본값(true) 사용", e);
+      // 3) FCM 초기화 및 서버 등록
+      if (accessToken && storeId) {
+        try {
+          const fcmToken = await initializePushNotifications();
+          if (fcmToken) {
+            await registerTokenWithServer(fcmToken, storeId);
           }
-
-          // 3-3) 실제 토픽 구독
-          if (storeId) {
-            const baseUrl = "/fcm/topic/subscribe";
-            const opts = authHeader;
-
-            // 공지(store-{storeId})
-            if (catNotice) {
-              await api.post(
-                `${baseUrl}?token=${encToken}&topic=store-${storeId}`,
-                {},
-                opts
-              );
-            }
-
-            // 재고부족(inv-low-{storeId})
-            if (catStockLow) {
-              await api.post(
-                `${baseUrl}?token=${encToken}&topic=inv-low-${storeId}`,
-                {},
-                opts
-              );
-            }
-
-            // 유통임박(expire-soon-{storeId})
-            if (catExpireSoon) {
-              await api.post(
-                `${baseUrl}?token=${encToken}&topic=expire-soon-${storeId}`,
-                {},
-                opts
-              );
-            }
-          } else {
-            console.warn(
-              "[FCM] storeId를 찾지 못해 토픽 구독을 생략했습니다. (/me 또는 JWT 클레임 확인 필요)"
-            );
-          }
+        } catch (fcme) {
+          console.warn("[FCM] 등록/구독 실패(무시 가능):", fcme);
         }
-      } catch (fcme) {
-        console.warn("[FCM] 등록/구독 실패(무시 가능):", fcme);
+      } else {
+        console.warn("[FCM] accessToken 또는 storeId가 없어 FCM 등록을 건너뜁니다.");
       }
 
       toast.success("로그인 성공");

@@ -47,3 +47,4 @@ spy.log
 *.log
 python-pdf-download/__pycache__
 python-pdf-download/component/__pycache__
+/front-end/android/app/google-services.json
