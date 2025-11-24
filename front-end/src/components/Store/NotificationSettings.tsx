@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import api from '../../lib/authApi';
+import axios from 'axios';
 import { Bell, AlertTriangle, Clock3, ShieldCheck, ShieldAlert, RefreshCw, Smartphone, BellRing, BellOff } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -10,6 +10,8 @@ import { Label } from '../ui/label';
 import { Input } from '../ui/input';
 import { Capacitor } from '@capacitor/core';
 import { initializePushNotifications, cleanupPushNotifications } from '../../lib/fcm';
+import { PushNotifications } from '@capacitor/push-notifications';
+import api from '../../lib/authApi';
 
 type Pref = {
   catNotice: boolean;
@@ -32,7 +34,17 @@ export default function NotificationSettings() {
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await api.get('/fcm/pref/me');
+        // ✅ 문제 해결: authApi 대신 수동으로 axios 호출
+        const token = localStorage.getItem('accessToken');
+        if (!token) throw new Error('로그인이 필요합니다.');
+
+        const { data } = await axios.get('/fcm/pref/me', {
+          baseURL: import.meta.env.VITE_BACKEND_API_BASE_URL,
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        
         setPref({
           catNotice: !!data.catNotice,
           catStockLow: !!data.catStockLow,
