@@ -4,12 +4,16 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
 /**
- * 가맹점 재고 커스텀 구현
+ * {@link StoreInventoryRepositoryCustom} 구현체(현재 빈 구현).
  *
- * 현재는 확장 포인트만 두고 빈 구현 상태
+ * <p>가이드</p>
+ * <ul>
+ *   <li>QueryDSL 사용 시 JPAQueryFactory 주입</li>
+ *   <li>성능/인덱스 전략은 메서드 Javadoc에 근거 기록</li>
+ * </ul>
  */
 @Repository
 @RequiredArgsConstructor
 public class StoreInventoryRepositoryImpl implements StoreInventoryRepositoryCustom {
-    // JPAQueryFactory 등 의존성 주입 후 커스텀 메서드 구현 예정
+    // 예. private final JPAQueryFactory queryFactory;
 }
