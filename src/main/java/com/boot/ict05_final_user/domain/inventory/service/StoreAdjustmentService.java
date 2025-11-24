@@ -34,9 +34,9 @@ public class StoreAdjustmentService {
         Objects.requireNonNull(req, "request must not be null");
 
         final Long storeMaterialId = req.getStoreMaterialId();
-        final BigDecimal newQty = scale3(req.getNewQuantity());
-        final AdjustmentReason reason = AdjustmentReason.valueOf(req.getReason());
-        final LocalDateTime at = Optional.ofNullable(req.getAdjustDate()).orElseGet(LocalDateTime::now);
+        final BigDecimal newQty = scale3(BigDecimal.valueOf(req.getNewQuantity()));
+        final AdjustmentReason reason = AdjustmentReason.valueOf(req.getReason().trim().toUpperCase());
+        final LocalDateTime at = LocalDateTime.now();
 
         // 대상 검증
         final StoreMaterial sm = storeMaterialRepository.findById(storeMaterialId)

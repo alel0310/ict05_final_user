@@ -35,7 +35,7 @@ export async function createStoreMaterial(
  * 가맹점 재료 목록 조회
  * 
  * GET /API/store/material/list
- 
+ * 
  * JWT(@AuthenticationPrincipal) 기반: 파라미터 없음
  */
 export async function fetchStoreMaterials(): Promise<StoreMaterialResponse[]> {

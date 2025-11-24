@@ -1,14 +1,14 @@
 package com.boot.ict05_final_user.domain.inventory.repository;
 
-import java.util.Optional;
-
 /**
- * 가맹점 재고 커스텀 쿼리
+ * 가맹점 집계 재고 커스텀 쿼리 확장 포인트.
  *
- * 필요 시 QueryDSL 기반 기능을 여기에 확장
+ * <p>예시</p>
+ * <ul>
+ *   <li>카테고리/온도대/상태별 집계</li>
+ *   <li>예측 수요 기반 가용 재고 산출</li>
+ * </ul>
  */
 public interface StoreInventoryRepositoryCustom {
-
-    // 예시 확장 포인트
     // Optional<BigDecimal> findProjectedQtyByStoreMaterial(Long storeId, Long storeMaterialId);
 }

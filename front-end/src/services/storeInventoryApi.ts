@@ -39,17 +39,15 @@ export async function fetchStoreInventory(): Promise<StoreInventoryResponse[]> {
   return res.data;
 }
 
-
-/** ★ 신규: 입고(inbound) 등록
+/** 입고(inbound) 등록
  * - POST /API/store/inventory/in
  * - 반환: 생성된 입고 PK (백엔드가 Long을 반환한다고 가정)
  */
-/** ★ 입고(inbound) 등록 */
 export async function inboundStoreInventory(payload: StoreInventoryInWriteDTO): Promise<number> {
   if (
     !payload ||
     typeof payload.storeInventoryId !== 'number' ||
-    typeof payload.storeMaterialId !== 'number' ||  // ★ 추가
+    typeof payload.storeMaterialId !== 'number' ||  // 추가 검증
     typeof payload.quantity !== 'number' ||
     Number.isNaN(payload.quantity) ||
     payload.quantity < 0
@@ -59,13 +57,6 @@ export async function inboundStoreInventory(payload: StoreInventoryInWriteDTO): 
   const res = await api.post<number>(`${BASE_PATH}/in`, payload);
   return res.data;
 }
-
-/** (레거시) 재입고: 재고 수량만 증가 — 더 이상 사용하지 않음 (호출부 제거)
-export async function restockStoreInventory(payload: StoreInventoryRestockRequest): Promise<void> {
-  await api.post(`${BASE_PATH}/restock`, payload);
-}
-*/
-
 
 /**
  * 재고 조정
@@ -79,7 +70,6 @@ export async function restockStoreInventory(payload: StoreInventoryRestockReques
 export async function adjustStoreInventory(
   payload: StoreInventoryAdjustmentWriteDTO,
 ): Promise<void> {
-  // 최소 방어: newQuantity가 유효한지 클라이언트에서 1차 확인
   if (
     payload == null ||
     typeof payload.storeInventoryId !== 'number' ||
