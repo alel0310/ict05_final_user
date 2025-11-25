@@ -43,7 +43,8 @@ import { toast } from 'sonner';
 
 import {
   createStoreMaterial,
-  fetchStoreMaterials // 현재 화면에서는 사용하지 않지만, 재사용 고려해 유지
+  fetchStoreMaterials, // 현재 화면에서는 사용하지 않지만, 재사용 고려해 유지
+  updateStoreMaterialSettings
 } from '../../services/storeMaterialApi';
 
 import {
@@ -126,6 +127,7 @@ interface InventoryItem {
   status: StockStatus;
   weeklyUsage: number;          // 현재 미사용. 향후 분석 연동 시 사용.
   hqMaterial?: boolean;         // 본사 제품 여부
+  usageStatus?: 'USE' | 'STOP'; // 가맹점 재료 사용 여부 (StoreMaterial.status: USE|STOP) */
 }
 
 interface OrderItem {
@@ -210,6 +212,11 @@ function mapStoreInventoryToInventoryItem(si: StoreInventoryResponse): Inventory
     ?? new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0]; // 기본 7일 후
   const unitPrice     = si.purchasePrice ?? 0;
   const supplier      = si.supplier ?? (si.hqMaterial ? '본사' : '');
+  // 백엔드가 내려주는 가맹점 재료 상태 키(보수적 수신: 둘 중 하나가 오도록 처리)
+  const usage =
+    ((si as any).storeMaterialStatus ??
+     (si as any).materialStatus ??
+     'USE') as 'USE' | 'STOP';
 
   return {
     id: storeInventoryId,
@@ -228,6 +235,7 @@ function mapStoreInventoryToInventoryItem(si: StoreInventoryResponse): Inventory
     status,
     weeklyUsage: 0,
     hqMaterial: si.hqMaterial ?? undefined,
+    usageStatus: usage,
   };
 }
 
@@ -238,6 +246,7 @@ export function InventoryManagement() {
   // 화면 상태
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [filteredInventory, setFilteredInventory] = useState<InventoryItem[]>([]);
+  const [smStatusMap, setSmStatusMap] = useState<Record<number, 'USE' | 'STOP'>>({});   // store_material 사용 여부 캐시 (storeMaterialId -> 'USE' | 'STOP')
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
   const [hasInventory, setHasInventory] = useState<boolean>(false);
@@ -269,12 +278,32 @@ export function InventoryManagement() {
 
   const PAGE_SIZE = 10;
 
-  /** 최초 로드 시 재고 목록 로딩 */
+  /** 최초 로드 시 재고 목록 + 가맹점 재료 상태 로딩 */
   useEffect(() => {
     const loadInventory = async () => {
-      try {
-        const list = await fetchStoreInventory();
-        const mapped = list.map(mapStoreInventoryToInventoryItem);
+      try {       
+        const [list, materials] = await Promise.all([
+          fetchStoreInventory(),
+          fetchStoreMaterials().catch(() => []), // 실패해도 목록은 렌더
+        ]);
+
+        // 가맹점 재료 상태 맵 구성
+        const statusMap: Record<number, 'USE' | 'STOP'> = {};
+        (materials as any[]).forEach((m: any) => {
+         const key = m?.id ?? m?.storeMaterialId;
+          if (typeof key === 'number') {
+            const st = (m?.status ?? m?.storeMaterialStatus) === 'STOP' ? 'STOP' : 'USE';
+            statusMap[key] = st;
+          }
+        });
+        setSmStatusMap(statusMap);
+
+        // 목록 매핑 시 usageStatus 주입
+        const mapped = list.map(si => {
+          const item = mapStoreInventoryToInventoryItem(si);
+          const st = statusMap[item.storeMaterialId];
+          return st ? ({ ...item, usageStatus: st } as InventoryItem) : item;
+        });
         setInventory(mapped);
         setFilteredInventory(mapped);
         setHasInventory(mapped.length > 0);
@@ -501,8 +530,13 @@ export function InventoryManagement() {
     setIsCartModalOpen(true);
   };
 
-  /** 상세 보기 */
-  const handleItemDetail = (item: InventoryItem) => { setSelectedItem(item); setIsDetailModalOpen(true); };
+  /** 상세 보기: 초기 로딩 시 주입한 usageStatus 사용 */
+  const handleItemDetail = (item: InventoryItem) => {
+    // 혹시 맵이 갱신되었다면 클릭 시점에 재주입
+    const st = smStatusMap[item.storeMaterialId];
+    setSelectedItem(st ? ({ ...item, usageStatus: st } as any) : item);
+    setIsDetailModalOpen(true);
+  };
 
   /**
    * 상세 팝업: 적정재고(최소 재고) 수정
@@ -512,21 +546,41 @@ export function InventoryManagement() {
   const handleUpdateMinStock = async (newMinStock: number) => {
     if (!selectedItem) return;
     try {
+      // 백엔드 저장 + 응답 바디 활용
+      const res = await updateStoreMaterialSettings(
+        selectedItem.storeMaterialId,
+        { optimalQuantity: newMinStock }
+      );
+      const optimalFromServer = res?.inventory?.optimalQuantity ?? newMinStock;
       setInventory(prev =>
         prev.map(item =>
           item.id === selectedItem.id
-            ? { ...item, optimalQuantity: newMinStock, status: calcStockStatus(item.currentStock, newMinStock) }
+            ? {
+                ...item,
+                // 서버가 돌려준 적정 재고 우선 반영
+                optimalQuantity: optimalFromServer,
+                // 기존 화면 로직 유지: 현재고 vs 적정재고로 상태 산출
+                status: calcStockStatus(item.currentStock, optimalFromServer)
+              }
             : item,
         ),
       );
-      setSelectedItem(prev =>
-        prev ? { ...prev, optimalQuantity: newMinStock, status: calcStockStatus(prev.currentStock, newMinStock) } : prev,
+      setSelectedItem((prev: InventoryItem | null) =>
+        prev
+          ? {
+              ...prev,
+              optimalQuantity: optimalFromServer,
+              status: calcStockStatus(prev.currentStock, optimalFromServer)
+            } as InventoryItem
+          : prev
       );
-      toast.success(`${selectedItem.name}의 최소 재고량이 ${newMinStock}${selectedItem.unit}로 설정되었습니다.`);
-    } catch {
-      toast.error('오류가 발생했습니다.');
+      toast.success(`${selectedItem.name}의 적정 재고를 ${newMinStock}${selectedItem.unit}로 저장했습니다.`);
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.response?.data?.message || '적정 재고 저장 중 오류가 발생했습니다.');
     }
   };
+
 
   /**
    * 모달 제출 (입고/조정/발주/재료등록)
@@ -917,6 +971,18 @@ export function InventoryManagement() {
               onUpdateMinStock={handleUpdateMinStock}
               onRestock={() => { setIsDetailModalOpen(false); handleRestock(selectedItem); }}
               onAdjust={() => { setIsDetailModalOpen(false); handleAdjust(selectedItem); }}
+              onUpdateUsageStatus={(status) => {
+                // 상세/선택 항목 동기화
+                 setSelectedItem(prev =>
+                   prev ? ({ ...prev, materialStatus: status, storeMaterialStatus: status } as any) : prev
+                 );
+                // 목록 행도 동기화(재조회 전까지 프런트 상태 일치)
+                setInventory(prev =>
+                  prev.map(it => it.id === (selectedItem?.id ?? -1) ? ({ ...it, usageStatus: status } as any) : it)
+                );
+                // 캐시도 동기화
+                setSmStatusMap(prev => ({ ...prev, [selectedItem!.storeMaterialId]: status }));
+              }}
             />
           )}
         </DialogContent>
@@ -1018,13 +1084,35 @@ function ItemDetailContent({
   item,
   onUpdateMinStock,
   onRestock,
-  onAdjust
+  onAdjust,
+  onUpdateUsageStatus
 }: {
   item: InventoryItem;
   onUpdateMinStock: (minStock: number) => void;
   onRestock: () => void;
   onAdjust: () => void;
+  onUpdateUsageStatus: (status: 'USE' | 'STOP') => void;
 }) {
+  
+  // --- 사용 여부(USE/STOP) 상태와 저장 핸들러: 이 컴포넌트 내부에서 선언해야 한다 ---
+  const [usageStatus, setUsageStatus] = useState<'USE' | 'STOP'>('USE');
+
+  useEffect(() => {
+    setUsageStatus(item.usageStatus === 'STOP' ? 'STOP' : 'USE');
+  }, [item.usageStatus]);
+
+  const handleSaveUsageStatus = async () => {
+    try {     
+      await updateStoreMaterialSettings(item.storeMaterialId, { status: usageStatus });
+      // 부모 선택 항목에 반영하여 다음에 팝업 열 때도 최신 상태 유지
+      onUpdateUsageStatus(usageStatus);
+      toast.success(`사용 여부를 ${usageStatus === 'USE' ? '사용' : '미사용'}으로 저장했습니다.`);
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.response?.data?.message || '사용 여부 저장 중 오류가 발생했습니다.');
+    }
+  };
+
   const [editingMinStock, setEditingMinStock] = useState(false);
   const [minStockValue, setMinStockValue] = useState(item.optimalQuantity.toString());
 
@@ -1044,6 +1132,7 @@ function ItemDetailContent({
   };
 
   const statusMeta = getStockStatusDisplay(item.status);
+  const isStopped = item.usageStatus === 'STOP';
 
   const expiryDate = new Date(item.expiryDate);
   const today = new Date();
@@ -1095,6 +1184,23 @@ function ItemDetailContent({
                     </Button>
                   </div>
                 )}
+              </div>
+            </div>
+            <div className="flex justify-between items-center">
+              {/* 사용 여부(USE/STOP) */}
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">사용 여부</span>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={usageStatus}
+                    onChange={(e) => setUsageStatus(e.target.value as 'USE' | 'STOP')}
+                    className="h-8 border border-gray-300 rounded-md text-sm px-2"
+                  >
+                    <option value="USE">사용</option>
+                    <option value="STOP">미사용</option>
+                  </select>
+                  <Button size="sm" onClick={handleSaveUsageStatus} className="h-8 px-2">저장</Button>
+                </div>
               </div>
             </div>
           </div>
@@ -1149,14 +1255,30 @@ function ItemDetailContent({
       </Card>
 
       <div className="flex gap-3 pt-4 border-t">
-        <Button onClick={onRestock} className="bg-kpi-green hover:bg-green-600 text-white">
+        <Button
+          onClick={onRestock}
+          disabled={isStopped}
+          title={isStopped ? '미사용 재료입니다. 사용으로 전환 후 진행하세요.' : undefined}
+          className="bg-kpi-green hover:bg-green-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+        >
           <Plus className="w-4 h-4 mr-2" />입고
         </Button>
-        <Button onClick={onAdjust} variant="outline" className="border-kpi-orange text-kpi-orange hover:bg-orange-50">
+        <Button
+          onClick={onAdjust}
+          disabled={isStopped}
+          title={isStopped ? '미사용 재료입니다. 사용으로 전환 후 진행하세요.' : undefined}
+          variant="outline"
+          className="border-kpi-orange text-kpi-orange hover:bg-orange-50 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
           <Settings className="w-4 h-4 mr-2" />재고 조정
         </Button>
         {(item.status === 'low' || item.status === 'shortage') && (
-          <Button variant="outline" className="border-kpi-red text-kpi-red hover:bg-red-50">
+          <Button
+            variant="outline"
+            disabled={isStopped}
+            title={isStopped ? '미사용 재료입니다. 사용으로 전환 후 진행하세요.' : undefined}
+            className="border-kpi-red text-kpi-red hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             <ShoppingCart className="w-4 h-4 mr-2" />발주 등록
           </Button>
         )}

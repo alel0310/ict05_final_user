@@ -2,13 +2,14 @@ package com.boot.ict05_final_user.domain.inventory.service;
 
 import com.boot.ict05_final_user.domain.inventory.dto.StoreMaterialCreateDTO;
 import com.boot.ict05_final_user.domain.inventory.dto.StoreMaterialResponse;
+import com.boot.ict05_final_user.domain.inventory.dto.StoreMaterialSettingsResponseDTO;
 import com.boot.ict05_final_user.domain.inventory.entity.InventoryStatus;
-import com.boot.ict05_final_user.domain.inventory.entity.StoreInventory;
-import com.boot.ict05_final_user.domain.inventory.repository.StoreInventoryRepository;
 import com.boot.ict05_final_user.domain.inventory.entity.Material;
 import com.boot.ict05_final_user.domain.inventory.entity.MaterialStatus;
+import com.boot.ict05_final_user.domain.inventory.entity.StoreInventory;
 import com.boot.ict05_final_user.domain.inventory.entity.StoreMaterial;
 import com.boot.ict05_final_user.domain.inventory.repository.MaterialRepository;
+import com.boot.ict05_final_user.domain.inventory.repository.StoreInventoryRepository;
 import com.boot.ict05_final_user.domain.inventory.repository.StoreMaterialRepository;
 import com.boot.ict05_final_user.domain.store.entity.Store;
 import com.boot.ict05_final_user.domain.store.repository.StoreRepository;
@@ -21,7 +22,18 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+
+import static java.math.BigDecimal.ZERO;
+
+/*
+ * 변경 요약 (2025-11-25)
+ * - Javadoc 정리 및 계약/예외 명시 강화.
+ * - import 중복 제거, BigDecimal.ZERO → ZERO(정적 임포트)로 일관화.
+ * - mapAllHqMaterialsToStore에 @Transactional 추가.
+ * - updateSettings: 상태 재계산을 touchAfterQuantityChange()로 일원화(업데이트 시각 동기화).
+ */
 
 /**
  * 가맹점 재료(StoreMaterial) 관리 서비스.
@@ -53,6 +65,7 @@ public class StoreMaterialService {
     private final MaterialRepository materialRepository;
     private final StoreMaterialRepository storeMaterialRepository;
     private final StoreInventoryRepository storeInventoryRepository;
+    private final StoreInventoryService storeInventoryService;
 
     /**
      * 선택 가맹점에 대해 "본사 재료 → 가맹점 재료" 일괄 매핑.
@@ -70,54 +83,55 @@ public class StoreMaterialService {
      *   <li>각 신규 StoreMaterial에 대해 집계 재고를 quantity=0으로 생성 후 {@code touchAfterQuantityChange()} 호출.</li>
      * </ol>
      *
-     * @param storeId 매장 ID
-     * @return 새로 생성된 {@link StoreMaterial} 개수
-     * @throws IllegalArgumentException 매장이 존재하지 않을 때
+     * @param storeId 매장 ID.
+     * @return 새로 생성된 {@link StoreMaterial} 개수.
+     * @throws IllegalArgumentException 매장이 존재하지 않을 때.
      */
+    @Transactional
     public int mapAllHqMaterialsToStore(Long storeId) {
         Store store = storeRepository.findById(storeId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 매장: " + storeId));
 
-        // 본사에서 사용 중인 재료만 매핑
+        // 본사에서 사용 중인 재료만 매핑.
         List<Material> hqMaterials = materialRepository.findByMaterialStatus(MaterialStatus.USE);
 
         int created = 0;
 
         for (Material material : hqMaterials) {
             if (storeMaterialRepository.existsByStoreAndMaterial(store, material)) {
-                continue;   // 이미 매핑된 재료는 스킵
+                continue;   // 이미 매핑된 재료는 스킵.
             }
 
-            // 코드/이름/단위/카테고리는 본사 재료에서 기본값 복사
+            // 코드/이름/단위/카테고리는 본사 재료에서 기본값 복사.
             StoreMaterial storeMaterial = StoreMaterial.builder()
                     .store(store)
                     .material(material)
-                    .code(material.getCode())                  // 필요 시 점포 prefix 적용 가능
+                    .code(material.getCode())                  // 필요 시 점포 prefix 적용 가능.
                     .name(material.getName())
                     .category(material.getMaterialCategory().name())
                     .baseUnit(material.getBaseUnit())
                     .salesUnit(material.getSalesUnit())
                     .conversionRate(material.getConversionRate())
-                    .supplier(null)                            // 가맹점에서 별도 입력
+                    .supplier(null)                            // 가맹점에서 별도 입력.
                     .temperature(material.getMaterialTemperature())
-                    .status(MaterialStatus.STOP)               // 기본: 미사용
-                    .optimalQuantity(null)                     // 가맹점이 나중에 입력
-                    .purchasePrice(null)                       // 가맹점 최근 단가 저장소와 연계 시 사용
+                    .status(MaterialStatus.STOP)               // 기본: 미사용.
+                    .optimalQuantity(null)                     // 가맹점이 나중에 입력.
+                    .purchasePrice(null)                       // 가맹점 최근 단가 저장소와 연계 시 사용.
                     .isHqMaterial(true)
                     .build();
 
             storeMaterialRepository.save(storeMaterial);
 
-            // 가맹점 재고도 같이 0으로 생성
+            // 가맹점 재고도 같이 0으로 생성.
             StoreInventory inventory = StoreInventory.builder()
                     .store(store)
                     .storeMaterial(storeMaterial)
-                    .quantity(BigDecimal.ZERO)
+                    .quantity(ZERO)
                     .optimalQuantity(null)
-                    .status(InventoryStatus.SUFFICIENT)        // 적정재고 미지정 상태이므로 일단 SUFFICIENT
+                    .status(InventoryStatus.SUFFICIENT)        // 적정재고 미지정 상태이므로 일단 SUFFICIENT.
                     .build();
 
-            inventory.touchAfterQuantityChange();               // updateDate, status 정합성 유지
+            inventory.touchAfterQuantityChange();               // updateDate, status 정합성 유지.
             storeInventoryRepository.save(inventory);
 
             created++;
@@ -137,26 +151,26 @@ public class StoreMaterialService {
      *   <li>신규 재료에 대한 집계 재고를 0으로 자동 생성하여 상태/업데이트일시를 동기화.</li>
      * </ul>
      *
-     * @param dto 등록 요청 DTO
-     * @return 생성된 {@link StoreMaterial} ID
-     * @throws EntityNotFoundException 가맹점이 존재하지 않을 때
+     * @param dto 등록 요청 DTO.
+     * @return 생성된 {@link StoreMaterial} ID.
+     * @throws EntityNotFoundException 가맹점이 존재하지 않을 때.
      */
     @Transactional
     public Long create(StoreMaterialCreateDTO dto) {
-        // 1) 가맹점 조회
+        // 1) 가맹점 조회.
         Store store = storeRepository.findById(dto.getStoreId())
                 .orElseThrow(() -> new EntityNotFoundException("가맹점을 찾을 수 없습니다. id=" + dto.getStoreId()));
 
-        // 2) 코드 설정 (없으면 간단 자동 생성)
+        // 2) 코드 설정(없으면 간단 자동 생성).
         String code = generateStoreMaterialCode(store);
 
-        // 3) 변환비율: null 또는 0 이하면 기본값(100) 적용
+        // 3) 변환비율: null 또는 0 이하면 기본값(100) 적용.
         int conversionRate =
                 (dto.getConversionRate() != null && dto.getConversionRate() > 0)
                         ? dto.getConversionRate()
                         : 100;
 
-        // 4) 엔티티 생성
+        // 4) 엔티티 생성.
         StoreMaterial storeMaterial = StoreMaterial.builder()
                 .store(store)
                 .code(code)
@@ -175,17 +189,17 @@ public class StoreMaterialService {
 
         storeMaterialRepository.save(storeMaterial);
 
-        // 5) 신규 가맹점 재료에 대한 재고 자동 생성(없을 때만)
+        // 5) 신규 가맹점 재료에 대한 재고 자동 생성(없을 때만).
         if (!storeInventoryRepository.existsByStoreAndStoreMaterial(store, storeMaterial)) {
             StoreInventory inventory = StoreInventory.builder()
                     .store(store)
                     .storeMaterial(storeMaterial)
-                    .quantity(BigDecimal.ZERO)                         // 초기 재고 0
-                    .optimalQuantity(nullSafe(dto.getOptimalQuantity())) // 적정 재고는 DTO 기준 복사
-                    .status(InventoryStatus.SUFFICIENT)               // 초기값, 실상태는 touch에서 재계산
+                    .quantity(ZERO)                              // 초기 재고 0.
+                    .optimalQuantity(nullSafe(dto.getOptimalQuantity())) // 적정 재고는 DTO 기준 복사.
+                    .status(InventoryStatus.SUFFICIENT)          // 초기값, 실상태는 touch에서 재계산.
                     .build();
 
-            inventory.touchAfterQuantityChange();                     // 상태/업데이트일 동기화
+            inventory.touchAfterQuantityChange();                // 상태/업데이트일 동기화.
             storeInventoryRepository.save(inventory);
         }
 
@@ -195,9 +209,9 @@ public class StoreMaterialService {
     /**
      * 지정 매장의 가맹점 재료 목록 조회.
      *
-     * @param storeId 매장 ID
-     * @return 가맹점 재료 응답 DTO 리스트
-     * @throws IllegalArgumentException 매장이 존재하지 않을 때
+     * @param storeId 매장 ID.
+     * @return 가맹점 재료 응답 DTO 리스트.
+     * @throws IllegalArgumentException 매장이 존재하지 않을 때.
      */
     @Transactional(readOnly = true)
     public List<StoreMaterialResponse> getStoreMaterials(Long storeId) {
@@ -211,33 +225,32 @@ public class StoreMaterialService {
     }
 
     /**
-     * store_material 에 존재하는 모든 가맹점 재료에 대해,
-     * 아직 store_inventory 가 없는 경우에만 0 재고로 생성.
+     * store_material 전수에 대해 store_inventory가 없으면 0 재고로 생성한다.
      *
      * <p>대상/규칙</p>
      * <ul>
-     *   <li>대상: store_material.store_id_fk = storeId 인 모든 행(HQ/자체 포함).</li>
+     *   <li>대상: {@code store_material.store_id_fk = storeId} 인 모든 행(HQ/자체 포함).</li>
      *   <li>이미 store_inventory 가 있는 (store, storeMaterial)은 스킵.</li>
      *   <li>생성 시 quantity=0, status=SUFFICIENT 후 {@code touchAfterQuantityChange()}로 동기화.</li>
      * </ul>
      *
-     * @param storeId 매장 ID
-     * @return 새로 생성된 {@link StoreInventory} 개수
-     * @throws IllegalArgumentException 매장이 존재하지 않을 때
+     * @param storeId 매장 ID.
+     * @return 새로 생성된 {@link StoreInventory} 개수.
+     * @throws IllegalArgumentException 매장이 존재하지 않을 때.
      */
     @Transactional
     public int initStoreInventoryForStore(Long storeId) {
-        // 1) 매장 조회
+        // 1) 매장 조회.
         Store store = storeRepository.findById(storeId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 매장입니다. id=" + storeId));
 
-        // 2) 이 매장의 모든 가맹점 재료 (HQ/자체 모두 포함)
+        // 2) 이 매장의 모든 가맹점 재료 (HQ/자체 모두 포함).
         List<StoreMaterial> materials = storeMaterialRepository.findByStore(store);
         if (materials.isEmpty()) {
             return 0;
         }
 
-        // 3) 이미 재고가 있는 StoreMaterial ID 집합
+        // 3) 이미 재고가 있는 StoreMaterial ID 집합.
         List<StoreInventory> existingInventories = storeInventoryRepository.findByStore(store);
         Set<Long> alreadyHasInventory = new HashSet<>();
         for (StoreInventory inv : existingInventories) {
@@ -248,7 +261,7 @@ public class StoreMaterialService {
 
         int created = 0;
 
-        // 4) 아직 재고 없는 재료만 0 재고로 생성
+        // 4) 아직 재고 없는 재료만 0 재고로 생성.
         for (StoreMaterial sm : materials) {
             if (alreadyHasInventory.contains(sm.getId())) {
                 continue;
@@ -257,12 +270,12 @@ public class StoreMaterialService {
             StoreInventory inventory = StoreInventory.builder()
                     .store(store)
                     .storeMaterial(sm)
-                    .quantity(BigDecimal.ZERO)     // 모든 재료 재고 0으로 생성
-                    .optimalQuantity(null)         // 적정재고는 여기선 보정하지 않음
+                    .quantity(ZERO)          // 모든 재료 재고 0으로 생성.
+                    .optimalQuantity(null)   // 적정재고는 여기선 보정하지 않음.
                     .status(InventoryStatus.SUFFICIENT)
                     .build();
 
-            inventory.touchAfterQuantityChange(); // status + updateDate 동기화
+            inventory.touchAfterQuantityChange(); // status + updateDate 동기화.
             storeInventoryRepository.save(inventory);
             created++;
         }
@@ -276,7 +289,7 @@ public class StoreMaterialService {
     private String generateStoreMaterialCode(Store store) {
         String code = "SM-" + store.getId() + "-" + System.currentTimeMillis();
 
-        // 유니크 제약 충돌 방지용 한 번 더 시도
+        // 유니크 제약 충돌 방지용 한 번 더 시도.
         if (storeMaterialRepository.existsByStoreAndCode(store, code)) {
             code = "SM-" + store.getId() + "-" + (System.currentTimeMillis() + 1);
         }
@@ -285,16 +298,16 @@ public class StoreMaterialService {
 
     /** BigDecimal null 안전 처리. null이면 0 반환. */
     private BigDecimal nullSafe(BigDecimal value) {
-        return value != null ? value : BigDecimal.ZERO;
+        return value != null ? value : ZERO;
     }
 
     /**
      * 적정재고(최소 재고) 업데이트.
      *
-     * @param storeId         인증 사용자 매장 ID
-     * @param storeMaterialId 가맹점 재료 PK
-     * @param optimalQuantity 소진 단위 기준 수량(null 허용, 0 이상)
-     * @throws IllegalArgumentException 권한 불일치/입력 값 음수
+     * @param storeId         인증 사용자 매장 ID.
+     * @param storeMaterialId 가맹점 재료 PK.
+     * @param optimalQuantity 소진 단위 기준 수량(null 허용, 0 이상).
+     * @throws IllegalArgumentException 권한 불일치/입력 값 음수.
      */
     @Transactional
     public void updateOptimalQuantity(Long storeId, Long storeMaterialId, Double optimalQuantity) {
@@ -306,17 +319,17 @@ public class StoreMaterialService {
             throw new IllegalArgumentException("적정 재고는 0 이상이어야 합니다.");
         }
 
-        // 엔티티 필드 타입에 맞춰 세팅 : BigDecimal 사용 시 변환
+        // 엔티티 필드 타입(BigDecimal)에 맞춰 세팅.
         sm.setOptimalQuantity(optimalQuantity != null ? BigDecimal.valueOf(optimalQuantity) : null);
     }
 
     /**
      * 가맹점 재료 상태(사용/중지) 업데이트.
      *
-     * @param storeId         인증 사용자 매장 ID
-     * @param storeMaterialId 가맹점 재료 PK
-     * @param status          {@link MaterialStatus#USE} | {@link MaterialStatus#STOP}
-     * @throws IllegalArgumentException 권한 불일치
+     * @param storeId         인증 사용자 매장 ID.
+     * @param storeMaterialId 가맹점 재료 PK.
+     * @param status          {@link MaterialStatus#USE} | {@link MaterialStatus#STOP}.
+     * @throws IllegalArgumentException 권한 불일치.
      */
     @Transactional
     public void updateStatus(Long storeId, Long storeMaterialId, MaterialStatus status) {
@@ -325,5 +338,67 @@ public class StoreMaterialService {
                 .orElseThrow(() -> new IllegalArgumentException("재료가 존재하지 않거나 권한이 없습니다."));
 
         sm.setStatus(status);
+    }
+
+    /**
+     * 상세 팝업 저장: 적정재고 동기화 + 상태 재계산 + 사용여부(USE/STOP) 반영.
+     *
+     * <p>트랜잭션 내에서 StoreMaterial, StoreInventory를 함께 갱신한다.</p>
+     *
+     * @param storeId         인증 사용자 매장 ID.
+     * @param storeMaterialId 가맹점 재료 PK.
+     * @param optimalQuantity 적정 재고량(null 허용, 0 이상).
+     * @param status          "USE" | "STOP"(null 허용).
+     * @return 저장 결과 스냅샷 DTO.
+     */
+    @Transactional
+    public StoreMaterialSettingsResponseDTO updateSettings(Long storeId,
+                                                           Long storeMaterialId,
+                                                           BigDecimal optimalQuantity,   // null 허용
+                                                           String status) {              // null 허용, "USE" | "STOP"
+        // 1) StoreMaterial for-update.
+        var sm = storeMaterialRepository.findByIdAndStoreIdForUpdate(storeMaterialId, storeId)
+                .orElseThrow(() -> new IllegalArgumentException("StoreMaterial not found or not owned by store"));
+
+        // 2) StoreMaterial: 적정재고/상태 반영.
+        if (optimalQuantity != null) {
+            if (optimalQuantity.signum() < 0) {
+                throw new IllegalArgumentException("optimalQuantity must be >= 0");
+            }
+            sm.setOptimalQuantity(optimalQuantity);
+        }
+        if (status != null && !status.isBlank()) {
+            sm.setStatus(MaterialStatus.valueOf(status)); // USE | STOP
+        }
+
+        // 3) StoreInventory: 연관 인벤토리 확보(없으면 생성).
+        Optional<StoreInventory> siOpt = storeInventoryRepository.findByStore_IdAndStoreMaterial_Id(storeId, storeMaterialId);
+        StoreInventory si = siOpt.orElseGet(() -> storeInventoryRepository.save(
+                StoreInventory.builder()
+                        .store(sm.getStore())
+                        .storeMaterial(sm)
+                        .quantity(ZERO)
+                        .build()
+        ));
+
+        // 4) StoreInventory: 적정재고 동기화.
+        if (optimalQuantity != null) {
+            si.setOptimalQuantity(optimalQuantity);
+        }
+
+        // 5) 상태 + 업데이트일 동기화(적정재고 vs 현재고).
+        si.touchAfterQuantityChange();
+
+        // 6) 응답 조립.
+        return StoreMaterialSettingsResponseDTO.builder()
+                .storeMaterialId(sm.getId())
+                .optimalQuantity(sm.getOptimalQuantity())
+                .status(sm.getStatus().name())
+                .inventory(StoreMaterialSettingsResponseDTO.InventoryPart.builder()
+                        .storeInventoryId(si.getId())
+                        .optimalQuantity(si.getOptimalQuantity())
+                        .status(si.getStatus().name())
+                        .build())
+                .build();
     }
 }

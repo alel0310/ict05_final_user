@@ -92,3 +92,34 @@ export async function updateStoreMaterialStatus(
     status,
   } satisfies Omit<StoreMaterialUpdateStatusDTO, 'storeMaterialId'>);
 }
+
+// ---------- Settings PATCH (적정재고/사용여부) ----------
+export interface StoreMaterialSettingsUpdateRequest {
+  /** 소수 3자리까지 허용, null이면 변경 없음 */
+  optimalQuantity?: number | null;
+  /** "USE" | "STOP", 지정 안 하면 변경 없음 */
+  status?: 'USE' | 'STOP';
+}
+
+export interface StoreMaterialSettingsResponse {
+  storeMaterialId: number;
+  optimalQuantity: number | null;
+  status: 'USE' | 'STOP';
+  inventory?: {
+    storeInventoryId: number;
+    optimalQuantity: number | null;
+    status: 'SUFFICIENT' | 'LOW' | 'SHORTAGE';
+  };
+}
+
+/**
++ * 상세 팝업 저장: 적정재고/사용여부(USE/STOP) 수정
++ * PATCH /api/store/materials/{id}/settings
++ */
+export async function updateStoreMaterialSettings(
+  storeMaterialId: number,
+  payload: StoreMaterialSettingsUpdateRequest
+): Promise<StoreMaterialSettingsResponse> {
+  const { data } = await api.patch<StoreMaterialSettingsResponse>(`${BASE_PATH}/${storeMaterialId}/settings`, payload);
+  return data;
+}
